@@ -5,23 +5,30 @@ import { doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8
 
 const CPAdmin: React.FC = () => {
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+  const [middleIconUrl, setMiddleIconUrl] = useState<string | null>(null);
+  const [rectangleUrl, setRectangleUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const bgInputRef = useRef<HTMLInputElement>(null);
+  const iconInputRef = useRef<HTMLInputElement>(null);
+  const rectInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "cp_config"), (snap) => {
       if (snap.exists()) {
-        setBackgroundUrl(snap.data().backgroundUrl || null);
+        const data = snap.data();
+        setBackgroundUrl(data.backgroundUrl || null);
+        setMiddleIconUrl(data.middleIconUrl || null);
+        setRectangleUrl(data.rectangleUrl || null);
       }
     });
     return unsub;
   }, []);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => setBackgroundUrl(reader.result as string);
+      reader.onloadend = () => setter(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -35,9 +42,11 @@ const CPAdmin: React.FC = () => {
     setIsSaving(true);
     try {
       await setDoc(doc(db, "settings", "cp_config"), {
-        backgroundUrl: backgroundUrl
+        backgroundUrl: backgroundUrl,
+        middleIconUrl: middleIconUrl,
+        rectangleUrl: rectangleUrl
       }, { merge: true });
-      alert("تم حفظ خلفية صفحة CP بنجاح");
+      alert("تم حفظ إعدادات صفحة CP بنجاح");
     } catch (e) {
       alert("حدث خطأ أثناء الحفظ");
     } finally {
@@ -88,7 +97,7 @@ const CPAdmin: React.FC = () => {
             ref={bgInputRef} 
             className="hidden" 
             accept="image/*,video/*" 
-            onChange={handleImageSelect} 
+            onChange={(e) => handleImageSelect(e, setBackgroundUrl)} 
           />
 
           <div className="space-y-2">
@@ -97,6 +106,87 @@ const CPAdmin: React.FC = () => {
               type="text" 
               value={backgroundUrl || ''} 
               onChange={e => setBackgroundUrl(e.target.value)} 
+              placeholder="https://..." 
+              className="w-full bg-white/5 border border-white/10 p-3.5 rounded-2xl text-[10px] text-white outline-none font-mono focus:border-rose-500/40" 
+            />
+          </div>
+        </div>
+
+        {/* Middle Icon Config */}
+        <div className="space-y-4 pt-4 border-t border-white/5">
+          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">أيقونة القلب (الوسط)</label>
+          
+          <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden bg-black/40 border-2 border-dashed border-white/10 flex flex-col items-center justify-center group">
+            {middleIconUrl ? (
+              <img src={middleIconUrl} className="w-full h-full object-contain" />
+            ) : (
+              <i className="fas fa-heart text-2xl text-rose-500 opacity-40"></i>
+            )}
+            
+            <button 
+              onClick={() => iconInputRef.current?.click()}
+              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm"
+            >
+              <i className="fas fa-camera text-white text-lg"></i>
+            </button>
+          </div>
+          
+          <input 
+            type="file" 
+            ref={iconInputRef} 
+            className="hidden" 
+            accept="image/*" 
+            onChange={(e) => handleImageSelect(e, setMiddleIconUrl)} 
+          />
+
+          <div className="space-y-2">
+            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">أو ضع رابط صورة متحركة (APNG/GIF)</label>
+            <input 
+              type="text" 
+              value={middleIconUrl || ''} 
+              onChange={e => setMiddleIconUrl(e.target.value)} 
+              placeholder="https://..." 
+              className="w-full bg-white/5 border border-white/10 p-3.5 rounded-2xl text-[10px] text-white outline-none font-mono focus:border-rose-500/40" 
+            />
+          </div>
+        </div>
+
+        {/* Rectangle Config */}
+        <div className="space-y-4 pt-4 border-t border-white/5">
+          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">مستطيل الـ CP (للبروفايل)</label>
+          
+          <div className="relative aspect-[4/1] w-full border-2 border-dashed border-white/10 flex flex-col items-center justify-center group overflow-visible">
+            {rectangleUrl ? (
+              <img src={rectangleUrl} className="w-full h-full object-contain" />
+            ) : (
+              <div className="flex flex-col items-center gap-1 opacity-20">
+                <i className="fas fa-vector-square text-xl text-white"></i>
+                <p className="text-[8px] font-black text-white uppercase tracking-widest">اختر المستطيل</p>
+              </div>
+            )}
+            
+            <button 
+              onClick={() => rectInputRef.current?.click()}
+              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm"
+            >
+              <i className="fas fa-camera text-white text-lg"></i>
+            </button>
+          </div>
+          
+          <input 
+            type="file" 
+            ref={rectInputRef} 
+            className="hidden" 
+            accept="image/*" 
+            onChange={(e) => handleImageSelect(e, setRectangleUrl)} 
+          />
+
+          <div className="space-y-2">
+            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">أو ضع رابط صورة</label>
+            <input 
+              type="text" 
+              value={rectangleUrl || ''} 
+              onChange={e => setRectangleUrl(e.target.value)} 
               placeholder="https://..." 
               className="w-full bg-white/5 border border-white/10 p-3.5 rounded-2xl text-[10px] text-white outline-none font-mono focus:border-rose-500/40" 
             />

@@ -47,14 +47,47 @@ export const RoomCard: React.FC<RoomCardProps> = ({ room, onClick }) => {
           </div>
           {/* عرض أيقونة الموجات (Wave Room) مباشرة بحجم متناسق (5x5) بدون حاوية دائرية */}
           <div className="flex items-center justify-center overflow-hidden">
-            {design?.waveRoomIcon ? (
-              <img src={design.waveRoomIcon} className="w-5 h-5 object-contain drop-shadow-lg" alt="wave" />
+            {!design ? (
+              <div className="w-5 h-5 flex items-center justify-center">
+                <div className="w-3 h-3 border border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+              </div>
+            ) : design.waveRoomIcon ? (
+              <SafeImage src={design.waveRoomIcon} className="w-5 h-5 object-contain drop-shadow-lg" alt="wave" fallback={<i className="fas fa-volume-up text-[8px] text-purple-300 drop-shadow-md"></i>} />
             ) : (
               <i className="fas fa-volume-up text-[8px] text-purple-300 drop-shadow-md"></i>
             )}
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+const SafeImage: React.FC<{ src: string; className?: string; alt?: string; fallback: React.ReactNode }> = ({ src, className, alt, fallback }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(false);
+  }, [src]);
+
+  if (error) return <>{fallback}</>;
+
+  return (
+    <div className={`relative ${className}`}>
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-3 h-3 border border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+        </div>
+      )}
+      <img
+        src={src}
+        className={`${className} ${loading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300 shadow-xl`}
+        alt={alt}
+        onLoad={() => setLoading(false)}
+        onError={() => { setLoading(false); setError(true); }}
+      />
     </div>
   );
 };

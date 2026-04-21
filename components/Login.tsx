@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -70,9 +70,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           const userCredential = await signInWithEmailAndPassword(auth, email, password);
           const user = userCredential.user;
           const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            if (data.banUntil) {
+          if (!userDoc.exists()) {
+            await signOut(auth);
+            setError('هذا الحساب أو كلمة المرور غير صحيحه');
+            setIsLoading(false);
+            return;
+          }
+          const data = userDoc.data();
+          if (data.banUntil) {
               const banDate = new Date(data.banUntil);
               const now = new Date();
               if (banDate > now) {
@@ -81,7 +86,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 setIsLoading(false);
                 return;
               }
-            }
           }
         } catch (authErr: any) {
           console.error(authErr.code);

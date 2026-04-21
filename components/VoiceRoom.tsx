@@ -30,6 +30,35 @@ interface UserOnMic {
 type GiftTab = 'normal' | 'cp' | 'famous' | 'country' | 'vip' | 'birthday';
 type SelectionMode = 'manual' | 'all-room' | 'all-mic';
 
+const SafeImage: React.FC<{ src: string; className?: string; alt?: string; fallback: React.ReactNode; spinnerSize?: string }> = ({ src, className, alt, fallback, spinnerSize = 'w-4 h-4' }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(false);
+  }, [src]);
+
+  if (error) return <>{fallback}</>;
+
+  return (
+    <div className={`relative ${className} flex items-center justify-center`}>
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <div className={`${spinnerSize} border border-purple-500/30 border-t-purple-500 rounded-full animate-spin`}></div>
+        </div>
+      )}
+      <img
+        src={src}
+        className={`${className} ${loading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+        alt={alt}
+        onLoad={() => setLoading(false)}
+        onError={() => { setLoading(false); setError(true); }}
+      />
+    </div>
+  );
+};
+
 export const VoiceRoom: React.FC<VoiceRoomProps> = ({ 
   room: initialRoom, onLeave, onMinimize, onOpenWallet, 
   micStates, setMicStates, isMicMuted, setIsMicMuted,
@@ -99,6 +128,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [availableBgs, setAvailableBgs] = useState<any[]>([]);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
   const [showBgSelector, setShowBgSelector] = useState(false);
+  const [cpConfig, setCpConfig] = useState<any>(null);
+  const [popupPartnerData, setPopupPartnerData] = useState<any>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const user = auth.currentUser;
@@ -262,6 +293,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     const unsubEmojis = onSnapshot(query(collection(db, "emojis"), orderBy("createdAt", "desc")), (snap) => {
       setDynamicEmojis(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
+    const unsubCp = onSnapshot(doc(db, "settings", "cp_config"), (snap) => {
+      if (snap.exists()) setCpConfig(snap.data());
+    });
     const unsubGifts = onSnapshot(query(collection(db, "gifts"), orderBy("createdAt", "desc")), (snap) => {
       if (snap.empty) {
         setDynamicGifts(STATIC_GIFTS as any);
@@ -270,9 +304,20 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       }
     });
     return () => {
-      unsubDesign(); unsubEmojis(); unsubGifts();
+      unsubDesign(); unsubEmojis(); unsubGifts(); unsubCp();
     };
   }, []);
+
+  useEffect(() => {
+    if (showUserData && currentUserData?.partnerUid) {
+      const unsub = onSnapshot(doc(db, "users", currentUserData.partnerUid), (docSnap) => {
+        if (docSnap.exists()) setPopupPartnerData(docSnap.data());
+      });
+      return unsub;
+    } else {
+      setPopupPartnerData(null);
+    }
+  }, [showUserData, currentUserData?.partnerUid]);
 
   useEffect(() => {
     if (showRoomSettings) {
@@ -602,7 +647,23 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                       {mic.user.uid === user?.uid && !isMicMuted && <div className="absolute inset-0 z-0 pointer-events-none"><div className="w-full h-full rounded-full border-[3px] border-purple-400 animate-ping opacity-40"></div></div>}
                       {mic.activeEmoji && <div className="absolute inset-[-10%] z-50 flex items-center justify-center pointer-events-none animate-in zoom-in duration-300"><img src={mic.activeEmoji} className="w-full h-full object-contain" alt="reaction" /></div>}
                     </div>
-                  ) : <div className="w-full h-full flex items-center justify-center animate-in fade-in duration-200">{mic?.status === 'locked' ? (designSettings?.micLockedIcon ? <img src={designSettings.micLockedIcon} className="w-full h-full object-contain" alt="locked" /> : <i className={`fas fa-lock text-white/20 ${activeMicCount === 15 ? 'text-sm' : 'text-xl'}`}></i>) : (designSettings?.micOpenIcon ? <img src={designSettings.micOpenIcon} className="w-full h-full object-contain" alt="open" /> : <i className={`fas fa-microphone text-white/20 ${activeMicCount === 15 ? 'text-lg' : 'text-2xl'}`}></i>)}</div>}
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center animate-in fade-in duration-200">
+                      {mic?.status === 'locked' ? (
+                        designSettings?.micLockedIcon ? (
+                          <img src={designSettings.micLockedIcon} className="w-full h-full object-contain" alt="locked" />
+                        ) : (
+                          <i className={`fas fa-lock text-white/20 ${activeMicCount === 15 ? 'text-sm' : 'text-xl'}`}></i>
+                        )
+                      ) : (
+                        designSettings?.micOpenIcon ? (
+                          <img src={designSettings.micOpenIcon} className="w-full h-full object-contain" alt="open" />
+                        ) : (
+                          <i className={`fas fa-microphone text-white/20 ${activeMicCount === 15 ? 'text-lg' : 'text-2xl'}`}></i>
+                        )
+                      )}
+                    </div>
+                  )}
                 </button>
                 
                 <div className="flex flex-col items-center gap-0.5">
@@ -659,7 +720,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </form>
             </div>
           </div>
-          <button onClick={() => setShowGifts(true)} className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center shadow-xl active:scale-90 transition-transform flex-shrink-0"><i className="fas fa-gift text-white text-sm"></i></button>
+          <button onClick={() => setShowGifts(true)} className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center shadow-xl active:scale-90 transition-transform flex-shrink-0 overflow-hidden">
+            {!designSettings ? (
+              <div className="w-5 h-5 border-[2px] border-white/20 border-t-white rounded-full animate-spin"></div>
+            ) : designSettings?.giftButtonIcon ? (
+              <SafeImage src={designSettings.giftButtonIcon} className="w-full h-full object-cover" alt="Gift" spinnerSize="w-5 h-5" fallback={<i className="fas fa-gift text-white text-sm"></i>} />
+            ) : (
+              <i className="fas fa-gift text-white text-sm"></i>
+            )}
+          </button>
           <button onClick={() => setShowExtraMenu(true)} className="w-10 h-10 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center active:scale-90 transition-transform relative group flex-shrink-0"><div className="grid grid-cols-2 gap-[3px] p-2"><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div></div></button>
         </div>
       </div>
@@ -707,16 +776,74 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           <div className="relative w-28 h-28 flex items-center justify-center">
             {currentUserData?.animatedAvatar ? (
               isVideoUrl(currentUserData.animatedAvatar) ? (
-                <video src={currentUserData.animatedAvatar} autoPlay loop muted playsInline className="w-24 h-24 rounded-full object-cover border-4 border-black/20 shadow-2xl bg-slate-900" />
+                <video src={currentUserData.animatedAvatar} autoPlay loop muted playsInline className="w-24 h-24 rounded-full object-cover bg-transparent" />
               ) : (
-                <img src={currentUserData.animatedAvatar} className="w-24 h-24 rounded-full object-cover border-4 border-black/20 shadow-2xl bg-slate-900" alt="Profile" />
+                <img src={currentUserData.animatedAvatar} className="w-24 h-24 rounded-full object-cover bg-transparent" alt="Profile" />
               )
             ) : (
-              <img src={currentUserData?.photoURL || user?.photoURL || "https://picsum.photos/200"} className="w-24 h-24 rounded-full object-cover border-4 border-black/20 shadow-2xl" alt="Profile" />
+              <img src={currentUserData?.photoURL || user?.photoURL || "https://picsum.photos/200"} className="w-24 h-24 rounded-full object-cover" alt="Profile" />
             )}
             {(currentUserData?.currentFrame || currentUserData?.currentFrame) && (<img src={currentUserData?.currentFrame} className="absolute inset-0 w-full h-full object-contain z-10 scale-125" alt="frame" />)}
           </div>
-        </div><div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto scrollbar-hide pb-12"><h3 className="text-2xl font-black text-white drop-shadow-lg mb-2">{currentUserData?.displayName || user?.displayName}</h3><div className="mb-4">{profileCustomIdIcon ? (<div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300" style={{ backgroundImage: `url(${profileCustomIdIcon})` }}><span className="text-[10px] font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" style={{ paddingLeft: `${pIdX}px`, paddingTop: `${pIdY}px` }}>{profileCustomId}</span></div>) : (<span className={`text-[11px] font-black w-fit ${profileCustomId === 'OFFICIAL' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : 'text-purple-300 bg-white/5 border-white/5'} px-3 py-1 rounded-xl border tracking-wider`}>ID: {profileCustomId}</span>)}</div><div className="w-full space-y-8"><div className="flex items-center justify-center gap-12 py-5 border-y border-white/10"><div className="flex flex-col items-center gap-1"><span className="text-xl font-black text-white">0</span><span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعين</span></div><div className="flex flex-col items-center gap-1"><span className="text-xl font-black text-white">0</span><span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعة</span></div></div><div className="bg-black/20 p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-inner">
+        </div>
+        <div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto scrollbar-hide pb-12">
+          <h3 className="text-2xl font-black text-white drop-shadow-lg mb-2">{currentUserData?.displayName || user?.displayName}</h3>
+          
+          <div className="mb-4">
+            {profileCustomIdIcon ? (
+              <div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300" style={{ backgroundImage: `url(${profileCustomIdIcon})` }}>
+                <span className="text-[12px] font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" style={{ paddingLeft: `${pIdX}px`, paddingTop: `${pIdY}px` }}>{profileCustomId}</span>
+              </div>
+            ) : (
+              <span className={`text-[11px] font-black w-fit ${profileCustomId === 'OFFICIAL' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : 'text-purple-300 bg-white/5 border-white/5'} px-3 py-1 rounded-xl border tracking-wider`}>ID: {profileCustomId}</span>
+            )}
+          </div>
+
+          <div className="w-full space-y-6">
+            <div className="flex items-center justify-center gap-12 py-4 border-y border-white/10">
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl font-black text-white">0</span>
+                <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعين</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xl font-black text-white">0</span>
+                <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعة</span>
+              </div>
+            </div>
+
+            {/* CP Rectangle Section */}
+            {cpConfig?.rectangleUrl && (
+              <div className="relative w-full h-28 flex items-center justify-center animate-in zoom-in duration-500 overflow-visible my-2">
+                <img src={cpConfig.rectangleUrl} className="absolute inset-0 w-full h-full object-contain scale-150 drop-shadow-2xl" alt="CP Effect" />
+                <div className="relative w-full flex items-center justify-between px-7 z-10 translate-y-4">
+                  {/* Me (Right in RTL) */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform">
+                      <img src={currentUserData?.photoURL || user?.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
+                    </div>
+                    <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
+                      {currentUserData?.displayName || user?.displayName || "أنا"}
+                    </span>
+                  </div>
+                  
+                  {/* Partner / Plus Icon (Left in RTL) */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform bg-white/5 backdrop-blur-sm flex items-center justify-center">
+                      {popupPartnerData ? (
+                        <img src={popupPartnerData.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
+                      ) : (
+                        <i className="fas fa-user text-white/20 text-xs"></i>
+                      )}
+                    </div>
+                    <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
+                      {popupPartnerData ? (popupPartnerData.displayName || "شريك") : "لا يوجد"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-black/20 p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-inner">
           <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] text-center">الأوسمة والجوائز</p>
           <div className="flex overflow-x-auto gap-4 pb-2 scrollbar-hide px-2">
             {userDataPopupBadges.length > 0 ? (
@@ -789,42 +916,49 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 pt-1 scrollbar-hide">
-              <div className="grid grid-cols-4 gap-2">
-                {filteredGifts.map(gift => {
-                  const isLongGiftName = gift.name.length > 8;
-                  return (
-                    <button 
-                      key={gift.id} 
-                      onClick={() => setSelectedGiftId(gift.id)} 
-                      className={`flex flex-col items-center justify-center p-1 py-3 rounded-2xl transition-all duration-300 h-[92px] border relative ${
-                        selectedGiftId === gift.id 
-                        ? 'bg-purple-600/20 border-purple-500/50' 
-                        : 'bg-white/5 border-white/5'
-                      }`}
-                    >
-                      {selectedGiftId === gift.id && (
-                        <div className="absolute inset-0 rounded-2xl border border-white/10 pointer-events-none"></div>
-                      )}
-                      <div className={`text-2xl mb-2 transition-transform duration-300 ${selectedGiftId === gift.id ? 'scale-110' : ''}`}>
-                        {gift.icon.startsWith('http') ? <img src={gift.icon} className="w-8 h-8 object-contain" /> : gift.icon}
-                      </div>
-                      <div className="w-full overflow-hidden h-4 flex items-center justify-center mb-0.5 px-1 relative" style={{ maskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)' }}>
-                        {isLongGiftName ? (
-                          <div className="flex animate-marquee-infinite">
-                            <span className="text-[10px] text-white font-bold whitespace-nowrap pr-8">{gift.name}</span>
-                            <span className="text-[10px] text-white font-bold whitespace-nowrap pr-8">{gift.name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-white font-bold truncate text-center">{gift.name}</span>
+              <div className="grid grid-cols-4 gap-2 min-h-[200px]">
+                {filteredGifts.length > 0 ? (
+                  filteredGifts.map(gift => {
+                    const isLongGiftName = gift.name.length > 8;
+                    return (
+                      <button 
+                        key={gift.id} 
+                        onClick={() => setSelectedGiftId(gift.id)} 
+                        className={`flex flex-col items-center justify-center p-1 py-3 rounded-2xl transition-all duration-300 h-[92px] border relative ${
+                          selectedGiftId === gift.id 
+                          ? 'bg-purple-600/20 border-purple-500/50' 
+                          : 'bg-white/5 border-white/5'
+                        }`}
+                      >
+                        {selectedGiftId === gift.id && (
+                          <div className="absolute inset-0 rounded-2xl border border-white/10 pointer-events-none"></div>
                         )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className={`text-[10px] font-black transition-colors ${selectedGiftId === gift.id ? 'text-yellow-400' : 'text-yellow-500/80'}`}>{gift.price}</span>
-                        <i className="fas fa-coins text-yellow-500 text-[8px]"></i>
-                      </div>
-                    </button>
-                  );
-                })}
+                        <div className={`text-2xl mb-2 transition-transform duration-300 ${selectedGiftId === gift.id ? 'scale-110' : ''}`}>
+                          {gift.icon.startsWith('http') ? <img src={gift.icon} className="w-8 h-8 object-contain" alt={gift.name} /> : gift.icon}
+                        </div>
+                        <div className="w-full overflow-hidden h-4 flex items-center justify-center mb-0.5 px-1 relative" style={{ maskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 15%, black 85%, transparent)' }}>
+                          {isLongGiftName ? (
+                            <div className="flex animate-marquee-infinite">
+                              <span className="text-[10px] text-white font-bold whitespace-nowrap pr-8">{gift.name}</span>
+                              <span className="text-[10px] text-white font-bold whitespace-nowrap pr-8">{gift.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-white font-bold truncate text-center">{gift.name}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className={`text-[10px] font-black transition-colors ${selectedGiftId === gift.id ? 'text-yellow-400' : 'text-yellow-500/80'}`}>{gift.price}</span>
+                          <i className="fas fa-coins text-yellow-500 text-[8px]"></i>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-4 flex flex-col items-center justify-center py-16 opacity-30 animate-in fade-in zoom-in duration-500">
+                    <i className="fas fa-box-open text-5xl mb-3 text-white/20"></i>
+                    <p className="text-[11px] font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
+                  </div>
+                )}
               </div>
             </div>
             <div className="px-6 h-20 bg-black/40 border-t border-white/10 flex items-center justify-between py-2.5 overflow-visible">

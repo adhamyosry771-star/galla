@@ -5,7 +5,7 @@
 */
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Play, RotateCcw, Activity, Cpu, BarChart2 } from 'lucide-react';
 
 // --- SURFACE CODE DIAGRAM ---

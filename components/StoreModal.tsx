@@ -257,14 +257,9 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                   </div>
 
                   {filteredBagItems.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center py-10 opacity-60 space-y-4">
-                       <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border-2 border-dashed border-white/10">
-                          <i className="fas fa-box-open text-3xl text-purple-300"></i>
-                       </div>
-                       <div className="text-center space-y-1">
-                          <p className="text-sm font-black text-white">القسم فارغ</p>
-                          <p className="text-[10px] text-white/50 font-bold">لا توجد عناصر {bagTab === 'frames' ? 'إطارات' : bagTab === 'entries' ? 'دخوليات' : 'خلفيات'} حالياً</p>
-                       </div>
+                    <div className="flex-1 flex flex-col items-center justify-center py-20 opacity-30 animate-in fade-in zoom-in duration-500">
+                      <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
+                      <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4 pb-10">
@@ -282,13 +277,13 @@ export const StoreModal: React.FC<StoreModalProps> = ({
 
                          return (
                           <div key={item.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center gap-3 animate-in fade-in shadow-xl relative overflow-hidden group transition-all hover:bg-white/10">
-                            <div className={`${mediaContainerClass} relative flex items-center justify-center overflow-hidden rounded-xl bg-slate-900`}>
+                            <div className={`${mediaContainerClass} relative flex items-center justify-center rounded-full`}>
                               {item.type === 'frame' ? (
                                 <>
-                                  <div className="w-[75%] h-[75%] rounded-xl overflow-hidden border border-white/5 bg-purple-900/10">
-                                    {renderProfileMedia(userPhoto, "w-full h-full object-cover grayscale opacity-30")}
+                                  <div className="w-[75%] h-[75%] rounded-full overflow-hidden">
+                                    {renderProfileMedia(userPhoto, "w-full h-full object-cover")}
                                   </div>
-                                  <img src={item.imageUrl} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-110" alt="frame" />
+                                  <img src={item.imageUrl} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-110 animate-frame-slow" alt="frame" />
                                 </>
                               ) : item.type === 'background' && isVideoUrl(item.imageUrl || item.videoUrl || '') ? (
                                 <video src={item.imageUrl || item.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" />
@@ -320,111 +315,138 @@ export const StoreModal: React.FC<StoreModalProps> = ({
             )}
 
             {storeTab === 'frames' && (
-              <div className="grid grid-cols-2 gap-3">
-                {storeItems.frames.map(frame => (
-                  <div key={frame.id} className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col items-center gap-2 animate-in fade-in shadow-xl hover:bg-white/10 transition-all">
-                    <div className="w-20 h-20 relative flex items-center justify-center group">
-                      <div className="w-[75%] h-[75%] rounded-xl overflow-hidden border border-white/5 bg-slate-900">
-                        {renderProfileMedia(userPhoto, "w-full h-full object-cover")}
-                      </div>
-                      <img 
-                        src={frame.imageUrl} 
-                        className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 animate-pulse-slow scale-110" 
-                        alt="frame" 
-                      />
-                    </div>
-                    
-                    <div className="w-full space-y-1.5">
-                      <div className="text-center">
-                        <span className="text-[11px] font-black text-white truncate w-full block opacity-90">{frame.name}</span>
-                        <span className="text-[7px] font-black text-white/30 uppercase tracking-widest">{frame.durationDays || 7} أيام</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 h-7 w-full">
-                        <div className="flex-1 h-full flex items-center justify-center gap-1">
-                          <span className="text-[10px] font-black text-yellow-500">{frame.price?.toLocaleString('ar-EG')}</span>
-                          <i className="fas fa-coins text-[7px] text-yellow-500"></i>
-                        </div>
-                        <button 
-                          onClick={() => setPurchaseModalItem({...frame, type: 'frame'})} 
-                          className="px-3 h-full bg-purple-500/15 text-purple-300 rounded-lg text-[8px] font-black active:scale-95 border border-purple-500/25 transition-all"
-                        >
-                          شراء
-                        </button>
-                      </div>
-                    </div>
+              <>
+                {storeItems.frames.length === 0 ? (
+                  <div className="w-full flex flex-col items-center justify-center py-24 opacity-30 animate-in fade-in zoom-in duration-500">
+                    <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
+                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {storeItems.frames.map(frame => (
+                      <div key={frame.id} className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col items-center gap-2 animate-in fade-in shadow-xl hover:bg-white/10 transition-all">
+                        <div className="w-20 h-20 relative flex items-center justify-center group">
+                          <div className="w-[75%] h-[75%] rounded-full overflow-hidden">
+                            {renderProfileMedia(userPhoto, "w-full h-full object-cover")}
+                          </div>
+                          <img 
+                            src={frame.imageUrl} 
+                            className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 animate-frame-slow scale-110" 
+                            alt="frame" 
+                          />
+                        </div>
+                        
+                        <div className="w-full space-y-1.5">
+                          <div className="text-center">
+                            <span className="text-[11px] font-black text-white truncate w-full block opacity-90">{frame.name}</span>
+                            <span className="text-[7px] font-black text-white/30 uppercase tracking-widest">{frame.durationDays || 7} أيام</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 h-7 w-full">
+                            <div className="flex-1 h-full flex items-center justify-center gap-1">
+                              <span className="text-[10px] font-black text-yellow-500">{frame.price?.toLocaleString('ar-EG')}</span>
+                              <i className="fas fa-coins text-[7px] text-yellow-500"></i>
+                            </div>
+                            <button 
+                              onClick={() => setPurchaseModalItem({...frame, type: 'frame'})} 
+                              className="px-3 h-full bg-purple-500/15 text-purple-300 rounded-lg text-[8px] font-black active:scale-95 border border-purple-500/25 transition-all"
+                            >
+                              شراء
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
             {storeTab === 'entries' && (
-              <div className="grid grid-cols-2 gap-4">
-                {storeItems.entries.map(entry => (
-                  <div key={entry.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center gap-3 animate-in fade-in shadow-xl hover:bg-white/10 transition-all relative overflow-hidden group">
-                    <button 
-                      onClick={() => setPreviewEntryVideo(entry.videoUrl)}
-                      className="w-full aspect-square rounded-xl overflow-hidden bg-black/40 border border-white/5 shadow-inner relative"
-                    >
-                      <img src={entry.previewImage} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt="preview" />
-                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                         <i className="fas fa-play text-white opacity-40 text-2xl"></i>
-                      </div>
-                    </button>
-                    <div className="w-full space-y-2">
-                      <div className="text-center">
-                        <span className="text-[12px] font-black text-white truncate w-full block">{entry.name}</span>
-                        <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{entry.durationDays || 7} أيام</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 h-7 w-full">
-                        <div className="flex-1 h-full flex items-center justify-center gap-1">
-                          <span className="text-[10px] font-black text-yellow-500">{entry.price?.toLocaleString('ar-EG')}</span>
-                          <i className="fas fa-coins text-[7px] text-yellow-500"></i>
-                        </div>
-                        <button 
-                          onClick={() => setPurchaseModalItem({...entry, type: 'entry'})} 
-                          className="px-3 h-full bg-purple-500/15 text-purple-300 rounded-lg text-[8px] font-black active:scale-95 border border-purple-500/25 transition-all"
-                        >
-                          شراء
-                        </button>
-                      </div>
-                    </div>
+              <>
+                {storeItems.entries.length === 0 ? (
+                  <div className="w-full flex flex-col items-center justify-center py-24 opacity-30 animate-in fade-in zoom-in duration-500">
+                    <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
+                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {storeItems.entries.map(entry => (
+                      <div key={entry.id} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center gap-3 animate-in fade-in shadow-xl hover:bg-white/10 transition-all relative overflow-hidden group">
+                        <button 
+                          onClick={() => setPreviewEntryVideo(entry.videoUrl)}
+                          className="w-full aspect-square rounded-xl overflow-hidden bg-black/40 border border-white/5 shadow-inner relative"
+                        >
+                          <img src={entry.previewImage} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt="preview" />
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                             <i className="fas fa-play text-white opacity-40 text-2xl"></i>
+                          </div>
+                        </button>
+                        <div className="w-full space-y-2">
+                          <div className="text-center">
+                            <span className="text-[12px] font-black text-white truncate w-full block">{entry.name}</span>
+                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{entry.durationDays || 7} أيام</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 h-7 w-full">
+                            <div className="flex-1 h-full flex items-center justify-center gap-1">
+                              <span className="text-[10px] font-black text-yellow-500">{entry.price?.toLocaleString('ar-EG')}</span>
+                              <i className="fas fa-coins text-[7px] text-yellow-500"></i>
+                            </div>
+                            <button 
+                              onClick={() => setPurchaseModalItem({...entry, type: 'entry'})} 
+                              className="px-3 h-full bg-purple-500/15 text-purple-300 rounded-lg text-[8px] font-black active:scale-95 border border-purple-500/25 transition-all"
+                            >
+                              شراء
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
             {storeTab === 'backgrounds' && (
-              <div className="grid grid-cols-2 gap-4">
-                {storeItems.backgrounds.map(bg => (
-                  <div key={bg.id} className="bg-white/5 border border-white/10 rounded-3xl p-3 flex flex-col gap-3 animate-in fade-in shadow-xl hover:bg-white/10 transition-all relative overflow-hidden group">
-                    <div className="w-full aspect-[9/16] rounded-2xl overflow-hidden bg-black/40 border border-white/5 shadow-inner relative">
-                      {isVideoUrl(bg.imageUrl || '') ? (
-                        <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                      ) : (
-                        <img src={bg.imageUrl} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt="preview" />
-                      )}
-                    </div>
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="text-center">
-                        <span className="text-[12px] font-black text-white truncate w-full block">{bg.name}</span>
-                        <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{bg.durationDays || 7} أيام</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-center gap-1.5">
-                        <span className="text-[11px] font-black text-yellow-500">{(bg.price || 0).toLocaleString('ar-EG')}</span>
-                        <i className="fas fa-coins text-[8px] text-yellow-500"></i>
-                      </div>
-
-                      <button 
-                        onClick={() => setPurchaseModalItem({...bg, type: 'background'})} 
-                        className="w-full py-2.5 bg-purple-600/15 text-purple-300 rounded-xl text-[10px] font-black active:scale-95 border border-purple-500/25 transition-all"
-                      >
-                        شراء
-                      </button>
-                    </div>
+              <>
+                {storeItems.backgrounds.length === 0 ? (
+                  <div className="w-full flex flex-col items-center justify-center py-24 opacity-30 animate-in fade-in zoom-in duration-500">
+                    <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
+                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {storeItems.backgrounds.map(bg => (
+                      <div key={bg.id} className="bg-white/5 border border-white/10 rounded-3xl p-3 flex flex-col gap-3 animate-in fade-in shadow-xl hover:bg-white/10 transition-all relative overflow-hidden group">
+                        <div className="w-full aspect-[9/16] rounded-2xl overflow-hidden bg-black/40 border border-white/5 shadow-inner relative">
+                          {isVideoUrl(bg.imageUrl || '') ? (
+                            <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                          ) : (
+                            <img src={bg.imageUrl} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt="preview" />
+                          )}
+                        </div>
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="text-center">
+                            <span className="text-[12px] font-black text-white truncate w-full block">{bg.name}</span>
+                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{bg.durationDays || 7} أيام</span>
+                          </div>
+                          
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="text-[11px] font-black text-yellow-500">{(bg.price || 0).toLocaleString('ar-EG')}</span>
+                            <i className="fas fa-coins text-[8px] text-yellow-500"></i>
+                          </div>
+
+                          <button 
+                            onClick={() => setPurchaseModalItem({...bg, type: 'background'})} 
+                            className="w-full py-2.5 bg-purple-600/15 text-purple-300 rounded-xl text-[10px] font-black active:scale-95 border border-purple-500/25 transition-all"
+                          >
+                            شراء
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -468,13 +490,13 @@ export const StoreModal: React.FC<StoreModalProps> = ({
             <div className="w-32 h-32 relative flex items-center justify-center z-10">
               {purchaseModalItem.imageUrl ? (
                 <>
-                  <div className="w-[70%] h-[70%] rounded-xl overflow-hidden border border-white/10 bg-slate-900">
-                    {renderProfileMedia(userPhoto, "w-full h-full object-cover opacity-50")}
+                  <div className="w-[70%] h-[70%] rounded-full overflow-hidden">
+                    {renderProfileMedia(userPhoto, "w-full h-full object-cover")}
                   </div>
                   {isVideoUrl(purchaseModalItem.imageUrl || purchaseModalItem.videoUrl || '') ? (
-                    <video src={purchaseModalItem.imageUrl || purchaseModalItem.videoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-contain z-20 scale-125" />
+                    <video src={purchaseModalItem.imageUrl || purchaseModalItem.videoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-contain z-20 scale-125 animate-frame-slow" />
                   ) : (
-                    <img src={purchaseModalItem.imageUrl} className="absolute inset-0 w-full h-full object-contain z-20 scale-125 animate-pulse-slow" alt="item" />
+                    <img src={purchaseModalItem.imageUrl} className="absolute inset-0 w-full h-full object-contain z-20 scale-125 animate-frame-slow" alt="item" />
                   )}
                 </>
               ) : (
@@ -519,11 +541,11 @@ export const StoreModal: React.FC<StoreModalProps> = ({
       )}
       
       <style>{`
-        @keyframes pulse-slow {
-          0%, 100% { transform: scale(1.1); opacity: 1; }
-          50% { transform: scale(1.15); opacity: 0.9; }
+        @keyframes frame-slow {
+          0%, 100% { transform: scale(1.1) rotate(0deg); }
+          50% { transform: scale(1.15) rotate(1deg); }
         }
-        .animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
+        .animate-frame-slow { animation: frame-slow 3s ease-in-out infinite; }
       `}</style>
     </div>
   );

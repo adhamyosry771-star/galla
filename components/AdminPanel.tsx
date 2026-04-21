@@ -67,6 +67,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [micOpenIcon, setMicOpenIcon] = useState<string | null>(null);
   const [micLockedIcon, setMicLockedIcon] = useState<string | null>(null);
   const [waveRoomIcon, setWaveRoomIcon] = useState<string | null>(null);
+  const [giftButtonIcon, setGiftButtonIcon] = useState<string | null>(null);
 
   const [emojiUrl, setEmojiUrl] = useState('');
 
@@ -131,6 +132,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const micOpenInputRef = useRef<HTMLInputElement>(null);
   const micLockedInputRef = useRef<HTMLInputElement>(null);
   const waveRoomInputRef = useRef<HTMLInputElement>(null);
+  const giftButtonInputRef = useRef<HTMLInputElement>(null);
   const msgImageRef = useRef<HTMLInputElement>(null);
   const idIconInputRef = useRef<HTMLInputElement>(null);
 
@@ -199,6 +201,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
         setMicOpenIcon(data.micOpenIcon || null);
         setMicLockedIcon(data.micLockedIcon || null);
         setWaveRoomIcon(data.waveRoomIcon || null);
+        setGiftButtonIcon(data.giftButtonIcon || null);
       }
     });
 
@@ -262,6 +265,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     if (confirm("هل تريد حذف هذه الشارة من بروفايل المستخدم؟")) {
       await deleteDoc(doc(db, "users", showBadgesPopup, "badges", badgeId));
       alert("تم حذف الشارة");
+    }
+  };
+
+  const handleRemoveInventoryItem = async (itemId: string, itemUrl: string, itemType: 'frame' | 'entry' | 'background') => {
+    if (!showGrantPopup) return;
+    if (confirm("هل تريد حذف هذا العنصر من حقيبة المستخدم؟")) {
+      try {
+        await deleteDoc(doc(db, "users", showGrantPopup, "inventory", itemId));
+        
+        // Also unequip if currently wearing
+        const userDocRef = doc(db, "users", showGrantPopup);
+        const userSnap = await getDoc(userDocRef);
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          const updates: any = {};
+          if (itemType === 'frame' && userData.currentFrame === itemUrl) updates.currentFrame = null;
+          if (itemType === 'entry' && userData.currentEntry === itemUrl) updates.currentEntry = null;
+          if (itemType === 'background' && (userData.currentRoomBackground === itemUrl || userData.currentRoomBackground === itemUrl)) updates.currentRoomBackground = null;
+          
+          if (Object.keys(updates).length > 0) {
+            await updateDoc(userDocRef, updates);
+          }
+        }
+        alert("تم حذف العنصر بنجاح.");
+      } catch (err) {
+        alert("حدث خطأ أثناء الحذف.");
+      }
     }
   };
 
@@ -608,6 +638,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
+  const handleDeleteAccount = async (uid: string, name: string) => {
+    if (!confirm(`هل أنت متأكد من حذف حساب "${name}" نهائياً؟ سيتم حذف جميع بيانات المستخدم ولا يمكن استعادتها.`)) return;
+    
+    try {
+      await deleteDoc(doc(db, "users", uid));
+      alert("تم حذف الحساب بنجاح");
+    } catch (e) {
+      console.error(e);
+      alert("حدث خطأ أثناء حذف الحساب");
+    }
+  };
+
   const handleBanSubmit = async (days: number | 'permanent') => {
     if (!showBanPopup) return;
     let banUntil = days === 'permanent' ? '2099-01-01T00:00:00Z' : new Date(Date.now() + days * 86400000).toISOString();
@@ -653,7 +695,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
       await setDoc(doc(db, "settings", "design"), {
         micOpenIcon,
         micLockedIcon,
-        waveRoomIcon
+        waveRoomIcon,
+        giftButtonIcon
       }, { merge: true });
       alert("تم حفظ إعدادات التصميم");
     } catch (e) {
@@ -868,6 +911,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                   <button onClick={() => { setShowBadgesPopup(u.id); setBadgeUrl(''); }} className="bg-emerald-600/20 text-emerald-400 text-[10px] py-2 rounded-xl border border-emerald-600/30 font-black">شارات</button>
                   <button onClick={() => { setShowGrantPopup(u.id); }} className="bg-purple-600/20 text-purple-400 text-[10px] py-2 rounded-xl border border-purple-600/30 font-black">منح مخصص</button>
                   <button onClick={() => { setShowGrantAnimatedPopup(u.id); setAnimatedUrl(u.animatedAvatar || ''); }} className="bg-pink-600/20 text-pink-400 text-[10px] py-2 rounded-xl border border-pink-600/30 font-black">منح صورة متحركة</button>
+                  <button onClick={() => handleDeleteAccount(u.id, u.displayName)} className="bg-red-900/40 text-red-400 text-[10px] py-2 rounded-xl border border-red-900/30 font-black">حذف الحساب</button>
                 </div>
               </div>
             ))}
@@ -1444,6 +1488,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                     </div>
                   </div>
                 </div>
+
+                {/* Gift Button Customization */}
+                <div className="space-y-2 pt-4 border-t border-white/5">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">أيقونة زر الهدايا</label>
+                  <div className="space-y-3">
+                    <button onClick={() => giftButtonInputRef.current?.click()} className="w-full h-16 bg-black/40 rounded-2xl border-2 border-dashed border-white/5 flex items-center justify-center overflow-hidden transition-all hover:bg-black/60">
+                      {giftButtonIcon ? <img src={giftButtonIcon} className="h-10 w-10 object-contain" alt="gift" /> : <div className="flex flex-col items-center opacity-20"><i className="fas fa-gift mb-1 text-xl"></i><span className="text-[8px] font-black uppercase">اختر الأيقونة</span></div>}
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={giftButtonInputRef} 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => handleImageSelect(e, setGiftButtonIcon)} 
+                    />
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-bold text-white/20 ml-2 uppercase">أو ضع رابط الأيقونة هنا</label>
+                      <input 
+                        type="text" 
+                        value={giftButtonIcon || ''} 
+                        onChange={e => setGiftButtonIcon(e.target.value)} 
+                        placeholder="https://..." 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-[10px] text-white outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
               </div>
               <button onClick={saveDesignSettings} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-transform border border-white/10">حفظ التغييرات</button>
             </div>
@@ -1570,6 +1642,85 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                 <label className="text-[9px] font-black text-purple-400/60 uppercase mr-1">المدة (بالأيام)</label>
                 <input type="number" value={grantDuration} onChange={e => setGrantDuration(e.target.value)} placeholder="7" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-xs text-white outline-none shadow-inner" />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-4 mt-2 border-t border-white/5 pt-4">
+              <p className="text-[11px] font-black text-white/80 bg-white/5 p-2 rounded-xl text-center">حقيبة المستخدم (العناصر الحالية)</p>
+              
+              {/* قسم الإطارات - يظهر فقط عند اختيار إطار */}
+              {grantType === 'frame' && (
+                <div className="space-y-2 animate-in fade-in zoom-in duration-300">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest">الإطارات الحالية ({userInventory.filter(i => i.type === 'frame').length})</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1 scrollbar-hide">
+                    {userInventory.filter(i => i.type === 'frame').map(item => (
+                      <div key={item.id} className="relative aspect-square bg-white/5 rounded-xl border border-white/5 p-1 flex items-center justify-center group shadow-lg">
+                        <div className="w-full h-full relative flex items-center justify-center">
+                          <div className="w-2/3 h-2/3 rounded-full bg-white/5 border border-white/20"></div>
+                          <img src={item.imageUrl} className="absolute inset-0 w-full h-full object-contain" />
+                        </div>
+                        <button 
+                          onClick={() => handleRemoveInventoryItem(item.id, item.imageUrl, 'frame')}
+                          className="absolute inset-0 bg-red-600/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all rounded-xl z-20"
+                        >
+                          <i className="fas fa-trash text-white text-xs"></i>
+                        </button>
+                      </div>
+                    ))}
+                    {userInventory.filter(i => i.type === 'frame').length === 0 && <div className="col-span-4 text-center py-2 opacity-20 text-[8px] font-bold text-white/50">لا توجد إطارات في حقيبة المستخدم</div>}
+                  </div>
+                </div>
+              )}
+
+              {/* قسم الدخوليات - يظهر فقط عند اختيار دخولية */}
+              {grantType === 'entry' && (
+                <div className="space-y-2 animate-in fade-in zoom-in duration-300">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest">الدخوليات الحالية ({userInventory.filter(i => i.type === 'entry').length})</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1 scrollbar-hide">
+                    {userInventory.filter(i => i.type === 'entry').map(item => (
+                      <div key={item.id} className="relative aspect-square bg-white/5 rounded-xl border border-white/5 p-1 flex items-center justify-center group shadow-lg overflow-hidden">
+                        <img src={item.previewImage || "https://picsum.photos/50"} className="w-full h-full object-cover rounded-lg" />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <i className="fas fa-play text-[8px] text-white/50"></i>
+                        </div>
+                        <button 
+                          onClick={() => handleRemoveInventoryItem(item.id, item.videoUrl || item.imageUrl, 'entry')}
+                          className="absolute inset-0 bg-red-600/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all rounded-xl z-20"
+                        >
+                          <i className="fas fa-trash text-white text-xs"></i>
+                        </button>
+                      </div>
+                    ))}
+                    {userInventory.filter(i => i.type === 'entry').length === 0 && <div className="col-span-4 text-center py-2 opacity-20 text-[8px] font-bold text-white/50">لا توجد دخوليات في حقيبة المستخدم</div>}
+                  </div>
+                </div>
+              )}
+
+              {/* قسم الخلفيات - يظهر فقط عند اختيار خلفية */}
+              {grantType === 'background' && (
+                <div className="space-y-2 animate-in fade-in zoom-in duration-300">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest">خلفيات الغرفة الحالية ({userInventory.filter(i => i.type === 'background').length})</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1 scrollbar-hide">
+                    {userInventory.filter(i => i.type === 'background').map(item => (
+                      <div key={item.id} className="relative aspect-square bg-white/5 rounded-xl border border-white/5 p-1 flex items-center justify-center group shadow-lg overflow-hidden">
+                        <img src={item.imageUrl} className="w-full h-full object-cover rounded-lg" />
+                        <button 
+                          onClick={() => handleRemoveInventoryItem(item.id, item.imageUrl, 'background')}
+                          className="absolute inset-0 bg-red-600/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all rounded-xl z-20"
+                        >
+                          <i className="fas fa-trash text-white text-xs"></i>
+                        </button>
+                      </div>
+                    ))}
+                    {userInventory.filter(i => i.type === 'background').length === 0 && <div className="col-span-4 text-center py-2 opacity-20 text-[8px] font-bold text-white/50">لا توجد خلفيات في حقيبة المستخدم</div>}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">

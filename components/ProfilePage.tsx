@@ -364,8 +364,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
           {isImageUploading && <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-10"><i className="fas fa-circle-notch animate-spin text-white"></i></div>}
         </div>
         <div className="absolute top-6 left-6 z-30 flex gap-2">
-          <button onClick={() => setIsEditModalOpen(true)} className="w-10 h-10 rounded-2xl bg-white/5 backdrop-blur-xl flex items-center justify-center border border-white/10 shadow-lg text-white active:scale-95 transition-all">
-            <i className="fas fa-user-edit"></i>
+          <button onClick={() => setIsEditModalOpen(true)} className="w-10 h-10 rounded-full bg-white/5 backdrop-blur-xl flex items-center justify-center border border-white/10 shadow-lg text-white active:scale-95 transition-all">
+            <i className="fas fa-pen-to-square text-sm"></i>
           </button>
         </div>
         <div className="absolute top-28 right-6 left-6 flex items-center gap-3 z-20">
@@ -384,7 +384,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
                 {isImageUploading && <div className="absolute inset-0 flex items-center justify-center"><i className="fas fa-circle-notch animate-spin text-white text-xs"></i></div>}
               </div>
               {currentFrame && (
-                <img src={currentFrame} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-[1.25] transition-transform duration-500" alt="frame" />
+                <img src={currentFrame} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-[1.25] animate-frame-slow" alt="frame" />
               )}
             </div>
           </div>
@@ -447,7 +447,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {liveUserData?.partnerUid && <div className="w-6 h-6 rounded-full border border-rose-500/50 overflow-hidden shadow-sm animate-in zoom-in"><img src={partnerAvatar} className="w-full h-full object-cover" /></div>}
+              {liveUserData?.partnerUid && <div className="w-6 h-6 rounded-full overflow-hidden shadow-sm animate-in zoom-in"><img src={partnerAvatar} className="w-full h-full object-cover" /></div>}
               <i className="fas fa-chevron-left text-xs text-white/10"></i>
             </div>
           </button>
@@ -484,7 +484,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
            <div className="w-full max-w-[320px] flex flex-col gap-5">
               <div className="flex justify-between items-center px-2">
                  <h3 className="text-lg font-black text-white">محفظتي</h3>
-                 <button onClick={() => setIsWalletOpen(false)} className="w-9 h-9 rounded-xl bg-white/5 text-white flex items-center justify-center border border-white/10"><i className="fas fa-times text-xs"></i></button>
+                 <button onClick={() => setIsWalletOpen(false)} className="w-10 h-10 rounded-full bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all"><i className="fas fa-times text-xs"></i></button>
               </div>
               <div className="relative w-full aspect-[1.7/1] rounded-[2rem] overflow-hidden bg-gradient-to-br from-[#cda34b] via-[#b68e41] to-[#735b2e] shadow-2xl border border-white/10 p-6 flex flex-col justify-between">
                 <div className="absolute top-0 left-0 w-full h-[50%] bg-gradient-to-b from-white/5 to-transparent"></div>
@@ -517,7 +517,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
           <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-20 pointer-events-none">
             <button 
               onClick={() => setIsCPPageOpen(false)} 
-              className="w-11 h-11 rounded-2xl bg-black/20 backdrop-blur-xl text-white flex items-center justify-center border border-white/10 active:scale-90 transition-all shadow-2xl pointer-events-auto"
+              className="w-11 h-11 rounded-full bg-black/20 backdrop-blur-xl text-white flex items-center justify-center border border-white/10 active:scale-90 transition-all shadow-2xl pointer-events-auto"
             >
               <i className="fas fa-times"></i>
             </button>
@@ -525,29 +525,33 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
           </div>
 
           <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-12 relative z-10">
-            <div className="flex items-center justify-center gap-10">
+            <div className="flex items-center justify-center gap-4">
               {/* User Photo Circle */}
               <div className="flex flex-col items-center gap-3">
-                <div className="w-24 h-24 rounded-full border-4 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] overflow-hidden bg-slate-900">
+                <div className="w-20 h-20 rounded-full shadow-[0_0_20px_rgba(244,63,94,0.3)] overflow-hidden bg-slate-900">
                   <img src={currentActiveAvatar} className="w-full h-full object-cover" alt="Me" />
                 </div>
                 <span className="text-[10px] font-black text-rose-300 uppercase tracking-widest drop-shadow-lg">أنا</span>
               </div>
               
               {/* Connector Heart Icon */}
-              <div className={`text-rose-500/60 text-3xl drop-shadow-[0_0_15px_rgba(244,63,94,0.5)] ${liveUserData?.partnerUid ? 'animate-pulse' : ''}`}>
-                <i className="fas fa-heart"></i>
+              <div className={`w-28 h-28 flex items-center justify-center ${liveUserData?.partnerUid ? 'animate-pulse' : ''}`}>
+                {cpConfig?.middleIconUrl ? (
+                  <img src={cpConfig.middleIconUrl} className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(244,63,94,0.6)]" />
+                ) : (
+                  <i className="fas fa-heart text-rose-500/60 text-6xl drop-shadow-[0_0_20px_rgba(244,63,94,0.6)]"></i>
+                )}
               </div>
 
               {/* Partner Circle or Plus */}
               <div className="flex flex-col items-center gap-3">
                 {liveUserData?.partnerUid ? (
-                  <div className="w-24 h-24 rounded-full border-4 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)] overflow-hidden bg-slate-900 animate-in zoom-in">
+                  <div className="w-20 h-20 rounded-full shadow-[0_0_20px_rgba(244,63,94,0.3)] overflow-hidden bg-slate-900 animate-in zoom-in">
                     <img src={partnerAvatar} className="w-full h-full object-cover" alt="Partner" />
                   </div>
                 ) : (
-                  <button onClick={() => setShowCPRequestModal(true)} className="w-24 h-24 rounded-full border-4 border-dashed border-white/20 bg-white/5 backdrop-blur-sm flex items-center justify-center text-white/40 active:scale-95 transition-all hover:bg-white/10 hover:border-white/30 group shadow-2xl">
-                    <i className="fas fa-plus text-2xl group-hover:text-rose-500 transition-colors"></i>
+                  <button onClick={() => setShowCPRequestModal(true)} className="w-20 h-20 rounded-full bg-white/5 backdrop-blur-sm flex items-center justify-center text-white/40 active:scale-95 transition-all hover:bg-white/10 group shadow-2xl">
+                    <i className="fas fa-plus text-xl group-hover:text-rose-500 transition-colors"></i>
                   </button>
                 )}
                 <span className="text-[10px] font-black text-white/40 uppercase tracking-widest drop-shadow-lg">
@@ -679,7 +683,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
         <div className="fixed inset-0 z-[550] bg-[#1a0b2e] flex flex-col animate-in slide-in-from-bottom duration-300">
           <header className="p-5 flex justify-between items-center border-b border-white/5 bg-[#0d051a]">
             {settingsView !== 'main' ? (
-              <button onClick={() => setSettingsView('main')} className="w-10 h-10 rounded-xl bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all">
+              <button onClick={() => setSettingsView('main')} className="w-10 h-10 rounded-full bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all">
                 <i className="fas fa-arrow-right"></i>
               </button>
             ) : <div className="w-10"></div>}
@@ -688,7 +692,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
               {settingsView === 'main' ? 'إعدادات الحساب' : settingsView === 'email' ? 'تغيير بريد الحساب' : settingsView === 'password' ? 'تغيير كلمة المرور' : 'الدعم الفني'}
             </h3>
             
-            <button onClick={() => { setIsSettingsOpen(false); setSettingsView('main'); }} className="w-10 h-10 rounded-xl bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all"><i className="fas fa-times"></i></button>
+            <button onClick={() => { setIsSettingsOpen(false); setSettingsView('main'); }} className="w-10 h-10 rounded-full bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all"><i className="fas fa-times"></i></button>
           </header>
 
           <div className="flex-1 overflow-y-auto p-6 scrollbar-hide flex flex-col">
@@ -750,10 +754,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
                 <div className="pt-8 mt-8 border-t border-white/5">
                   <button 
                     onClick={() => { signOut(auth); setIsSettingsOpen(false); }} 
-                    className="w-full py-5 bg-red-500/10 text-red-400 font-black rounded-[2rem] border border-red-500/20 active:bg-red-500 active:text-white transition-all flex items-center justify-center gap-3 shadow-xl"
+                    className="w-full flex justify-between items-center p-4 bg-red-600/10 border border-red-500/20 rounded-full active:scale-[0.98] transition-all hover:bg-red-600/20 shadow-lg"
                   >
-                    <i className="fas fa-sign-out-alt"></i>
-                    <span>تسجيل الخروج من الحساب</span>
+                    <div className="flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-full bg-red-600/20 flex items-center justify-center text-red-400">
+                        <i className="fas fa-sign-out-alt text-lg"></i>
+                      </div>
+                      <div className="flex flex-col items-start">
+                        <span className="font-bold text-sm text-white tracking-wide">تسجيل الخروج من الحساب</span>
+                      </div>
+                    </div>
+                    <i className="fas fa-chevron-left text-xs text-white/10"></i>
                   </button>
                 </div>
               </div>
@@ -884,7 +895,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
         <div className="fixed inset-0 z-[600] bg-[#0d051a]/95 backdrop-blur-xl flex flex-col animate-in fade-in">
           <header className="p-5 flex justify-between items-center border-b border-white/5 bg-[#1a0b2e]">
             <h3 className="text-lg font-black text-white">تعديل الملف الشخصي</h3>
-            <button onClick={() => setIsEditModalOpen(false)} className="w-8 h-8 rounded-lg bg-white/5 text-white flex items-center justify-center active:scale-95 transition-transform"><i className="fas fa-times"></i></button>
+            <button onClick={() => setIsEditModalOpen(false)} className="w-10 h-10 rounded-full bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-transform"><i className="fas fa-times"></i></button>
           </header>
           <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-hide">
             <div className="space-y-2">
@@ -898,12 +909,17 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ initialUserData, force
             <button onClick={handleUpdateProfileData} disabled={isUpdating} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-white shadow-lg active:scale-95 transition-transform">
               {isUpdating ? <i className="fas fa-spinner animate-spin"></i> : <span>حفظ التغييرات</span>}
             </button>
-            <div className="pt-6 mt-6 border-t border-white/5">
-              <button onClick={async () => { if (!confirm("حذف الحساب؟")) return; try { await deleteDoc(doc(db, "users", user!.uid)); await deleteUser(user!); alert("تم الحذف"); } catch (e) { alert("يجب إعادة تسجيل الدخول للإجراء الأمني"); signOut(auth); } }} disabled={isUpdating} className="w-full py-4 rounded-2xl font-black text-[10px] text-red-500 border border-red-500/20 bg-red-500/5 uppercase tracking-widest active:scale-95 transition-transform">حذف الحساب نهائياً</button>
-            </div>
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes frame-slow {
+          0%, 100% { transform: scale(1.25) rotate(0deg); }
+          50% { transform: scale(1.3) rotate(1deg); }
+        }
+        .animate-frame-slow { animation: frame-slow 3s ease-in-out infinite; }
+      `}</style>
     </div>
   );
 };
