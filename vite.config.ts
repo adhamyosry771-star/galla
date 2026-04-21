@@ -23,7 +23,10 @@ export default defineConfig(({ mode }) => {
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
-        }
+          'motion/react': 'framer-motion',
+          'motion': 'framer-motion'
+        },
+        extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json']
       }
     };
 });

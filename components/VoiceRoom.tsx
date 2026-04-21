@@ -786,13 +786,13 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             {(currentUserData?.currentFrame || currentUserData?.currentFrame) && (<img src={currentUserData?.currentFrame} className="absolute inset-0 w-full h-full object-contain z-10 scale-125" alt="frame" />)}
           </div>
         </div>
-        <div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto scrollbar-hide pb-12">
+        <div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto overflow-x-hidden scrollbar-hide pb-12">
           <h3 className="text-2xl font-black text-white drop-shadow-lg mb-2">{currentUserData?.displayName || user?.displayName}</h3>
           
           <div className="mb-4">
             {profileCustomIdIcon ? (
               <div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300" style={{ backgroundImage: `url(${profileCustomIdIcon})` }}>
-                <span className="text-[12px] font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" style={{ paddingLeft: `${pIdX}px`, paddingTop: `${pIdY}px` }}>{profileCustomId}</span>
+                <span className="text-[10px] font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" style={{ paddingLeft: `${pIdX}px`, paddingTop: `${pIdY}px` }}>{profileCustomId}</span>
               </div>
             ) : (
               <span className={`text-[11px] font-black w-fit ${profileCustomId === 'OFFICIAL' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : 'text-purple-300 bg-white/5 border-white/5'} px-3 py-1 rounded-xl border tracking-wider`}>ID: {profileCustomId}</span>
@@ -811,11 +811,11 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </div>
             </div>
 
-            {/* CP Rectangle Section */}
+            {/* CP Rectangle Section - Sized to match badges box but without background */}
             {cpConfig?.rectangleUrl && (
-              <div className="relative w-full h-28 flex items-center justify-center animate-in zoom-in duration-500 overflow-visible my-2">
-                <img src={cpConfig.rectangleUrl} className="absolute inset-0 w-full h-full object-contain scale-150 drop-shadow-2xl" alt="CP Effect" />
-                <div className="relative w-full flex items-center justify-between px-7 z-10 translate-y-4">
+              <div className="relative w-full h-32 flex items-center justify-center animate-in zoom-in duration-500 overflow-visible my-4">
+                <img src={cpConfig.rectangleUrl} className="absolute inset-0 w-full h-full object-center object-contain scale-[1.26] drop-shadow-2xl z-0" alt="CP Effect" />
+                <div className="relative w-full flex items-center justify-between px-7 z-10 translate-y-[19px]">
                   {/* Me (Right in RTL) */}
                   <div className="flex flex-col items-center gap-1.5">
                     <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform">
