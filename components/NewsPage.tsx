@@ -22,9 +22,6 @@ export const NewsPage: React.FC = () => {
     <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-[#1a0b2e]">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-2xl font-black text-white tracking-tight">آخر الأخبار</h2>
-        <div className="bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20">
-          <span className="text-[10px] text-purple-400 font-black uppercase">عالم يلا</span>
-        </div>
       </div>
 
       {news.length === 0 ? (

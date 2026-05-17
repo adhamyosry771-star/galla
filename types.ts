@@ -5,6 +5,12 @@ export interface User {
   avatar: string;
   level: number;
   vip?: boolean;
+  coins?: number;
+  diamonds?: number;
+  charismaXP?: number;
+  wealthXP?: number;
+  charismaLevel?: number;
+  wealthLevel?: number;
 }
 
 export interface Room {

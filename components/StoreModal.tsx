@@ -32,6 +32,8 @@ export const StoreModal: React.FC<StoreModalProps> = ({
   
   const [purchaseModalItem, setPurchaseModalItem] = useState<any | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
   
   const [previewEntryVideo, setPreviewEntryVideo] = useState<string | null>(null);
 
@@ -110,34 +112,62 @@ export const StoreModal: React.FC<StoreModalProps> = ({
     const duration = purchaseModalItem.durationDays || 7;
 
     if (userCoins < price) {
-      alert("رصيدك غير كافٍ لإتمم عملية الشراء!");
+      alert("رصيدك غير كافٍ لإتمام عملية الشراء!");
       setPurchaseModalItem(null);
       return;
     }
 
     setIsPurchasing(true);
     try {
-      const purchasedAt = new Date();
-      const expiresAt = new Date(purchasedAt.getTime() + duration * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      
+      // Check if user already owns this item and it hasn't expired
+      const inventoryRef = collection(db, "users", user.uid, "inventory");
+      const q = query(inventoryRef, where("itemId", "==", purchaseModalItem.id));
+      const querySnap = await getDocs(q);
+      
+      let existingItem: any = null;
+      querySnap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.expiresAt && data.expiresAt.toDate() > now) {
+          existingItem = { id: docSnap.id, ...data };
+        }
+      });
 
       await updateDoc(doc(db, "users", user.uid), {
         coins: userCoins - price
       });
 
-      await addDoc(collection(db, "users", user.uid, "inventory"), {
-        itemId: purchaseModalItem.id,
-        name: purchaseModalItem.name || 'عنصر',
-        imageUrl: purchaseModalItem.imageUrl || null,
-        videoUrl: purchaseModalItem.videoUrl || null,
-        previewImage: purchaseModalItem.previewImage || null,
-        type: purchaseModalItem.type,
-        price: price,
-        purchasedAt: serverTimestamp(),
-        expiresAt: Timestamp.fromDate(expiresAt),
-        isEquipped: false 
-      });
+      if (existingItem) {
+        // Aggregate duration
+        const currentExpiry = existingItem.expiresAt.toDate();
+        const newExpiresAt = new Date(currentExpiry.getTime() + duration * 24 * 60 * 60 * 1000);
+        
+        await updateDoc(doc(db, "users", user.uid, "inventory", existingItem.id), {
+          expiresAt: Timestamp.fromDate(newExpiresAt),
+          purchasedAt: serverTimestamp()
+        });
+        setSuccessMsg(`تم تجديد المدة بنجاح! تم إضافة ${duration} أيام إلى مدة العنصر الحالية.`);
+        setShowSuccess(true);
+      } else {
+        // Fresh purchase
+        const expiresAt = new Date(now.getTime() + duration * 24 * 60 * 60 * 1000);
+        await addDoc(collection(db, "users", user.uid, "inventory"), {
+          itemId: purchaseModalItem.id,
+          name: purchaseModalItem.name || 'عنصر',
+          imageUrl: purchaseModalItem.imageUrl || null,
+          videoUrl: purchaseModalItem.videoUrl || null,
+          previewImage: purchaseModalItem.previewImage || null,
+          type: purchaseModalItem.type,
+          price: price,
+          purchasedAt: serverTimestamp(),
+          expiresAt: Timestamp.fromDate(expiresAt),
+          isEquipped: false 
+        });
+        setSuccessMsg(`تم الشراء بنجاح! تم نقل العنصر إلى حقيبتك.`);
+        setShowSuccess(true);
+      }
 
-      alert(`تم الشراء بنجاح! تم نقل العنصر إلى حقيبتك.`);
       setPurchaseModalItem(null);
       setStoreTab('my_bag'); 
       setBagTab(purchaseModalItem.type === 'frame' ? 'frames' : purchaseModalItem.type === 'entry' ? 'entries' : 'backgrounds');
@@ -283,7 +313,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                                   <div className="w-[75%] h-[75%] rounded-full overflow-hidden">
                                     {renderProfileMedia(userPhoto, "w-full h-full object-cover")}
                                   </div>
-                                  <img src={item.imageUrl} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-110 animate-frame-slow" alt="frame" />
+                                  <img src={item.imageUrl} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-110" alt="frame" />
                                 </>
                               ) : item.type === 'background' && isVideoUrl(item.imageUrl || item.videoUrl || '') ? (
                                 <video src={item.imageUrl || item.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" />
@@ -331,7 +361,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                           </div>
                           <img 
                             src={frame.imageUrl} 
-                            className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 animate-frame-slow scale-110" 
+                            className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-110" 
                             alt="frame" 
                           />
                         </div>
@@ -481,9 +511,9 @@ export const StoreModal: React.FC<StoreModalProps> = ({
       )}
 
       {purchaseModalItem && (
-        <div className="fixed inset-0 z-[600] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-[#1a0b2e] w-full max-sm rounded-3xl border border-white/10 p-8 flex flex-col items-center gap-6 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-purple-600/10 to-transparent"></div>
+        <div className="fixed inset-0 z-[600] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-[#1a0b2e]/80 backdrop-blur-2xl w-full max-w-[320px] rounded-[2.5rem] border border-white/10 p-8 flex flex-col items-center gap-6 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-purple-600/20 to-transparent"></div>
             
             <h3 className="text-lg font-black text-white z-10">تأكيد عملية الشراء</h3>
             
@@ -494,9 +524,9 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                     {renderProfileMedia(userPhoto, "w-full h-full object-cover")}
                   </div>
                   {isVideoUrl(purchaseModalItem.imageUrl || purchaseModalItem.videoUrl || '') ? (
-                    <video src={purchaseModalItem.imageUrl || purchaseModalItem.videoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-contain z-20 scale-125 animate-frame-slow" />
+                    <video src={purchaseModalItem.imageUrl || purchaseModalItem.videoUrl} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-contain z-20 scale-125" />
                   ) : (
-                    <img src={purchaseModalItem.imageUrl} className="absolute inset-0 w-full h-full object-contain z-20 scale-125 animate-frame-slow" alt="item" />
+                    <img src={purchaseModalItem.imageUrl} className="absolute inset-0 w-full h-full object-contain z-20 scale-125" alt="item" />
                   )}
                 </>
               ) : (
@@ -524,19 +554,45 @@ export const StoreModal: React.FC<StoreModalProps> = ({
               <button 
                 onClick={confirmPurchase} 
                 disabled={isPurchasing} 
-                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-white/10"
+                className="w-full bg-purple-600/20 backdrop-blur-md py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-purple-500/30 hover:bg-purple-600/30"
               >
-                {isPurchasing ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-check-circle"></i><span>تأكيد وشراء الآن</span></>}
+                {isPurchasing ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-check-circle text-purple-400"></i><span>تأكيد وشراء الآن</span></>}
               </button>
               <button 
                 onClick={() => setPurchaseModalItem(null)} 
                 disabled={isPurchasing} 
-                className="w-full bg-white/5 py-4 rounded-2xl font-black text-xs text-white/60 active:scale-95 transition-all border border-white/5"
+                className="w-full bg-white/5 py-4 rounded-2xl font-black text-xs text-white/40 active:scale-95 transition-all border border-white/5"
               >
                 تراجع
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showSuccess && (
+        <div className="fixed inset-0 z-[700] bg-black/40 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
+           <div 
+             className="bg-[#1a0b2e]/90 backdrop-blur-2xl w-full max-w-[320px] rounded-[2.5rem] border border-white/10 p-10 flex flex-col items-center gap-6 shadow-2xl relative overflow-hidden text-center"
+           >
+              <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-purple-500/20 to-transparent"></div>
+              
+              <div className="w-20 h-20 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 z-10">
+                <i className="fas fa-check-circle text-4xl"></i>
+              </div>
+
+              <div className="z-10 space-y-2">
+                <h3 className="text-lg font-black text-white">تم بنجاح!</h3>
+                <p className="text-[11px] font-bold text-white/60 leading-relaxed">{successMsg}</p>
+              </div>
+
+              <button 
+                onClick={() => setShowSuccess(false)}
+                className="w-full py-4 bg-purple-600/20 text-purple-300 font-black text-xs rounded-2xl border border-purple-500/30 active:scale-95 transition-all z-10"
+              >
+                رائع
+              </button>
+           </div>
         </div>
       )}
       

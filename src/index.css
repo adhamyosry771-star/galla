@@ -1,0 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;700;900&family=Libre+Baskerville:italic@1&family=IBM+Plex+Sans+Arabic:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Anton", sans-serif;
+  --font-serif: "Libre Baskerville", serif;
+  --color-brand: #c026d3; /* fuchsia-600 */
+}

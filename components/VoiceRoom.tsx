@@ -3,7 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Room, Gift, ChatMessage } from '../types';
 import { GIFTS as STATIC_GIFTS } from '../constants';
 import { auth, db } from '../firebase';
-import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, orderBy, addDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { FruitsGame } from './FruitsGame';
+import { getWealthLevelInfo, getCharismaLevelInfo } from '../utils';
+import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, orderBy, addDoc, serverTimestamp, Timestamp, increment, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 interface VoiceRoomProps {
   room: Room & { roomBackground?: string; roomIdDisplay?: string; description?: string; micCount?: number };
@@ -69,6 +71,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [showGifts, setShowGifts] = useState(false);
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
   const [showExtraMenu, setShowExtraMenu] = useState(false); 
+  const [showGamesMenu, setShowGamesMenu] = useState(false);
+  const [activeGame, setActiveGame] = useState<string | null>(null);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showUserData, setShowUserData] = useState(false); 
@@ -114,7 +118,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   const [selectedQuantity, setSelectedQuantity] = useState<number>(1);
   const [showQuantityMenu, setShowQuantityMenu] = useState(false);
-  const quantities = [1, 7, 38, 66, 188, 520, 1314];
+  const quantities = [1, 7, 38, 66, 188, 520, 1314, 2628];
 
   const [designSettings, setDesignSettings] = useState<any>(null);
   const [dynamicEmojis, setDynamicEmojis] = useState<any[]>([]);
@@ -128,12 +132,31 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [availableBgs, setAvailableBgs] = useState<any[]>([]);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
   const [showBgSelector, setShowBgSelector] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [roomPasswordInput, setRoomPasswordInput] = useState(currentRoom.password || '');
+  const [showReportSuccess, setShowReportSuccess] = useState(false);
+  const [reportReason, setReportReason] = useState('اسائة');
+  const [reportDetails, setReportDetails] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [cpConfig, setCpConfig] = useState<any>(null);
+  const [fruitsSettings, setFruitsSettings] = useState<any>(null);
   const [popupPartnerData, setPopupPartnerData] = useState<any>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const user = auth.currentUser;
   const isRoomOwner = user?.uid === currentRoom.owner?.uid;
+
+  const handleUpdateBalance = async (amount: number) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        coins: (currentUserData?.coins || 0) + amount
+      });
+    } catch (err) {
+      console.error("Error updating balance:", err);
+    }
+  };
 
   const isVideoUrl = (url?: string) => {
     if (!url) return false;
@@ -254,8 +277,23 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         }
       }
     });
-    return () => unsubRoom();
-  }, [currentRoom.id, showRoomSettings]);
+
+    const micsRef = collection(db, "rooms", currentRoom.id, "mics");
+    const unsubMics = onSnapshot(micsRef, (snap) => {
+      const newMics = Array(currentRoom.micCount || 10).fill({ status: 'open', user: null });
+      snap.docs.forEach(doc => {
+        const index = parseInt(doc.id);
+        if (index < newMics.length) {
+          newMics[index] = doc.data();
+        }
+      });
+      setMicStates(newMics);
+    });
+    return () => {
+      unsubRoom();
+      unsubMics();
+    };
+  }, [currentRoom.id, showRoomSettings, currentRoom.micCount]);
 
   useEffect(() => {
     if (currentRoom.owner?.uid) {
@@ -288,7 +326,13 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   useEffect(() => {
     const unsubDesign = onSnapshot(doc(db, "settings", "design"), (docSnap) => {
-      if (docSnap.exists()) setDesignSettings(docSnap.data());
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setDesignSettings(data);
+        // Preload core design icons
+        if (data.giftButtonIcon) { const img = new Image(); img.src = data.giftButtonIcon; }
+        if (data.waveRoomIcon) { const img = new Image(); img.src = data.waveRoomIcon; }
+      }
     });
     const unsubEmojis = onSnapshot(query(collection(db, "emojis"), orderBy("createdAt", "desc")), (snap) => {
       setDynamicEmojis(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -300,11 +344,22 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       if (snap.empty) {
         setDynamicGifts(STATIC_GIFTS as any);
       } else {
-        setDynamicGifts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+        const giftsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setDynamicGifts(giftsData);
+        // Preload gift images to avoid delay when opening menu
+        giftsData.forEach(gift => {
+          if (gift.imageUrl) {
+            const img = new Image();
+            img.src = gift.imageUrl;
+          }
+        });
       }
     });
+    const unsubFruits = onSnapshot(doc(db, "settings", "fruitsGame"), (snap) => {
+      if (snap.exists()) setFruitsSettings(snap.data());
+    });
     return () => {
-      unsubDesign(); unsubEmojis(); unsubGifts(); unsubCp();
+      unsubDesign(); unsubEmojis(); unsubGifts(); unsubCp(); unsubFruits();
     };
   }, []);
 
@@ -383,9 +438,33 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }
 
     try {
+      // 1. تحديث بيانات المرسل (ثروة)
+      const newWealthXP = (currentUserData.wealthXP || 0) + totalCost;
+      const { level: newWealthLevel } = getWealthLevelInfo(newWealthXP);
+      
       await updateDoc(doc(db, "users", user!.uid), {
-        coins: currentUserData.coins - totalCost
+        coins: increment(-totalCost),
+        wealthXP: increment(totalCost),
+        wealthLevel: newWealthLevel
       });
+
+      // 2. تحديث بيانات المستقبلين (جاذبية + ماس)
+      const diamondValue = Math.floor(giftValue * 0.7);
+      for (const recipientId of Array.from(selectedUserIds)) {
+        const recipientRef = doc(db, "users", recipientId);
+        const recipientSnap = await getDoc(recipientRef);
+        if (recipientSnap.exists()) {
+          const rData = recipientSnap.data();
+          const newCharismaXP = (rData.charismaXP || 0) + giftValue;
+          const { level: newCharismaLevel } = getCharismaLevelInfo(newCharismaXP);
+          
+          await updateDoc(recipientRef, {
+            charismaXP: increment(giftValue),
+            charismaLevel: newCharismaLevel,
+            diamonds: increment(diamondValue)
+          });
+        }
+      }
 
       setMicStates(prev => prev.map(mic => {
         if (mic?.user && selectedUserIds.has(mic.user.uid)) {
@@ -456,6 +535,71 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     } catch (err) { alert("حدث خطأ أثناء التحديث"); } finally { setIsUpdatingRoom(false); }
   };
 
+  const handleSendReport = async () => {
+    if (!user) return;
+    if (reportDetails.length < 5) return alert("يرجى شرح ما حدث بمزيد من التفاصيل");
+    
+    setIsSubmittingReport(true);
+    try {
+      await addDoc(collection(db, "reports"), { 
+        roomId: currentRoom.id, 
+        roomName: currentRoom.title, 
+        roomOwnerUid: currentRoom.owner?.uid || null,
+        roomOwnerCustomId: ownerData?.customId || null,
+        reporterUid: user.uid, 
+        reporterName: user.displayName, 
+        reporterCustomId: currentUserData?.customId || null,
+        reason: reportReason, 
+        details: reportDetails, 
+        createdAt: serverTimestamp() 
+      });
+      setShowReportModal(false);
+      setShowReportSuccess(true);
+      setReportDetails('');
+    } catch (err) { alert("خطأ في إرسال البلاغ"); } finally { setIsSubmittingReport(false); }
+  };
+
+  const handleToggleLockRoom = async () => {
+    if (!user) return;
+    setIsUpdatingRoom(true);
+    try {
+      if (roomPasswordInput.trim()) {
+        await updateDoc(doc(db, "rooms", currentRoom.id), {
+          isLocked: true,
+          password: roomPasswordInput.trim()
+        });
+      } else {
+        await updateDoc(doc(db, "rooms", currentRoom.id), {
+          isLocked: false,
+          password: null
+        });
+      }
+      setShowLockModal(false);
+    } catch (err) {
+      alert("خطأ في تحديث قفل الغرفة");
+    } finally {
+      setIsUpdatingRoom(false);
+    }
+  };
+
+  const handleUserExit = async () => {
+    if (user) {
+      const userMicIndex = micStates.findIndex(m => m?.user?.uid === user.uid);
+      if (userMicIndex !== -1) {
+        try {
+          await updateDoc(doc(db, "rooms", currentRoom.id, "mics", userMicIndex.toString()), {
+            user: null,
+            status: 'open',
+            receivedCoins: 0
+          });
+        } catch (err) {
+          console.error("Error clearing mic on exit:", err);
+        }
+      }
+    }
+    onLeave();
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -492,29 +636,83 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     setSelectedMicIndex(index); setShowMicActions(true);
   };
 
-  const takeMic = (index: number) => {
-    const newMicStates = [...micStates];
-    newMicStates.forEach(m => { if (m?.user?.uid === user?.uid) { m.user = null; m.receivedCoins = 0; } });
-    newMicStates[index] = { 
-      ...newMicStates[index], 
-      user: currentUserData || { uid: user?.uid, photoURL: user?.photoURL, displayName: user?.displayName, customId: currentUserData?.customId || user?.uid.substring(0,8), currentFrame: currentUserData?.currentFrame || null, animatedAvatar: currentUserData?.animatedAvatar || null }, 
+  const takeMic = async (index: number) => {
+    if (!user) return;
+    
+    // Find if user is already on another mic and remove them
+    const existingMicIndex = micStates.findIndex(m => m?.user?.uid === user.uid);
+    if (existingMicIndex !== -1) {
+      await updateDoc(doc(db, "rooms", currentRoom.id, "mics", existingMicIndex.toString()), {
+        user: null,
+        status: 'open',
+        receivedCoins: 0
+      });
+    }
+
+    const micData = {
+      user: {
+        uid: user.uid,
+        displayName: currentUserData?.displayName || user.displayName,
+        photoURL: currentUserData?.photoURL || user.photoURL,
+        customId: currentUserData?.customId || user.uid.substring(0, 8),
+        currentFrame: currentUserData?.currentFrame || null,
+        animatedAvatar: currentUserData?.animatedAvatar || null
+      },
       status: 'occupied',
-      receivedCoins: 0 
+      receivedCoins: 0,
+      updatedAt: serverTimestamp()
     };
-    setMicStates(newMicStates); setIsMicMuted(false); setShowMicActions(false);
+
+    try {
+      await updateDoc(doc(db, "rooms", currentRoom.id, "mics", index.toString()), micData).catch(async (err) => {
+        // If doc doesn't exist (first time), use setDoc (well, updateDoc fails if not exists)
+        // In our case, we can use setDoc
+        const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+        await setDoc(doc(db, "rooms", currentRoom.id, "mics", index.toString()), micData);
+      });
+      setIsMicMuted(false);
+      setShowMicActions(false);
+    } catch (err) {
+      console.error("Error taking mic:", err);
+    }
   };
 
-  const toggleLockMic = (index: number) => {
-    const newMicStates = [...micStates];
-    const currentStatus = newMicStates[index]?.status;
-    newMicStates[index] = { ...newMicStates[index], status: currentStatus === 'locked' ? 'open' : 'locked', user: null, receivedCoins: 0 };
-    setMicStates(newMicStates); setShowMicActions(false);
+  const toggleLockMic = async (index: number) => {
+    const currentStatus = micStates[index]?.status;
+    const newStatus = currentStatus === 'locked' ? 'open' : 'locked';
+    
+    try {
+      const micRef = doc(db, "rooms", currentRoom.id, "mics", index.toString());
+      await updateDoc(micRef, {
+        status: newStatus,
+        user: null,
+        receivedCoins: 0
+      }).catch(async () => {
+        const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+        await setDoc(micRef, {
+          status: newStatus,
+          user: null,
+          receivedCoins: 0
+        });
+      });
+      setShowMicActions(false);
+    } catch (err) {
+      console.error("Error toggling mic lock:", err);
+    }
   };
 
-  const leaveMic = (index: number) => {
-    const newMicStates = [...micStates];
-    newMicStates[index] = { ...newMicStates[index], user: null, status: 'open', receivedCoins: 0 }; 
-    setMicStates(newMicStates); setIsMicMuted(true); setShowMicActions(false);
+  const leaveMic = async (index: number) => {
+    try {
+      await updateDoc(doc(db, "rooms", currentRoom.id, "mics", index.toString()), {
+        user: null,
+        status: 'open',
+        receivedCoins: 0
+      });
+      setIsMicMuted(true);
+      setShowMicActions(false);
+    } catch (err) {
+      console.error("Error leaving mic:", err);
+    }
   };
 
   const allPresentUsers: any[] = [];
@@ -605,9 +803,21 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </div>
               <div className="flex flex-col min-w-0 flex-1">
                 <h2 className="font-black text-[12px] text-white leading-tight break-words">{roomTitle}</h2>
-                {ownerCustomIdIcon ? (
-                  <div className="relative w-[70px] h-[22px] flex items-center bg-contain bg-center bg-no-repeat mt-0.5 flex-shrink-0" style={{ backgroundImage: `url(${ownerCustomIdIcon})` }}><span className="text-[7px] font-black text-white tracking-widest text-center w-full block drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" style={{ paddingLeft: `${(idX * 70) / 90}px`, paddingTop: `${(idY * 22) / 28}px` }}>{displayId}</span></div>
-                ) : <span className={`text-[8px] font-black tracking-tighter ${displayId === 'OFFICIAL' ? 'text-blue-400' : 'text-white/40'}`}>ID: {displayId}</span>}
+                <div className="flex items-center gap-1">
+                  {ownerCustomIdIcon ? (
+                    <div className="relative w-[70px] h-[22px] flex items-center bg-contain bg-center bg-no-repeat mt-0.5 flex-shrink-0" style={{ backgroundImage: `url(${ownerCustomIdIcon})` }}>
+                      <span className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" 
+                            style={{ 
+                              paddingLeft: `${(idX * 70) / 90}px`, 
+                              paddingTop: `${(idY * 22) / 28}px`,
+                              fontSize: `${((ownerData?.idFontSize || 10) * 70) / 90}px`
+                            }}>
+                        {displayId}
+                      </span>
+                    </div>
+                  ) : <span className={`text-[8px] font-black tracking-tighter ${displayId === 'OFFICIAL' ? 'text-blue-400' : 'text-white/40'}`}>ID: {displayId}</span>}
+                  {currentRoom.isLocked && <i className="fas fa-lock text-[7px] text-white/70 ml-0.5 -mt-0.5"></i>}
+                </div>
               </div>
             </div>
           </div>
@@ -679,10 +889,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                   </div>
                   
                   {mic?.user && (
-                    <div className={`min-w-[28px] max-w-[48px] w-fit h-3.5 bg-black/40 backdrop-blur-md rounded-full border border-yellow-500/20 flex items-center justify-center gap-1 px-1.5 shadow-inner animate-in slide-in-from-top-1 duration-300`}>
+                    <div className={`min-w-[28px] w-fit h-3.5 bg-black/40 backdrop-blur-md rounded-full border border-yellow-500/20 flex items-center justify-center gap-1 px-2 shadow-inner animate-in slide-in-from-top-1 duration-300`}>
                       <i className="fas fa-gift text-[6px] text-yellow-500"></i>
-                      <span className="text-[7.5px] font-black text-yellow-400 tracking-tighter whitespace-nowrap overflow-hidden">
-                        {coins > 999999 ? `${(coins/1000000).toFixed(1)}M` : coins.toLocaleString('ar-EG')}
+                      <span className="text-[7.5px] font-black text-yellow-400 tracking-tighter whitespace-nowrap">
+                        {coins >= 1000000000 ? `${(coins/1000000000).toFixed(1)}B` : coins >= 1000000 ? `${(coins/1000000).toFixed(1)}M` : coins.toLocaleString('en-US')}
                       </span>
                     </div>
                   )}
@@ -720,13 +930,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </form>
             </div>
           </div>
-          <button onClick={() => setShowGifts(true)} className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center shadow-xl active:scale-90 transition-transform flex-shrink-0 overflow-hidden">
-            {!designSettings ? (
-              <div className="w-5 h-5 border-[2px] border-white/20 border-t-white rounded-full animate-spin"></div>
-            ) : designSettings?.giftButtonIcon ? (
-              <SafeImage src={designSettings.giftButtonIcon} className="w-full h-full object-cover" alt="Gift" spinnerSize="w-5 h-5" fallback={<i className="fas fa-gift text-white text-sm"></i>} />
-            ) : (
-              <i className="fas fa-gift text-white text-sm"></i>
+          <button onClick={() => setShowGifts(true)} className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center shadow-xl active:scale-90 transition-transform flex-shrink-0 overflow-hidden relative group">
+            {/* Custom Icon - covers the background color completely when loaded */}
+            {designSettings?.giftButtonIcon && (
+              <img 
+                src={designSettings.giftButtonIcon} 
+                className="absolute inset-0 w-full h-full object-cover animate-in fade-in duration-500 z-10" 
+                alt="Gift" 
+              />
             )}
           </button>
           <button onClick={() => setShowExtraMenu(true)} className="w-10 h-10 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center active:scale-90 transition-transform relative group flex-shrink-0"><div className="grid grid-cols-2 gap-[3px] p-2"><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div></div></button>
@@ -738,19 +949,196 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       )}
 
       {showExtraMenu && (
-        <><div className="fixed inset-0 z-[105] bg-black/10 animate-in fade-in" onClick={() => setShowExtraMenu(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[110] bg-black/60 backdrop-blur-2px border-t border-white/10 animate-slide-up h-[50%] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 flex-shrink-0"></div><div className="p-8 grid grid-cols-4 gap-y-8 gap-x-4 flex-1 overflow-y-auto scrollbar-hide mt-4">
+        <><div className="fixed inset-0 z-[105] bg-black/10 animate-in fade-in" onClick={() => setShowExtraMenu(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[110] bg-black/60 backdrop-blur-2px border-t border-white/10 animate-slide-up h-[50%] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 flex-shrink-0"></div><div className="p-8 grid grid-cols-4 gap-y-4 gap-x-4 flex-1 overflow-y-auto scrollbar-hide mt-4">
           {isRoomOwner && (
             <button onClick={() => { setShowRoomSettings(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-cog text-xl"></i></div><span className="text-[10px] font-black text-white/60">الإعدادات</span></button>
           )}
-          <button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">الألعاب</span></button><button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">الموسيقى</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>المؤثرات</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">كتم الغرفة</span></button><button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">مشاركة</span></button><button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">إبلاغ</span></button></div></div></>
+          <button onClick={() => { setShowGamesMenu(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">الألعاب</span></button><button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">الموسيقى</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>المؤثرات</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">كتم الغرفة</span></button><button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">مشاركة</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">إبلاغ</span></button>
+{isRoomOwner && (
+  <button onClick={() => { setShowLockModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform">
+    <div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center ${currentRoom.isLocked ? 'text-white' : 'text-white/80'}`}>
+      <i className={`fas ${currentRoom.isLocked ? 'fa-lock' : 'fa-lock-open'} text-xl`}></i>
+    </div>
+    <span className="text-[10px] font-black text-white/60">قفل الغرفة</span>
+  </button>
+)}
+</div></div></>
+      )}
+
+      {showGamesMenu && (
+        <>
+          <div className="fixed inset-0 z-[120] bg-black/10 animate-in fade-in" onClick={() => setShowGamesMenu(false)}></div>
+          <div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[130] bg-black/60 border-t border-white/10 animate-slide-up h-[60%] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl">
+            <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 flex-shrink-0"></div>
+            <div className="p-6 overflow-y-auto scrollbar-hide">
+              <h3 className="text-white font-black text-sm mb-6 text-center tracking-tighter">قائمة الألعاب</h3>
+              <div className="grid grid-cols-4 gap-4">
+                <button 
+                  onClick={() => { setActiveGame('fruits'); setShowGamesMenu(false); }}
+                  className="flex flex-col items-center gap-2 group active:scale-95 transition-all"
+                >
+                  <div className={`w-14 h-14 rounded-2xl shadow-lg overflow-hidden ${!fruitsSettings?.gameIcon ? 'bg-gradient-to-br from-orange-400 to-rose-500 p-[1px]' : ''}`}>
+                    {fruitsSettings?.gameIcon ? (
+                      <img src={fruitsSettings.gameIcon} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                    ) : (
+                      <div className="w-full h-full rounded-2xl bg-black/40 flex items-center justify-center border border-white/10">
+                        <span className="text-2xl group-hover:scale-110 transition-transform">🍓</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-black text-white/70 tracking-tighter">لعبة الفواكه</span>
+                </button>
+                
+                {/* Placeholder for future games */}
+                {[...Array(7)].map((_, i) => (
+                  <div key={i} className="flex flex-col items-center gap-2 opacity-20">
+                    <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                      <i className="fas fa-lock text-xs text-white/40"></i>
+                    </div>
+                    <span className="text-[10px] font-black text-white/40 tracking-tighter">قريباً</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {activeGame === 'fruits' && (
+        <FruitsGame 
+          onClose={() => setActiveGame(null)} 
+          userBalance={currentUserData?.coins || 0}
+          onUpdateBalance={handleUpdateBalance}
+        />
       )}
 
       {showRoomSettings && (
         <div className="fixed inset-0 z-[600] bg-[#1a0b2e] flex flex-col animate-in slide-in-from-bottom duration-300" dir="rtl"><header className="p-4 flex items-center justify-between border-b border-white/5 bg-[#0d051a]"><button onClick={() => setShowRoomSettings(false)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all"><i className="fas fa-times"></i></button><h2 className="text-sm font-black text-white">إعدادات الغرفة</h2><button onClick={handleUpdateRoomSettings} disabled={isUpdatingRoom} className="px-4 py-2 rounded-xl bg-purple-600/10 text-purple-400 text-sm font-black active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">{isUpdatingRoom && <i className="fas fa-circle-notch animate-spin text-[10px]"></i>}<span>حفظ</span></button></header><div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">{!showBgSelector ? (<><div className="flex flex-col items-center gap-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">صورة الغرفة</label><button onClick={() => coverInputRef.current?.click()} className="relative w-32 h-32 rounded-[2.5rem] bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden transition-all group-hover:bg-white/10"><img src={editRoomCover} className="w-full h-full object-cover" alt="Room Cover" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><i className="fas fa-camera text-white"></i></div></button><input type="file" ref={coverInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} /></div><div className="space-y-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">اسم الغرفة</label><input type="text" value={editRoomTitle} onChange={(e) => setEditRoomTitle(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500/40 transition-all shadow-inner" placeholder="اسم الغرفة..." /></div><div className="space-y-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">وصف الغرفة</label><textarea value={editRoomDescription} onChange={(e) => setEditRoomDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-sm text-white outline-none h-32 focus:border-purple-500/40 transition-all shadow-inner" placeholder="اكتب وصفاً أو ترحيباً خاصاً لزوار غرفتك..." /></div><div className="space-y-3"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">عدد الميكروفونات</label><div className="grid grid-cols-3 gap-3">{[5, 10, 15].map((count) => (<button key={count} onClick={() => setEditMicCount(count)} className={`py-3 rounded-2xl font-black text-xs transition-all border ${editMicCount === count ? 'bg-purple-600 text-white border-purple-500 shadow-lg scale-95' : 'bg-white/5 text-white/40 border-white/10'}`}>{count} ميك</button>))}</div></div><div className="space-y-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">خلفية الغرفة</label><button onClick={() => setShowBgSelector(true)} className="w-full flex items-center justify-between p-5 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all"><div className="flex items-center gap-4"><div className="w-10 h-14 rounded-lg overflow-hidden border border-white/20 bg-black/40">{isVideoUrl(editRoomBg) ? <video src={editRoomBg} muted className="w-full h-full object-cover" /> : <img src={editRoomBg || editRoomCover} className="w-full h-full object-cover" />}</div><span className="text-sm font-black text-white">اختر خلفية للغرفة</span></div><i className="fas fa-chevron-left text-purple-400"></i></button></div></>) : (<div className="space-y-6 animate-in slide-in-from-left"><div className="flex items-center gap-3"><button onClick={() => setShowBgSelector(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white"><i className="fas fa-arrow-right text-xs"></i></button><span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اختر الخلفية المفضلة</span></div><div className="grid grid-cols-3 gap-3">{availableBgs.map((bg) => (<div key={bg.id} onClick={() => { setEditRoomBg(bg.imageUrl); setShowBgSelector(false); }} className={`relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer border-2 transition-all ${editRoomBg === bg.imageUrl ? 'border-purple-500 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-60'}`}>{isVideoUrl(bg.imageUrl) ? <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <img src={bg.imageUrl} className="w-full h-full object-cover" alt="Background" />}{bg.remainingDays !== undefined && (<div className="absolute top-2 right-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-lg shadow-xl z-20 flex items-center gap-0.5"><span className="text-purple-300">{bg.remainingDays}</span><span className="opacity-80">يوم</span></div>)}{editRoomBg === bg.imageUrl && <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center"><i className="fas fa-check-circle text-white text-xl"></i></div>}</div>))}</div></div>)}</div></div>
       )}
 
+      {showReportModal && (
+        <div className="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir="rtl">
+          <div className="w-full max-w-[320px] bg-[#2d0f4d]/85 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-200">
+            <header className="p-5 flex justify-between items-center">
+              <h3 className="text-white font-black text-sm">الابلاغ عن الغرفة</h3>
+              <button onClick={() => setShowReportModal(false)} className="text-white/40 hover:text-white transition-colors">
+                <i className="fas fa-times text-xs"></i>
+              </button>
+            </header>
+            
+            <div className="p-6 space-y-6">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">سبب البلاغ</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['اباحي', 'اسائة', 'شتائم', 'ترويج'].map(reason => (
+                    <button 
+                      key={reason}
+                      onClick={() => setReportReason(reason)}
+                      className={`py-2.5 rounded-xl text-[10px] font-black border transition-all backdrop-blur-md ${reportReason === reason ? 'bg-purple-600/40 border-purple-500/50 text-white shadow-lg' : 'bg-white/5 border-white/5 text-white/40'}`}
+                    >
+                      {reason}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">يرجى شرح ما حدث بالتفاصيل</label>
+                <div className="relative">
+                  <textarea 
+                    value={reportDetails}
+                    onChange={(e) => setReportDetails(e.target.value.substring(0, 250))}
+                    placeholder="اكتب هنا..."
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none h-32 focus:border-purple-500/40 transition-all resize-none shadow-inner"
+                  />
+                  <div className="absolute bottom-3 left-3 text-[8px] font-black text-white/20">
+                    {reportDetails.length}/250
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSendReport}
+                disabled={isSubmittingReport || !reportDetails.trim()}
+                className="w-full bg-purple-600/30 backdrop-blur-md border border-purple-500/30 py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all flex items-center justify-center gap-2"
+              >
+                {isSubmittingReport ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-paper-plane"></i>}
+                <span>تقديم البلاغ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReportSuccess && (
+        <div className="fixed inset-0 z-[805] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir="rtl">
+          <div className="w-full max-w-[320px] bg-[#2d0f4d]/85 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-200">
+            <div className="p-8 flex flex-col items-center text-center space-y-6">
+              <div className="w-16 h-16 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
+                <i className="fas fa-check text-2xl text-purple-400"></i>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-white font-black text-lg">تم تقديم البلاغ</h3>
+                <p className="text-white/60 text-xs leading-relaxed font-bold">
+                  سيتم المراجعه شكرا لك على الحفاظ على بيئة Yalla Games
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowReportSuccess(false)}
+                className="w-full bg-purple-600/30 backdrop-blur-md border border-purple-500/30 py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 transition-all"
+              >
+                حسناً
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLockModal && (
+        <div className="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir="rtl">
+          <div className="w-full max-w-[320px] bg-[#2d0f4d]/85 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-200">
+            <header className="p-5 flex justify-between items-center border-b border-white/5">
+              <h3 className="text-white font-black text-sm">إعدادات قفل الغرفة</h3>
+              <button onClick={() => setShowLockModal(false)} className="text-white/40 hover:text-white transition-colors">
+                <i className="fas fa-times text-xs"></i>
+              </button>
+            </header>
+            
+            <div className="p-6 space-y-6">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">كلمة مرور الغرفة (6 أرقام)</label>
+                <div className="relative">
+                  <input 
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={roomPasswordInput}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      if (val.length <= 6) setRoomPasswordInput(val);
+                    }}
+                    placeholder="••••••"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-center text-sm font-black text-white outline-none focus:border-purple-500/40 transition-all shadow-inner tracking-[0.5em]"
+                  />
+                </div>
+                <p className="text-[9px] text-white/40 text-center font-bold italic">اترك الحقل فارغاً إذا كنت تريد فتح الغرفة للجميع</p>
+              </div>
+
+              <button 
+                onClick={handleToggleLockRoom}
+                disabled={isUpdatingRoom || (roomPasswordInput.length > 0 && roomPasswordInput.length < 6)}
+                className="w-full bg-purple-600/20 border border-purple-500/40 backdrop-blur-md py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2"
+              >
+                {isUpdatingRoom ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-lock text-[10px]"></i>}
+                <span>{roomPasswordInput.trim() ? 'قفل الغرفة الآن' : 'فتح الغرفة للجميع'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {showExitDialog && (
-        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/80 animate-in fade-in backdrop-blur-sm" onClick={() => setShowExitDialog(false)}><div className="flex flex-row items-center gap-10"><div className="flex flex-col items-center gap-3"><button onClick={() => { setShowExitDialog(false); onMinimize(); }} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90"><i className="fas fa-compress-alt text-3xl"></i></button><span className="text-white font-black text-[12px]">احتفاظ</span></div><div className="flex flex-col items-center gap-3"><button onClick={onLeave} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-red-500 active:scale-90"><i className="fas fa-sign-out-alt text-3xl"></i></button><span className="text-white font-black text-[12px]">خروج</span></div></div></div>
+        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/80 animate-in fade-in backdrop-blur-sm" onClick={() => setShowExitDialog(false)}><div className="flex flex-col items-center gap-10"><div className="flex flex-col items-center gap-3"><button onClick={() => { setShowExitDialog(false); onMinimize(); }} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90"><i className="fas fa-compress-alt text-3xl"></i></button><span className="text-white font-black text-[12px]">احتفاظ</span></div><div className="flex flex-col items-center gap-3"><button onClick={handleUserExit} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90"><i className="fas fa-sign-out-alt text-3xl"></i></button><span className="text-white font-black text-[12px]">خروج</span></div></div></div>
       )}
       
       {showParticipants && (
@@ -787,16 +1175,66 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           </div>
         </div>
         <div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto overflow-x-hidden scrollbar-hide pb-12">
-          <h3 className="text-2xl font-black text-white drop-shadow-lg mb-2">{currentUserData?.displayName || user?.displayName}</h3>
+          <h3 className="text-2xl font-black text-white drop-shadow-lg py-1 mb-2 leading-relaxed relative z-10">{currentUserData?.displayName || user?.displayName}</h3>
           
-          <div className="mb-4">
-            {profileCustomIdIcon ? (
-              <div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300" style={{ backgroundImage: `url(${profileCustomIdIcon})` }}>
-                <span className="text-[10px] font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" style={{ paddingLeft: `${pIdX}px`, paddingTop: `${pIdY}px` }}>{profileCustomId}</span>
+          <div className="mb-8 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-2">
+              {profileCustomIdIcon ? (
+                <div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300" style={{ backgroundImage: `url(${profileCustomIdIcon})` }}>
+                  <span className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" 
+                        style={{ 
+                          paddingLeft: `${pIdX}px`, 
+                          paddingTop: `${pIdY}px`,
+                          fontSize: `${currentUserData?.idFontSize || 10}px`
+                        }}>
+                    {profileCustomId}
+                  </span>
+                </div>
+              ) : (
+                <span className={`text-[11px] font-black w-fit ${profileCustomId === 'OFFICIAL' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : 'text-purple-300 bg-white/5 border-white/5'} px-3 py-1 rounded-xl border tracking-wider`}>ID: {profileCustomId}</span>
+              )}
+
+              {/* Gender and Region Info */}
+              <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-xl border border-white/5">
+                {currentUserData?.gender === 'male' ? (
+                  <i className="fas fa-mars text-blue-400 text-[10px]"></i>
+                ) : currentUserData?.gender === 'female' ? (
+                  <i className="fas fa-venus text-pink-400 text-[10px]"></i>
+                ) : null}
+                {currentUserData?.regionFlag && (
+                  <span className="text-sm leading-none">{currentUserData.regionFlag}</span>
+                )}
               </div>
-            ) : (
-              <span className={`text-[11px] font-black w-fit ${profileCustomId === 'OFFICIAL' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : 'text-purple-300 bg-white/5 border-white/5'} px-3 py-1 rounded-xl border tracking-wider`}>ID: {profileCustomId}</span>
-            )}
+            </div>
+
+            {/* Compact Level Badges */}
+            <div className="flex gap-2 animate-in slide-in-from-top duration-500">
+              {/* Wealth Badge */}
+              {(() => {
+                const info = getWealthLevelInfo(currentUserData?.wealthXP || 0);
+                return (
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${info.tier.border} ${info.tier.bg} backdrop-blur-md shadow-lg`}>
+                    <div className={`w-4 h-4 rounded-full ${info.tier.bar} flex items-center justify-center text-[8px] text-white`}>
+                      <i className="fas fa-crown"></i>
+                    </div>
+                    <span className={`text-[10px] font-black ${info.tier.color}`}>{info.level}</span>
+                  </div>
+                );
+              })()}
+
+              {/* Charisma Badge */}
+              {(() => {
+                const info = getCharismaLevelInfo(currentUserData?.charismaXP || 0);
+                return (
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${info.tier.border} ${info.tier.bg} backdrop-blur-md shadow-lg`}>
+                    <div className={`w-4 h-4 rounded-full ${info.tier.bar} flex items-center justify-center text-[8px] text-white`}>
+                      <i className="fas fa-heart"></i>
+                    </div>
+                    <span className={`text-[10px] font-black ${info.tier.color}`}>{info.level}</span>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
           <div className="w-full space-y-6">
@@ -968,19 +1406,41 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               <div className="flex items-center h-9 w-[131px] relative overflow-visible">
                  <div className="flex items-center h-full w-full rounded-full border border-[#2d1252]/60 overflow-hidden shadow-lg">
                     <div className="basis-1/2 h-full relative bg-[#2d1252]/30">
-                       <button onClick={(e) => { e.stopPropagation(); if (selectedGiftId) { setShowQuantityMenu(!showQuantityMenu); } }} className="w-full h-full flex items-center justify-center gap-1 transition-all active:scale-95">
+                       <button onClick={(e) => { e.stopPropagation(); if (selectedGiftId) { setShowQuantityMenu(!showQuantityMenu); } }} className="w-full h-full flex items-center justify-center gap-1 transition-all">
                          <i className={`fas fa-chevron-up text-[7px] text-white/60 ${showQuantityMenu ? 'rotate-180' : ''}`}></i>
                          <span className="text-[9px] font-black text-white/90">x{selectedQuantity}</span>
                        </button>
                        {showQuantityMenu && (
-                         <div className="absolute bottom-[calc(100%+12px)] left-0 w-[131px] bg-[#0d051a]/90 border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-[150] animate-in zoom-in duration-200 origin-bottom">
-                           <div className="flex flex-col max-h-48 overflow-y-auto scrollbar-hide">
-                            {quantities.map((q) => (<button key={q} onClick={(e) => { e.stopPropagation(); setSelectedQuantity(q); setShowQuantityMenu(false); }} className={`w-full py-3 px-4 text-center text-[10px] font-black border-b border-white/5 last:border-0 ${selectedQuantity === q ? 'bg-purple-600/30 text-white' : 'text-white/60 hover:bg-white/5'}`}>x{q}</button>))}
+                         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+                           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowQuantityMenu(false)}></div>
+                           <div className="relative w-full max-w-[280px] bg-[#0d051a]/90 border border-white/10 rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+                             <div className="p-4 border-b border-white/5 bg-white/5">
+                               <h3 className="text-white text-center text-[13px] font-black uppercase tracking-wider">اختر الكمية</h3>
+                             </div>
+                             <div className="p-3 grid grid-cols-2 gap-2">
+                              {quantities.map((q) => (
+                                <button 
+                                  key={q} 
+                                  onClick={(e) => { e.stopPropagation(); setSelectedQuantity(q); setShowQuantityMenu(false); }} 
+                                  className={`py-3 px-4 rounded-xl text-center text-xs font-black transition-all ${selectedQuantity === q ? 'bg-purple-600/30 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'}`}
+                                >
+                                  x{q}
+                                </button>
+                              ))}
+                             </div>
+                             <div className="p-2 pt-0 pb-4">
+                               <button 
+                                 onClick={() => setShowQuantityMenu(false)}
+                                 className="w-full py-3.5 rounded-xl text-[11px] font-black text-white/50 bg-white/5 hover:text-white transition-all"
+                               >
+                                 إلغاء
+                               </button>
+                             </div>
                            </div>
                          </div>
                        )}
                     </div>
-                    <button onClick={handleSendGift} className="basis-1/2 h-full bg-[#2d1252]/85 text-white text-[9.5px] font-black active:bg-[#3d1a6e] border-r border-[#2d1252]/60 transition-all active:scale-95">إرسال</button>
+                    <button onClick={handleSendGift} className="basis-1/2 h-full bg-[#2d1252]/85 text-white text-[9.5px] font-black border-r border-[#2d1252]/60 transition-all">إرسال</button>
                  </div>
               </div>
             </div>

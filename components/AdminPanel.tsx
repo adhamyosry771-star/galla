@@ -24,12 +24,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [allOfficialMsgs, setAllOfficialMsgs] = useState<any[]>([]);
   const [allEmojis, setAllEmojis] = useState<any[]>([]);
   const [allGifts, setAllGifts] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp'>('users');
+  const [allReports, setAllReports] = useState<any[]>([]);
+  const [defaultProfileImage, setDefaultProfileImage] = useState<string | null>(null);
+  const [defaultCoverImage, setDefaultCoverImage] = useState<string | null>(null);
+
+  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign'>('users');
+  
+  // Agency Design States
+  const [agencyBackgroundUrl, setAgencyBackgroundUrl] = useState('');
+  const [isAgencyDesignSaving, setIsAgencyDesignSaving] = useState(false);
+  const [fruitsGlobalSettings, setFruitsGlobalSettings] = useState<any>({
+    lossThreshold: 10000000,
+    globalDifficulty: 'balanced', // 'easy', 'balanced', 'hard'
+    totalProfit24h: 0,
+    totalRounds: 0
+  });
+  const [fruitsActiveBets, setFruitsActiveBets] = useState<any[]>([]);
+  const [fruitsPlayers, setFruitsPlayers] = useState<any[]>([]);
   
   const [showChargePopup, setShowChargePopup] = useState<string | null>(null);
   const [showDeductPopup, setShowDeductPopup] = useState<string | null>(null);
   const [showIdPopup, setShowIdPopup] = useState<string | null>(null);
-  const [showBanPopup, setShowBanPopup] = useState<string | null>(null);
   const [showGrantPopup, setShowGrantPopup] = useState<string | null>(null);
   const [showGrantAnimatedPopup, setShowGrantAnimatedPopup] = useState<string | null>(null);
   const [showBadgesPopup, setShowBadgesPopup] = useState<string | null>(null);
@@ -45,6 +60,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [newCustomIdIcon, setNewCustomIdIcon] = useState<string | null>(null);
   const [idOffsetX, setIdOffsetX] = useState(28); 
   const [idOffsetY, setIdOffsetY] = useState(0.5); 
+  const [idFontSize, setIdFontSize] = useState(11); 
 
   const [badgeUrl, setBadgeUrl] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
@@ -111,6 +127,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [storeBgPrice, setStoreBgPrice] = useState('');
   const [storeBgDuration, setStoreBgDuration] = useState('7');
   const [storeBackgrounds, setStoreBackgrounds] = useState<any[]>([]);
+  const [fruitsGameIcon, setFruitsGameIcon] = useState<string | null>(null);
 
   // Support State
   const [supportChats, setSupportChats] = useState<any[]>([]);
@@ -135,6 +152,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const giftButtonInputRef = useRef<HTMLInputElement>(null);
   const msgImageRef = useRef<HTMLInputElement>(null);
   const idIconInputRef = useRef<HTMLInputElement>(null);
+  const fruitsGameIconInputRef = useRef<HTMLInputElement>(null);
+  const profileImageInputRef = useRef<HTMLInputElement>(null);
+  const coverImageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -205,8 +225,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
       }
     });
 
+    const unsubFruitsSettings = onSnapshot(doc(db, "settings", "fruitsGame"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setFruitsGlobalSettings(data);
+        setFruitsGameIcon(data.gameIcon || null);
+      }
+    });
+
+    const unsubFruitsActiveBets = onSnapshot(collection(db, "fruitsGameActiveBets"), (snap) => {
+      setFruitsActiveBets(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubFruitsPlayers = onSnapshot(query(collection(db, "users"), where("fruitsTotalBet", ">", 0), limit(100)), (snap) => {
+      setFruitsPlayers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubReports = onSnapshot(query(collection(db, "reports"), orderBy("createdAt", "desc")), (snap) => {
+      setAllReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubDefaultImages = onSnapshot(doc(db, "settings", "default_images"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setDefaultProfileImage(data.profileImage || null);
+        setDefaultCoverImage(data.coverImage || null);
+      }
+    });
+
+    const unsubAgencyDesign = onSnapshot(doc(db, "settings", "agencyDesign"), (snap) => {
+      if (snap.exists()) {
+        setAgencyBackgroundUrl(snap.data().backgroundUrl || '');
+      }
+    });
+
     return () => {
       unsubUsers(); unsubNews(); unsubBanners(); unsubBgs(); unsubRooms(); unsubDesign(); unsubOfficialMsgs(); unsubAppearance(); unsubStoreFrames(); unsubStoreEntries(); unsubStoreBgs(); unsubEmojis(); unsubGifts(); unsubSupport();
+      unsubFruitsSettings(); unsubFruitsActiveBets(); unsubFruitsPlayers(); unsubReports(); unsubDefaultImages(); unsubAgencyDesign();
     };
   }, [isOpen]);
 
@@ -268,6 +323,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
+  const handleRemoveReport = async (reportId: string) => {
+    if (confirm("هل تريد حذف هذا البلاغ؟")) {
+      try {
+        await deleteDoc(doc(db, "reports", reportId));
+        alert("تم حذف البلاغ");
+      } catch (e) {
+        alert("خطأ في الحذف");
+      }
+    }
+  };
+
   const handleRemoveInventoryItem = async (itemId: string, itemUrl: string, itemType: 'frame' | 'entry' | 'background') => {
     if (!showGrantPopup) return;
     if (confirm("هل تريد حذف هذا العنصر من حقيبة المستخدم؟")) {
@@ -282,7 +348,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
           const updates: any = {};
           if (itemType === 'frame' && userData.currentFrame === itemUrl) updates.currentFrame = null;
           if (itemType === 'entry' && userData.currentEntry === itemUrl) updates.currentEntry = null;
-          if (itemType === 'background' && (userData.currentRoomBackground === itemUrl || userData.currentRoomBackground === itemUrl)) updates.currentRoomBackground = null;
+          if (itemType === 'background' && userData.currentRoomBackground === itemUrl) {
+            try {
+              const bgsSnap = await getDocs(query(collection(db, "roomBackgrounds"), limit(1)));
+              updates.currentRoomBackground = !bgsSnap.empty ? bgsSnap.docs[0].data().imageUrl : null;
+            } catch (e) {
+              updates.currentRoomBackground = null;
+            }
+          }
           
           if (Object.keys(updates).length > 0) {
             await updateDoc(userDocRef, updates);
@@ -297,6 +370,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
 
   const cleanupInventoryAndUsers = async (itemId: string, type: 'frame' | 'entry' | 'background', itemUrl: string) => {
     try {
+      let defaultBgUrl: string | null = null;
+      if (type === 'background') {
+        try {
+          const bgsSnap = await getDocs(query(collection(db, "roomBackgrounds"), limit(1)));
+          if (!bgsSnap.empty) defaultBgUrl = bgsSnap.docs[0].data().imageUrl;
+        } catch (e) {
+          console.error("Error fetching default background:", e);
+        }
+      }
+
       const inventoryQuery = query(collectionGroup(db, "inventory"), where("itemId", "==", itemId));
       const snap = await getDocs(inventoryQuery);
       
@@ -315,7 +398,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               updates.currentEntry = null;
             }
             if (type === 'background' && userData.currentRoomBackground === itemUrl) {
-              updates.currentRoomBackground = null;
+              updates.currentRoomBackground = defaultBgUrl;
             }
             
             if (Object.keys(updates).length > 0) {
@@ -398,7 +481,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
       
       await addDoc(collection(db, "users", showGrantPopup, "systemNotifications"), {
         title: "هدية خاصة من الإدارة",
-        desc: `لقد منحتك الإدارة ${grantType === 'frame' ? 'إطاراً' : grantType === 'background' ? 'خلفية غرفه مخصصة' : 'دخولية'} مميزة باسم "${grantName}" لمدة ${grantDuration} أيام. تفقدها الآن في إعدادات الغرفة!`,
+        desc: grantType === 'frame' 
+          ? `لقد منحتك الإدارة إطاراً مميزة باسم "${grantName}" لمدة ${grantDuration} أيام. تفقدها الآن في إعدادات المتجر!`
+          : grantType === 'background' 
+            ? `لقد منحتك الإدارة خلفية غرفه مخصصة باسم "${grantName}" لمدة ${grantDuration} أيام. تفقدها الآن في إعدادات الغرفة!`
+            : `لقد منحتك الإدارة دخولية مميزة باسم "${grantName}" لمدة ${grantDuration} أيام. تفقدها الآن في إعدادات المتجر!`,
         icon: grantType === 'frame' ? 'fa-id-badge' : grantType === 'background' ? 'fa-image' : 'fa-door-open',
         createdAt: serverTimestamp()
       });
@@ -610,7 +697,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     const data: any = { 
       customId: newCustomId,
       idOffsetX: idOffsetX,
-      idOffsetY: idOffsetY
+      idOffsetY: idOffsetY,
+      idFontSize: idFontSize
     };
     if (newCustomIdIcon) {
       data.customIdIcon = newCustomIdIcon;
@@ -638,24 +726,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
-  const handleDeleteAccount = async (uid: string, name: string) => {
-    if (!confirm(`هل أنت متأكد من حذف حساب "${name}" نهائياً؟ سيتم حذف جميع بيانات المستخدم ولا يمكن استعادتها.`)) return;
-    
+  const handleGrantBanSystem = async (uid: string, name: string, currentStatus: boolean) => {
     try {
-      await deleteDoc(doc(db, "users", uid));
-      alert("تم حذف الحساب بنجاح");
-    } catch (e) {
-      console.error(e);
-      alert("حدث خطأ أثناء حذف الحساب");
+      const userRef = doc(db, "users", uid);
+      await updateDoc(userRef, { canBan: !currentStatus });
+      
+      if (!currentStatus) {
+        await addDoc(collection(db, "users", uid, "systemNotifications"), {
+          title: "تم منحك صلاحية جديدة",
+          desc: "لقد تم منحك الوصول إلى نظام حظر المستخدمين. يمكنك الآن العثور عليه في ملفك الشخصي.",
+          icon: "fas fa-user-slash",
+          createdAt: serverTimestamp(),
+          type: 'canBan_grant',
+          read: false
+        });
+      } else {
+        await addDoc(collection(db, "users", uid, "systemNotifications"), {
+          title: "تنبيه إداري",
+          desc: "تم سحب نظام حظر المستخدمين من الحساب بسبب المخالفه للقوانين",
+          icon: "fas fa-user-slash",
+          createdAt: serverTimestamp(),
+          type: 'canBan_revoke',
+          read: false
+        });
+      }
+      
+      alert(currentStatus ? "تم سحب الصلاحية بنجاح" : "تم منح الصلاحية بنجاح");
+    } catch (e: any) {
+      alert(`خطأ: ${e.message || String(e)}`);
     }
   };
 
-  const handleBanSubmit = async (days: number | 'permanent') => {
-    if (!showBanPopup) return;
-    let banUntil = days === 'permanent' ? '2099-01-01T00:00:00Z' : new Date(Date.now() + days * 86400000).toISOString();
-    if (await handleUserUpdate(showBanPopup, { banUntil })) {
-      setShowBanPopup(null);
-      alert("تم الحظر بنجاح");
+  const handleGrantGMSystem = async (uid: string, name: string, currentStatus: boolean) => {
+    try {
+      const userRef = doc(db, "users", uid);
+      await updateDoc(userRef, { isGM: !currentStatus });
+      
+      if (!currentStatus) {
+        await addDoc(collection(db, "users", uid, "systemNotifications"), {
+          title: "تم منحك صلاحية جديدة",
+          desc: "لقد تم منحك الوصول إلى نظام المدير العام. يمكنك الآن العثور عليه في ملفك الشخصي.",
+          icon: "fas fa-user-shield",
+          createdAt: serverTimestamp(),
+          type: 'gm_grant',
+          read: false
+        });
+      } else {
+        await addDoc(collection(db, "users", uid, "systemNotifications"), {
+          title: "تنبيه إداري",
+          desc: "تم سحب نظام المدير العام من الحساب بسبب المخالفه للقوانين",
+          icon: "fas fa-user-shield",
+          createdAt: serverTimestamp(),
+          type: 'gm_revoke',
+          read: false
+        });
+      }
+      
+      alert(currentStatus ? "تم سحب صلاحية المدير العام بنجاح" : "تم منح صلاحية المدير العام بنجاح");
+    } catch (e: any) {
+      alert(`خطأ: ${e.message || String(e)}`);
     }
   };
 
@@ -716,6 +845,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
+  const handleSaveDefaultImages = async () => {
+    try {
+      await setDoc(doc(db, "settings", "default_images"), {
+        profileImage: defaultProfileImage,
+        coverImage: defaultCoverImage
+      }, { merge: true });
+      alert("تم تحديث الصور الرئيسية بنجاح");
+    } catch (e) {
+      alert("خطأ أثناء الحفظ");
+    }
+  };
+
   const handlePublishEmoji = async () => {
     if (!emojiUrl.trim()) return alert("يرجى إدخال رابط الـ Emoji أولاً");
     setIsPublishing(true);
@@ -734,7 +875,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   };
 
   const filteredUsers = searchId.trim() 
-    ? allUsers.filter(u => u.customId?.toLowerCase().includes(searchId.toLowerCase()))
+    ? allUsers.filter(u => 
+        u.customId?.toLowerCase().includes(searchId.toLowerCase()) || 
+        u.displayName?.toLowerCase().includes(searchId.toLowerCase())
+      )
     : allUsers;
 
   if (!isOpen) return null;
@@ -756,6 +900,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
       <input type="file" ref={msgImageRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setMsgImage)} />
       <input type="file" ref={idIconInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setNewCustomIdIcon)} />
 
+      <input type="file" ref={profileImageInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setDefaultProfileImage)} />
+      <input type="file" ref={coverImageInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setDefaultCoverImage)} />
+
       {!selectedSupportChatId && (
         <header className="p-4 border-b border-white/10 flex flex-col bg-[#0d051a] sticky top-0 z-50">
           <div className="flex justify-between items-center mb-4">
@@ -773,6 +920,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               {id: 'store', label: 'المتجر'},
               {id: 'emojis', label: 'إيموجي'},
               {id: 'gifts', label: 'الهدايا'},
+              {id: 'fruits', label: 'لعبة فواكه'},
+              {id: 'mainImages', label: 'الصور الرئيسية'},
+              {id: 'agencyDesign', label: 'تصميم الوكالات'},
+              {id: 'reports', label: 'استلام البلاغات'},
               {id: 'cp', label: 'CP'},
               {id: 'design', label: 'التصميم'},
               {id: 'messages', label: 'الرسائل'}
@@ -787,6 +938,164 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
 
       <div className={`flex-1 ${selectedSupportChatId ? '' : 'overflow-y-auto p-4 space-y-6 pb-20'}`}>
         {adminTab === 'cp' && <CPAdmin />}
+        
+        {adminTab === 'fruits' && (
+          <div className="space-y-6 animate-in fade-in">
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 gap-3 pb-2">
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
+                 <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">إجمالي الجولات</p>
+                 <p className="text-xl font-black text-white">{fruitsGlobalSettings.totalRounds || 0}</p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
+                 <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">أرباح 24 ساعة</p>
+                 <p className="text-xl font-black text-white">{(fruitsGlobalSettings.totalProfit24h || 0).toLocaleString()} <i className="fas fa-coins text-[10px] text-yellow-500"></i></p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
+                 <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1">الرهانات النشطة</p>
+                 <p className="text-xl font-black text-white">{fruitsActiveBets.reduce((acc, curr) => acc + (curr.amount || 0), 0).toLocaleString()}</p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
+                 <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-1">اللاعبين النشطين</p>
+                 <p className="text-xl font-black text-white">{new Set(fruitsActiveBets.map(b => b.userId)).size}</p>
+              </div>
+            </div>
+
+            {/* Global Algorithm Settings */}
+            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
+              <h4 className="text-sm font-black text-white flex items-center gap-2">
+                <i className="fas fa-image text-pink-400"></i>
+                إعدادات أيقونة اللعبة
+              </h4>
+              
+              <div className="flex flex-col gap-4">
+                 <div className="flex justify-center">
+                   <div 
+                     className={`w-24 h-24 rounded-3xl shadow-lg group relative overflow-hidden ${!fruitsGameIcon ? 'bg-gradient-to-br from-orange-400 to-rose-500 p-[1px]' : ''}`}
+                   >
+                     {fruitsGameIcon ? (
+                       <img src={fruitsGameIcon} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                     ) : (
+                       <div className="w-full h-full rounded-3xl bg-black/40 flex items-center justify-center border border-white/10">
+                         <span className="text-4xl group-hover:scale-110 transition-transform">🍓</span>
+                       </div>
+                     )}
+                   </div>
+                 </div>
+
+                 <div className="space-y-2">
+                   <p className="text-[10px] text-white/50 font-bold px-1">رابط أيقونة اللعبة</p>
+                   <input 
+                     type="text"
+                     value={fruitsGameIcon || ''}
+                     onChange={(e) => setFruitsGameIcon(e.target.value)}
+                     placeholder="ضع رابط الصورة هنا..."
+                     className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-xs font-bold text-white focus:outline-none focus:border-purple-500/50 transition-all"
+                   />
+                 </div>
+
+                 <button 
+                   onClick={() => setDoc(doc(db, "settings", "fruitsGame"), { gameIcon: fruitsGameIcon }, { merge: true })}
+                   className="w-full py-3 bg-purple-600 rounded-2xl text-xs font-black text-white shadow-lg active:scale-95 transition-all"
+                 >
+                   حفظ أيقونة اللعبة
+                 </button>
+              </div>
+            </div>
+
+            {/* Global Algorithm Settings */}
+            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
+              <h4 className="text-sm font-black text-white flex items-center gap-2">
+                <i className="fas fa-cogs text-purple-400"></i>
+                خوارزميات اللعبة العامة
+              </h4>
+              
+              <div className="space-y-4">
+                 <div className="space-y-1.5">
+                   <label className="text-[9px] font-black text-purple-400/60 uppercase tracking-widest ml-2">صعوبة اللعبة (لكل المستخدمين)</label>
+                   <div className="grid grid-cols-3 gap-2">
+                      {['easy', 'balanced', 'hard'].map(mode => (
+                        <button 
+                          key={mode}
+                          onClick={() => setDoc(doc(db, "settings", "fruitsGame"), { globalDifficulty: mode }, { merge: true })}
+                          className={`py-2 px-1 rounded-xl text-[10px] font-black border transition-all ${fruitsGlobalSettings.globalDifficulty === mode ? 'bg-purple-600 border-purple-500 text-white' : 'bg-white/5 border-white/5 text-white/40'}`}
+                        >
+                          {mode === 'easy' ? 'سهل (ربح)' : mode === 'balanced' ? 'متوازن' : 'صعب (خسارة)'}
+                        </button>
+                      ))}
+                   </div>
+                 </div>
+
+                 <div className="space-y-1.5">
+                   <label className="text-[9px] font-black text-purple-400/60 uppercase tracking-widest ml-2">حد تفعيل خوارزمية الخسارة (Threshold)</label>
+                   <div className="flex gap-2">
+                      <input 
+                        type="number" 
+                        value={fruitsGlobalSettings.lossThreshold ?? 0} 
+                        onChange={e => setDoc(doc(db, "settings", "fruitsGame"), { lossThreshold: parseInt(e.target.value) || 0 }, { merge: true })}
+                        placeholder="مثلاً: 10000000" 
+                        className="flex-1 bg-white/5 border border-white/10 rounded-xl py-2 px-4 text-xs text-white outline-none"
+                      />
+                      <div className="bg-purple-600/20 px-3 flex items-center rounded-xl text-purple-400 text-[10px] font-black border border-purple-600/30">كوينز</div>
+                   </div>
+                   <p className="text-[8px] text-white/20 font-bold leading-tight">عندما يصل أرباح المستخدم لهذا المبلغ، ستبدأ الخوارزمية بمنعه من الربح المستمر.</p>
+                 </div>
+              </div>
+            </div>
+
+            {/* Players List with Individual Management */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center px-2">
+                <h4 className="text-[10px] font-black text-purple-400 uppercase tracking-widest">إدارة اللاعبين المخصصة</h4>
+                <span className="text-[8px] font-bold text-white/30">{fruitsPlayers.length} لاعب مسجل</span>
+              </div>
+
+              {fruitsPlayers.length === 0 ? (
+                <div className="text-center py-10 opacity-20"><i className="fas fa-users-slash text-2xl mb-1"></i><p className="text-[10px] font-bold">لا يوجد لاعبين حالياً</p></div>
+              ) : fruitsPlayers.map(player => (
+                <div key={player.id} className="bg-white/5 p-4 rounded-3xl border border-white/10 space-y-4 shadow-lg animate-in fade-in">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3">
+                      <img src={player.photoURL} className="w-10 h-10 rounded-2xl object-cover border border-white/10" />
+                      <div>
+                        <p className="text-xs font-black text-white">{player.displayName}</p>
+                        <p className="text-[9px] text-purple-400 font-bold uppercase">ID: {player.customId}</p>
+                      </div>
+                    </div>
+                    <div className="text-left">
+                       <p className="text-[9px] font-black text-emerald-400">صافي الربح: {(player.fruitsTotalWin - player.fruitsTotalBet).toLocaleString()}</p>
+                       <p className="text-[8px] font-bold text-white/20">إجمالي الرهان: {player.fruitsTotalBet?.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 border-t border-white/5 pt-3">
+                     <div className="space-y-1">
+                        <label className="text-[8px] font-black text-white/30 uppercase tracking-widest">نسبة الحظ (%)</label>
+                        <div className="flex items-center gap-2">
+                           <input 
+                              type="range" min="0" max="100" 
+                              value={player.fruitsLuckPercent ?? 100} 
+                              onChange={e => updateDoc(doc(db, "users", player.id), { fruitsLuckPercent: parseInt(e.target.value) })}
+                              className="flex-1 accent-purple-500 h-1 bg-white/10 rounded-full appearance-none"
+                           />
+                           <span className="text-[10px] font-black text-white w-6">{player.fruitsLuckPercent ?? 100}%</span>
+                        </div>
+                     </div>
+                     <div className="space-y-1">
+                        <label className="text-[8px] font-black text-white/30 uppercase tracking-widest">خوارزمية الخسارة</label>
+                        <button 
+                          onClick={() => updateDoc(doc(db, "users", player.id), { fruitsForcedLoss: !player.fruitsForcedLoss })}
+                          className={`w-full py-1.5 rounded-xl text-[9px] font-black border transition-all ${player.fruitsForcedLoss ? 'bg-red-600 border-red-500 text-white' : 'bg-white/5 border-white/5 text-white/40'}`}
+                        >
+                          {player.fruitsForcedLoss ? 'خسارة إجبارية نشطة' : 'تفعيل الخسارة اليدوية'}
+                        </button>
+                     </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
         {adminTab === 'support' && (
           <div className="h-full flex flex-col animate-in fade-in">
@@ -880,11 +1189,172 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
           </div>
         )}
 
+        {adminTab === 'agencyDesign' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <i className="fas fa-palette text-emerald-400"></i>
+                تصميم محفظة الوكالة
+              </h3>
+              <p className="text-[10px] text-emerald-400/60 font-bold uppercase tracking-widest">تحكم في مظهر محفظة الوكيل (صورة أو فيديو)</p>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-white/30 uppercase tracking-widest mr-2">رابط الخلفية (URL)</label>
+                  <input 
+                    type="text" 
+                    value={agencyBackgroundUrl} 
+                    onChange={e => setAgencyBackgroundUrl(e.target.value)} 
+                    placeholder="رابط صورة أو فيديو (mp4)..." 
+                    className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-emerald-500/40 font-bold" 
+                  />
+                  <p className="text-[8px] text-white/20 font-bold px-1">يدعم روابط الصور (png, jpg) والروابط المباشرة للفيديوهات (mp4, webm).</p>
+                </div>
+
+                {agencyBackgroundUrl && (
+                  <div className="w-full aspect-[16/9] bg-black/40 rounded-3xl border border-white/10 overflow-hidden relative">
+                    {isVideoUrl(agencyBackgroundUrl) ? (
+                      <video src={agencyBackgroundUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                    ) : (
+                      <img src={agencyBackgroundUrl} className="w-full h-full object-cover" alt="preview" />
+                    )}
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">معاينة الخلفية</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    onClick={async () => {
+                      setIsAgencyDesignSaving(true);
+                      try {
+                        await setDoc(doc(db, "settings", "agencyDesign"), {
+                          backgroundUrl: agencyBackgroundUrl
+                        }, { merge: true });
+                        alert("تم حفظ التصميم بنجاح");
+                      } catch (e) {
+                        alert("حدث خطأ أثناء الحفظ");
+                      } finally {
+                        setIsAgencyDesignSaving(false);
+                      }
+                    }}
+                    disabled={isAgencyDesignSaving}
+                    className="bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isAgencyDesignSaving ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-save"></i> <span>حفظ التعديلات</span></>}
+                  </button>
+
+                  <button 
+                    onClick={async () => {
+                      if (confirm("هل تريد العودة للشكل الافتراضي؟")) {
+                        setIsAgencyDesignSaving(true);
+                        try {
+                          await setDoc(doc(db, "settings", "agencyDesign"), {
+                            backgroundUrl: ""
+                          }, { merge: true });
+                          setAgencyBackgroundUrl("");
+                          alert("تمت العودة للشكل الافتراضي");
+                        } catch (e) {
+                          alert("حدث خطأ");
+                        } finally {
+                          setIsAgencyDesignSaving(false);
+                        }
+                      }
+                    }}
+                    disabled={isAgencyDesignSaving}
+                    className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black text-xs text-white/60 hover:bg-white/10 active:scale-95 transition-all"
+                  >
+                    العودة للافتراضي
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {adminTab === 'reports' && (
+          <div className="space-y-6 animate-in fade-in pb-20">
+            <header className="flex flex-col gap-2 mb-2 px-1">
+              <h3 className="text-white font-black text-lg">استلام البلاغات الواردة</h3>
+              <p className="text-[10px] text-purple-400 font-bold uppercase tracking-widest">تنبيهات الأمان والخصوصية</p>
+            </header>
+
+            {allReports.length === 0 ? (
+              <div className="text-center py-24 opacity-20 flex flex-col items-center">
+                <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+                  <i className="fas fa-shield-alt text-4xl"></i>
+                </div>
+                <p className="text-xs font-bold font-black tracking-widest opacity-60">لا توجد بلاغات حالياً</p>
+                <p className="text-[10px] font-bold mt-1 opacity-40 uppercase">Safe Environment</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {allReports.map((report) => (
+                  <div key={report.id} className="bg-black/40 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-in zoom-in duration-300">
+                    <div className="p-6">
+                      <div className="flex justify-between items-start mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
+                            <i className="fas fa-exclamation-triangle text-xl"></i>
+                          </div>
+                          <div>
+                            <h4 className="text-white font-black text-sm">{report.roomName}</h4>
+                            <p className="text-[9px] text-white/40 font-bold">Room ID: {report.roomId}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleRemoveReport(report.id)}
+                          className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-red-500 transition-colors active:scale-90"
+                        >
+                          <i className="fas fa-trash-alt text-xs"></i>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black text-purple-400 uppercase tracking-widest block">صاحب الغرفة (ID)</label>
+                          <div className="text-[11px] font-bold text-white bg-white/5 px-3 py-2 rounded-xl truncate max-w-[120px]">
+                            {report.roomOwnerCustomId || (allUsers.find(u => u.id === report.roomOwnerUid)?.customId) || 'غير متوفر'}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black text-purple-400 uppercase tracking-widest block">مقدم البلاغ (ID)</label>
+                          <div className="text-[11px] font-bold text-white bg-white/5 px-3 py-2 rounded-xl truncate max-w-[120px]">
+                            {report.reporterCustomId || (allUsers.find(u => u.id === report.reporterUid)?.customId) || 'غير متوفر'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex flex-col gap-2 p-4 bg-white/5 rounded-2xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                            <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">سبب البلاغ: {report.reason}</span>
+                          </div>
+                          <p className="text-xs font-bold text-white/60 leading-relaxed italic break-words">
+                            "{report.details}"
+                          </p>
+                        </div>
+                        
+                        <div className="flex justify-end pt-2">
+                           <span className="text-[8px] font-black text-white/20 uppercase">
+                             تاريخ البلاغ: {report.createdAt?.toDate ? report.createdAt.toDate().toLocaleString('ar-EG') : 'الآن'}
+                           </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {adminTab === 'users' && (
           <div className="space-y-4">
             <div className="relative mb-4">
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-purple-300/30 text-xs"><i className="fas fa-search"></i></span>
-              <input type="text" value={searchId} onChange={(e) => setSearchId(e.target.value)} placeholder="بحث بواسطة الـ ID..." className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pr-10 pl-4 text-xs text-white outline-none focus:border-purple-500/40 shadow-inner" />
+              <input type="text" value={searchId} onChange={(e) => setSearchId(e.target.value)} placeholder="بحث بواسطة الاسم أو الـ ID..." className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pr-10 pl-4 text-xs text-white outline-none focus:border-purple-500/40 shadow-inner" />
             </div>
             {filteredUsers.map(u => (
               <div key={u.id} className="bg-white/5 p-4 rounded-2xl border border-white/10 space-y-3 animate-in fade-in duration-300">
@@ -893,9 +1363,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                     <div className="relative w-10 h-10">
                       <img src={u.animatedAvatar || u.photoURL} className="w-10 h-10 rounded-full object-cover border border-white/10" />
                     </div>
-                    <div><p className="text-xs font-black">{u.displayName}</p><p className={`text-[9px] ${u.banUntil ? 'text-red-500 font-black' : 'text-purple-400'}`}>ID: {u.customId}</p></div>
+                    <div><p className="text-xs font-black">{u.displayName}</p><p className="text-[9px] text-purple-400">ID: {u.customId}</p></div>
                   </div>
-                  <div className="flex items-center gap-1"><i className="fas fa-coins text-yellow-500 text-[9px]"></i><span className="text-xs font-bold">{u.coins || 0}</span></div>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <div className="flex items-center gap-1">
+                      <i className="fas fa-coins text-yellow-500 text-[9px]"></i>
+                      <span className="text-xs font-bold">{u.coins || 0}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className={`text-[8px] font-black px-2 py-0.5 rounded ${u.canBan ? 'bg-orange-500/20 text-orange-400' : 'bg-white/5 text-white/20'}`}>
+                        {u.canBan ? 'سيستم الحظر نشط' : 'بدون نظام حظر'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className={`text-[8px] font-black px-2 py-0.5 rounded ${u.isGM ? 'bg-purple-500/20 text-purple-400' : 'bg-white/5 text-white/20'}`}>
+                        {u.isGM ? 'نظام المدير نشط' : 'بدون نظام مدير'}
+                      </span>
+                    </div>
+                    {u.email && (
+                      <p className="text-[8px] text-white/40 font-bold truncate max-w-[100px]" title={u.email}>
+                        {u.email}
+                      </p>
+                    )}
+                    <p className="text-[7px] text-white/40 font-bold bg-white/5 px-1 rounded">
+                      كلمة المرور: <span className="text-purple-400">{u.password || 'غير متوفرة بعد'}</span>
+                    </p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => { setShowChargePopup(u.id); setChargeAmount(''); }} className="bg-green-600/20 text-green-400 text-[10px] py-2 rounded-xl border border-green-600/30 font-black">شحن</button>
@@ -906,12 +1399,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                     setNewCustomIdIcon(u.customIdIcon || null);
                     setIdOffsetX(u.idOffsetX ?? 28);
                     setIdOffsetY(u.idOffsetY ?? 0.5);
+                    setIdFontSize(u.idFontSize ?? 11);
                   }} className="bg-blue-600/20 text-blue-400 text-[10px] py-2 rounded-xl border border-blue-600/30 font-black">تعديل ID</button>
-                  <button onClick={() => setShowBanPopup(u.id)} className="bg-red-600/20 text-red-400 text-[10px] py-2 rounded-xl border border-red-600/30 font-black">حظر</button>
                   <button onClick={() => { setShowBadgesPopup(u.id); setBadgeUrl(''); }} className="bg-emerald-600/20 text-emerald-400 text-[10px] py-2 rounded-xl border border-emerald-600/30 font-black">شارات</button>
                   <button onClick={() => { setShowGrantPopup(u.id); }} className="bg-purple-600/20 text-purple-400 text-[10px] py-2 rounded-xl border border-purple-600/30 font-black">منح مخصص</button>
                   <button onClick={() => { setShowGrantAnimatedPopup(u.id); setAnimatedUrl(u.animatedAvatar || ''); }} className="bg-pink-600/20 text-pink-400 text-[10px] py-2 rounded-xl border border-pink-600/30 font-black">منح صورة متحركة</button>
-                  <button onClick={() => handleDeleteAccount(u.id, u.displayName)} className="bg-red-900/40 text-red-400 text-[10px] py-2 rounded-xl border border-red-900/30 font-black">حذف الحساب</button>
+                  <button 
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleGrantBanSystem(u.id, u.displayName, !!u.canBan); }} 
+                    className={`${u.canBan ? 'bg-orange-600/40 text-orange-400' : 'bg-orange-600/10 text-orange-500/60'} text-[10px] py-2 rounded-xl border border-orange-600/30 font-black`}
+                  >
+                    {u.canBan ? 'سحب سيستم الحظر' : 'منح سيستم الحظر'}
+                  </button>
+                  <button 
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleGrantGMSystem(u.id, u.displayName, !!u.isGM); }} 
+                    className={`${u.isGM ? 'bg-purple-600/40 text-purple-400' : 'bg-purple-600/10 text-purple-500/60'} text-[10px] py-2 rounded-xl border border-purple-600/30 font-black`}
+                  >
+                    {u.isGM ? 'سحب نظام المدير' : 'منح نظام المدير'}
+                  </button>
                 </div>
               </div>
             ))}
@@ -1403,6 +1907,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                   setMsgTitle(''); setMsgDesc(''); setMsgImage(null); alert("تم الإرسال");
                 }} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all mt-4 border border-white/10">بث الرسالة الآن</button>
             </div>
+
+            <div className="space-y-4">
+              <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest px-1">الرسائل النشطة حالياً ({allOfficialMsgs.length})</p>
+              {allOfficialMsgs.length === 0 ? (
+                <div className="text-center py-20 opacity-20">
+                  <i className="fas fa-bullhorn text-4xl mb-2"></i>
+                  <p className="text-xs font-bold">لا توجد رسائل مرسلة حالياً</p>
+                </div>
+              ) : allOfficialMsgs.map(msg => (
+                <div key={msg.id} className="bg-white/5 p-4 rounded-3xl border border-white/10 space-y-3 relative group animate-in fade-in transition-all overflow-hidden shadow-lg">
+                  {msg.image && (
+                    <div className="w-full h-32 rounded-2xl overflow-hidden mb-2">
+                       <img src={msg.image} className="w-full h-full object-cover" alt="notification" />
+                    </div>
+                  )}
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h4 className="text-sm font-black text-white mb-1 line-clamp-1">{msg.title}</h4>
+                      <p className="text-[10px] text-white/50 font-bold whitespace-pre-wrap line-clamp-2">{msg.desc}</p>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        if(confirm("هل تريد حقاً حذف هذه الرسالة من صندوق البريد لجميع التابعين؟")) {
+                          await deleteDoc(doc(db, "officialNotifications", msg.id));
+                        }
+                      }}
+                      className="w-9 h-9 rounded-xl bg-red-600/20 text-red-500 border border-red-600/30 flex items-center justify-center active:scale-90 transition-all ml-2"
+                    >
+                      <i className="fas fa-trash-alt text-xs"></i>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/5">
+                    <i className="far fa-clock text-[8px] text-white/20"></i>
+                    <span className="text-[8px] font-bold text-white/20">
+                      {msg.createdAt?.toDate ? msg.createdAt.toDate().toLocaleString('ar-EG') : 'جاري التحميل...'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1457,6 +2001,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               <div className="grid grid-cols-3 gap-2">{allRoomBgs.map(bg => (
                   <div key={bg.id} className="relative aspect-[9/16] rounded-xl overflow-hidden bg-white/5 border border-white/5 group shadow-lg">{isVideoUrl(bg.imageUrl) ? <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <img src={bg.imageUrl} className="w-full h-full object-cover" />}<button onClick={async () => { if(confirm("حذف؟")) await deleteDoc(doc(db, "roomBackgrounds", bg.id)); }} className="absolute top-1 right-1 w-6 h-6 rounded-lg bg-red-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-lg active:scale-90"><i className="fas fa-trash-alt text-[10px]"></i></button></div>
                 ))}</div>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'mainImages' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-6 shadow-2xl">
+              <h4 className="text-sm font-black text-white flex items-center gap-2 mb-2">
+                <i className="fas fa-images text-purple-400"></i>
+                إعداد الصور الرئيسية الافتراضية
+              </h4>
+              <p className="text-[10px] text-white/40 font-bold -mt-2 pr-2">هذه الصور ستوضع تلقائياً لأي مستخدم جديد لا يقوم باختيار صور خاصة به</p>
+
+              <div className="grid grid-cols-1 gap-6">
+                {/* Default Profile Image */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">الصورة الشخصية الافتراضية</label>
+                  <div className="flex flex-col items-center gap-4">
+                    <button onClick={() => profileImageInputRef.current?.click()} className="w-24 h-24 rounded-full border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden bg-black/20 group hover:border-purple-500/40 transition-all">
+                      {defaultProfileImage ? <img src={defaultProfileImage} className="w-full h-full object-cover" /> : <i className="fas fa-plus text-white/20"></i>}
+                    </button>
+                    <input 
+                      type="text" 
+                      value={defaultProfileImage || ''} 
+                      onChange={e => setDefaultProfileImage(e.target.value)} 
+                      placeholder="رابط الصورة الشخصية..." 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-[10px] text-white outline-none font-mono" 
+                    />
+                  </div>
+                </div>
+
+                {/* Default Cover Image */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">صورة الغلاف الافتراضية</label>
+                  <div className="flex flex-col items-center gap-4">
+                    <button onClick={() => coverImageInputRef.current?.click()} className="w-full h-32 rounded-3xl border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden bg-black/20 group hover:border-purple-500/40 transition-all">
+                      {defaultCoverImage ? <img src={defaultCoverImage} className="w-full h-full object-cover" /> : <i className="fas fa-plus text-white/20"></i>}
+                    </button>
+                    <input 
+                      type="text" 
+                      value={defaultCoverImage || ''} 
+                      onChange={e => setDefaultCoverImage(e.target.value)} 
+                      placeholder="رابط صورة الغلاف..." 
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-[10px] text-white outline-none font-mono" 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={handleSaveDefaultImages} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-transform border border-white/10 flex items-center justify-center gap-2">
+                <i className="fas fa-save"></i>
+                حفظ الإعدادات
+              </button>
             </div>
           </div>
         )}
@@ -1548,25 +2145,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
           <div className="bg-[#1a0b2e] w-full max-w-[340px] rounded-[2.5rem] border border-white/10 p-6 shadow-2xl flex flex-col gap-5 overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <h4 className="text-sm font-black text-white text-center">تعديل وتصميم الـ ID</h4>
             
-            <div className="bg-black/40 rounded-3xl border border-white/5 p-4 flex flex-col items-center justify-center relative overflow-hidden h-36">
-               <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent"></div>
-               {newCustomIdIcon ? (
-                 <div className="relative w-[120px] h-[36px] flex items-center bg-contain bg-center bg-no-repeat transition-all" style={{ backgroundImage: `url(${newCustomIdIcon})` }}>
-                    <span className="text-[11px] font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" 
-                          style={{ paddingLeft: `${idOffsetX}px`, paddingTop: `${idOffsetY}px` }}>
-                      {newCustomId || 'ID PREVIEW'}
-                    </span>
-                 </div>
-               ) : (
-                 <span className="text-blue-400 font-black text-sm px-4 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20">{newCustomId || 'ID PREVIEW'}</span>
-               )}
-               <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em] mt-3">معاينة حية للمظهر</p>
+            <div className="bg-black/40 rounded-[2rem] border border-white/5 p-6 flex flex-col items-center justify-center gap-8 relative overflow-hidden min-h-[200px] py-10">
+               <div className="absolute inset-0 bg-gradient-to-b from-blue-500/10 to-transparent"></div>
+               
+               {/* Profile Page Preview */}
+               <div className="flex flex-col items-center gap-3 z-10">
+                 <p className="text-[8px] font-black text-purple-400 uppercase tracking-widest opacity-60">معاينة البروفايل (90 × 28)</p>
+                 {newCustomIdIcon ? (
+                   <div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat transition-all shadow-2xl" style={{ backgroundImage: `url(${newCustomIdIcon})` }}>
+                      <span className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" 
+                            style={{ 
+                              paddingLeft: `${idOffsetX}px`, 
+                              paddingTop: `${idOffsetY}px`,
+                              fontSize: `${idFontSize}px`
+                            }}>
+                        {newCustomId || 'ID PREVIEW'}
+                      </span>
+                   </div>
+                 ) : (
+                   <span className="text-blue-400 font-black text-[10px] px-3 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">{newCustomId || 'ID PREVIEW'}</span>
+                 )}
+               </div>
+
+               {/* Voice Room Preview */}
+               <div className="flex flex-col items-center gap-3 z-10">
+                 <p className="text-[8px] font-black text-cyan-400 uppercase tracking-widest opacity-60">معاينة الغرفة (70 × 22)</p>
+                 {newCustomIdIcon ? (
+                   <div className="relative w-[70px] h-[22px] flex items-center bg-contain bg-center bg-no-repeat transition-all shadow-xl" style={{ backgroundImage: `url(${newCustomIdIcon})` }}>
+                      <span className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" 
+                            style={{ 
+                              paddingLeft: `${(idOffsetX * 70) / 90}px`, 
+                              paddingTop: `${(idOffsetY * 22) / 28}px`,
+                              fontSize: `${(idFontSize * 70) / 90}px`
+                            }}>
+                        {newCustomId || 'ID PREVIEW'}
+                      </span>
+                   </div>
+                 ) : (
+                   <span className="text-blue-400 font-black text-[8px] px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/20">{newCustomId || 'ID PREVIEW'}</span>
+                 )}
+               </div>
+
+               <p className="text-[10px] font-black text-white/10 uppercase tracking-[0.4em] absolute bottom-2">Live Accuracy Preview</p>
             </div>
 
             <div className="space-y-4">
-               <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-purple-400/60 mr-1 uppercase">النص المكتوب (ID)</label>
-                  <input type="text" value={newCustomId} onChange={e => setNewCustomId(e.target.value)} placeholder="ادخل النص هنا..." className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-xs text-white outline-none font-black shadow-inner" />
+               <div className="grid grid-cols-2 gap-3">
+                 <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-purple-400/60 mr-1 uppercase">النص (ID)</label>
+                    <input type="text" value={newCustomId} onChange={e => setNewCustomId(e.target.value)} placeholder="ادخل النص هنا..." className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-xs text-white outline-none font-black shadow-inner" />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-purple-400/60 mr-1 uppercase">حجم الخط</label>
+                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 h-[46px]">
+                       <input type="range" min="4" max="24" step="0.5" value={idFontSize} onChange={e => setIdFontSize(parseFloat(e.target.value))} className="flex-1 accent-purple-500 h-1 bg-white/10 rounded-full appearance-none" />
+                       <span className="text-[10px] font-black text-white w-6 text-center">{idFontSize}</span>
+                    </div>
+                 </div>
                </div>
 
                <div className="space-y-1.5">
@@ -1824,22 +2459,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               </button>
               <button onClick={() => setShowRoomCoverPopup(null)} className="w-full bg-white/5 py-2 rounded-xl text-[10px] font-black text-white border border-white/10 active:scale-95 transition-all">إلغاء</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {showBanPopup && (
-        <div className="fixed inset-0 z-[700] bg-black/60 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowBanPopup(null)}>
-          <div className="bg-[#1a0b2e] w-full max-w-[300px] rounded-[2rem] border border-white/10 p-6 shadow-2xl flex flex-col gap-4" onClick={e => e.stopPropagation()}>
-            <h4 className="text-sm font-black text-white text-center">حظر المستخدم</h4>
-            <div className="grid grid-cols-1 gap-2">
-              <button onClick={() => handleBanSubmit(1)} className="w-full py-3 bg-white/5 text-white text-[11px] font-black rounded-xl border border-white/10">حظر لمدة يوم</button>
-              <button onClick={() => handleBanSubmit(7)} className="w-full py-3 bg-white/5 text-white text-[11px] font-black rounded-xl border border-white/10">حظر لمدة أسبوع</button>
-              <button onClick={() => handleBanSubmit(30)} className="w-full py-3 bg-white/5 text-white text-[11px] font-black rounded-xl border border-white/10">حظر لمدة شهر</button>
-              <button onClick={() => handleBanSubmit('permanent')} className="w-full py-3 bg-red-600/20 text-red-500 text-[11px] font-black rounded-xl border border-red-600/30">حظر نهائي</button>
-              <button onClick={() => handleUserUpdate(showBanPopup!, { banUntil: deleteField() }).then(() => { setShowBanPopup(null); alert("تم فك الحظر"); })} className="w-full py-3 bg-green-600/20 text-green-400 text-[11px] font-black rounded-xl border border-green-600/30">فك الحظر</button>
-            </div>
-            <button onClick={() => setShowBanPopup(null)} className="w-full py-2 text-[10px] font-black text-white/30">إلغاء</button>
           </div>
         </div>
       )}

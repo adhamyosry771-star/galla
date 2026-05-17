@@ -70,17 +70,6 @@ const NotificationItem: React.FC<NotificationItemProps> = ({ id, icon, title, de
       )}
       <div className="p-6 flex flex-col gap-4">
         <div className="flex items-start gap-4">
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 overflow-hidden shadow-lg ${isOfficial ? 'bg-purple-600/20 text-purple-400' : 'bg-blue-600/20 text-blue-400'} border border-white/5`}>
-            {isMediaIcon ? (
-              isVideo(icon) ? (
-                <video src={icon} autoPlay loop muted playsInline className="w-full h-full object-cover" />
-              ) : (
-                <img src={icon} className="w-full h-full object-cover" alt="Icon" />
-              )
-            ) : (
-              <i className={`fas ${icon}`}></i>
-            )}
-          </div>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-2">
               <h4 className="text-[14px] font-black text-white truncate pr-2">{title}</h4>
@@ -176,19 +165,17 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ onBack }) 
       </header>
 
       <div className="px-5 py-6">
-        <div className="bg-white/5 p-1.5 rounded-[1.8rem] flex items-center border border-white/5">
+        <div className="bg-white/5 p-1.5 rounded-[1.8rem] flex items-center border border-white/5 backdrop-blur-sm">
           <button 
             onClick={() => setActiveTab('official')}
-            className={`flex-1 py-3.5 rounded-[1.4rem] text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${activeTab === 'official' ? 'bg-purple-600 text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
+            className={`flex-1 py-3.5 rounded-[1.4rem] text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${activeTab === 'official' ? 'bg-purple-600/30 backdrop-blur-md text-white border border-purple-500/30 shadow-xl' : 'text-white/40 hover:text-white/60'}`}
           >
-            <i className="fas fa-crown text-[10px]"></i>
             الرسائل الرسمية
           </button>
           <button 
             onClick={() => setActiveTab('system')}
-            className={`flex-1 py-3.5 rounded-[1.4rem] text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${activeTab === 'system' ? 'bg-blue-600 text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
+            className={`flex-1 py-3.5 rounded-[1.4rem] text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 ${activeTab === 'system' ? 'bg-blue-600/30 backdrop-blur-md text-white border border-blue-500/30 shadow-xl' : 'text-white/40 hover:text-white/60'}`}
           >
-            <i className="fas fa-microchip text-[10px]"></i>
             رسائل النظام
           </button>
         </div>

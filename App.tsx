@@ -10,20 +10,28 @@ import { MessagesPage } from './components/MessagesPage';
 import { ProfilePage } from './components/ProfilePage';
 import { CreateRoomModal } from './components/CreateRoomModal';
 import { NotificationsPage } from './components/NotificationsPage';
+import { BanModal } from './components/BanModal';
 import { auth, db } from './firebase';
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { doc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { motion, AnimatePresence } from 'framer-motion';
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { doc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp, deleteDoc, updateDoc, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [isProfileSetup, setIsProfileSetup] = useState(true);
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [banUntil, setBanUntil] = useState<string | null>(null);
+  const [isProfileSetup, setIsProfileSetup] = useState(false);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordRoom, setPasswordRoom] = useState<Room | null>(null);
+  const [joiningPassword, setJoiningPassword] = useState('');
   const [activeTab, setActiveTab] = useState<'home' | 'news' | 'messages' | 'me'>('home');
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [showHasRoomError, setShowHasRoomError] = useState(false);
   const [shouldOpenWalletOnProfile, setShouldOpenWalletOnProfile] = useState(false);
   
   const [unreadCount, setUnreadCount] = useState(0);
@@ -37,6 +45,8 @@ const App: React.FC = () => {
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
+  const [designSettings, setDesignSettings] = useState<any>(null);
+  const [defaultImages, setDefaultImages] = useState<any>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
   // تتبع العناصر التي تمت معالجة انتهاء صلاحيتها لمنع التكرار
@@ -48,105 +58,176 @@ const App: React.FC = () => {
   const hasMoved = useRef(false); 
   const dragOffset = useRef({ x: 0, y: 0 });
 
+  useEffect(() => {
+    const unsubDesign = onSnapshot(doc(db, "settings", "design"), (docSnap) => {
+      if (docSnap.exists()) setDesignSettings(docSnap.data());
+    });
+    const unsubDefaultImages = onSnapshot(doc(db, "settings", "default_images"), (snap) => {
+      if (snap.exists()) setDefaultImages(snap.data());
+    });
+    return () => { unsubDesign(); unsubDefaultImages(); };
+  }, []);
+
   const isVideoUrl = (url?: string | null) => {
     if (!url) return false;
     return url.match(/\.(mp4|webm|ogg|mov)$/) !== null || url.includes('video');
   };
 
+  // 1. Auth Listener (Runs once)
   useEffect(() => {
-    let unsubscribeUserDoc: any;
-    let unsubscribeOfficial: any;
-    let unsubscribeSystem: any;
-    let unsubscribeInventory: any;
-
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
-        unsubscribeUserDoc = onSnapshot(doc(db, "users", currentUser.uid), (docSnap) => {
-          if (docSnap.exists()) {
-            setUserData(docSnap.data());
-            setIsProfileSetup(true);
-          } else {
-            setIsProfileSetup(false);
-          }
-          setLoading(false);
-        });
-
-        // مراقبة انتهاء صلاحية العناصر وإرسال رسائل النظام
-        unsubscribeInventory = onSnapshot(collection(db, "users", currentUser.uid, "inventory"), async (snap) => {
-          const now = new Date();
-          const userDocRef = doc(db, "users", currentUser.uid);
-
-          for (const itemDoc of snap.docs) {
-            const item = itemDoc.data();
-            const itemId = itemDoc.id;
-
-            if (item.expiresAt && !processedExpirations.current.has(itemId)) {
-              const expiration = item.expiresAt.toDate();
-              if (expiration < now) {
-                // تعليم العنصر كـ "تمت معالجته" فوراً لمنع التكرار
-                processedExpirations.current.add(itemId);
-
-                const itemTypeLabel = item.type === 'frame' ? 'الإطار' : item.type === 'entry' ? 'الدخولية' : 'الخلفية';
-                const itemIcon = item.type === 'frame' ? 'fa-id-badge' : item.type === 'entry' ? 'fa-door-open' : 'fa-image';
-
-                try {
-                  // 1. إرسال رسالة نظام (مرة واحدة فقط)
-                  await addDoc(collection(db, "users", currentUser.uid, "systemNotifications"), {
-                    title: "انتهت صلاحية العنصر",
-                    desc: `تم انتهاء وقت ${itemTypeLabel} الخاص بك: "${item.name}". يمكنك التوجه للمتجر للحصول عليه مرة أخرى.`,
-                    icon: itemIcon,
-                    createdAt: serverTimestamp()
-                  });
-
-                  // 2. تحديث بروفايل المستخدم لإزالة العنصر إذا كان يرتديه
-                  const updates: any = {};
-                  if (item.type === 'frame' && userData?.currentFrame === item.imageUrl) updates.currentFrame = null;
-                  if (item.type === 'entry' && userData?.currentEntry === item.videoUrl) updates.currentEntry = null;
-                  if (item.type === 'background' && (userData?.currentRoomBackground === item.imageUrl || item.isEquipped)) {
-                    updates.currentRoomBackground = null;
-                  }
-
-                  if (Object.keys(updates).length > 0) {
-                    await updateDoc(userDocRef, updates);
-                  }
-
-                  // 3. حذف من الحقيبة
-                  await deleteDoc(itemDoc.ref);
-                } catch (err) {
-                  console.error("Error processing expired item:", err);
-                  // في حالة الفشل، يمكن إزالة الـ ID من processed للسماح بمحاولة أخرى لاحقاً
-                  processedExpirations.current.delete(itemId);
-                }
+        setLoading(true);
+        try {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.banUntil) {
+              const banDate = new Date(data.banUntil);
+              if (banDate > new Date()) {
+                setBanUntil(data.banUntil);
+                setShowBanModal(true);
+                await signOut(auth);
+                setLoading(false);
+                return;
               }
             }
           }
-        });
-
-        unsubscribeOfficial = onSnapshot(collection(db, "officialNotifications"), (snap) => {
-          const newOfficial = snap.docs.filter(doc => {
-            const data = doc.data();
-            const createdAt = data.createdAt?.toMillis() || 0;
-            return createdAt > lastReadTimestamp;
-          }).length;
-          
-          unsubscribeSystem = onSnapshot(collection(db, "users", currentUser.uid, "systemNotifications"), (sysSnap) => {
-            const newSystem = sysSnap.docs.filter(doc => {
-              const data = doc.data();
-              const createdAt = data.createdAt?.toMillis() || 0;
-              return createdAt > lastReadTimestamp;
-            }).length;
-            setUnreadCount(newOfficial + newSystem);
-          });
-        });
-
+          setUser(currentUser);
+        } catch (e) {
+          console.error("Auth check error:", e);
+          setUser(currentUser);
+        }
       } else {
         setUser(null);
         setUserData(null);
+        setIsProfileSetup(false);
+        setActiveTab('home');
         setLoading(false);
       }
     });
+    return unsubscribeAuth;
+  }, []);
 
+  // 2. User Data & Inventory Listener (Runs when user changes)
+  useEffect(() => {
+    if (!user) return;
+
+    setLoading(true);
+    const unsubscribeUserDoc = onSnapshot(doc(db, "users", user.uid), async (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+
+        // Ban check
+        if (data.banUntil) {
+          const banDate = new Date(data.banUntil);
+          const now = new Date();
+          if (banDate > now) {
+            setBanUntil(data.banUntil);
+            setShowBanModal(true);
+            await signOut(auth);
+            setLoading(false);
+            return;
+          }
+        }
+
+        if (user.email && data.email !== user.email) {
+          updateDoc(doc(db, "users", user.uid), { email: user.email });
+        }
+        setUserData(data);
+        // Check if profile is setup: either has a displayName in Firestore, or has a customId, or has one in Auth
+        setIsProfileSetup(!!data.displayName || !!data.customId || !!user.displayName);
+      } else {
+        // If doc doesn't exist, check Auth profile as a fallback for external logins
+        setIsProfileSetup(!!user.displayName);
+      }
+      setLoading(false);
+    });
+
+    const unsubscribeInventory = onSnapshot(collection(db, "users", user.uid, "inventory"), async (snap) => {
+      const now = new Date();
+      const userDocRef = doc(db, "users", user.uid);
+
+      for (const itemDoc of snap.docs) {
+        const item = itemDoc.data();
+        const itemId = itemDoc.id;
+
+        if (item.expiresAt && !processedExpirations.current.has(itemId)) {
+          const expiration = item.expiresAt.toDate();
+          if (expiration < now) {
+            processedExpirations.current.add(itemId);
+            const itemTypeLabel = item.type === 'frame' ? 'الإطار' : item.type === 'entry' ? 'الدخولية' : 'الخلفية';
+            const itemIcon = item.type === 'frame' ? 'fa-id-badge' : item.type === 'entry' ? 'fa-door-open' : 'fa-image';
+
+            try {
+              await addDoc(collection(db, "users", user.uid, "systemNotifications"), {
+                title: "انتهت صلاحية العنصر",
+                desc: `تم انتهاء وقت ${itemTypeLabel} الخاص بك: "${item.name}". يمكنك التوجه للمتجر للحصول عليه مرة أخرى.`,
+                icon: itemIcon,
+                createdAt: serverTimestamp()
+              });
+
+              const updates: any = {};
+              if (item.type === 'frame' && userData?.currentFrame === item.imageUrl) updates.currentFrame = null;
+              if (item.type === 'entry' && userData?.currentEntry === item.videoUrl) updates.currentEntry = null;
+              if (item.type === 'background' && (userData?.currentRoomBackground === item.imageUrl || item.isEquipped)) {
+                try {
+                  const publicBgsSnapshot = await getDocs(query(collection(db, "roomBackgrounds"), limit(1)));
+                  if (!publicBgsSnapshot.empty) {
+                    updates.currentRoomBackground = publicBgsSnapshot.docs[0].data().imageUrl;
+                  } else {
+                    updates.currentRoomBackground = null;
+                  }
+                } catch (e) {
+                  updates.currentRoomBackground = null;
+                }
+              }
+
+              if (Object.keys(updates).length > 0) await updateDoc(userDocRef, updates);
+              await deleteDoc(itemDoc.ref);
+            } catch (err) {
+              console.error("Error processing expired item:", err);
+              processedExpirations.current.delete(itemId);
+            }
+          }
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeUserDoc();
+      unsubscribeInventory();
+    };
+  }, [user]);
+
+  // 3. Notifications & Social Listener
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribeOfficial = onSnapshot(collection(db, "officialNotifications"), (snap) => {
+      const newOfficial = snap.docs.filter(doc => {
+        const data = doc.data();
+        const createdAt = data.createdAt?.toMillis() || 0;
+        return createdAt > lastReadTimestamp;
+      }).length;
+      
+      const unsubscribeSystem = onSnapshot(collection(db, "users", user.uid, "systemNotifications"), (sysSnap) => {
+        const newSystem = sysSnap.docs.filter(doc => {
+          const data = doc.data();
+          const createdAt = data.createdAt?.toMillis() || 0;
+          return createdAt > lastReadTimestamp;
+        }).length;
+        setUnreadCount(newOfficial + newSystem);
+      });
+
+      return () => unsubscribeSystem();
+    });
+
+    return () => unsubscribeOfficial();
+  }, [user, lastReadTimestamp]);
+
+  // 4. Global Data Listeners (Rooms, Banners)
+  useEffect(() => {
     const bannersQuery = query(collection(db, "banners"), orderBy("createdAt", "desc"), limit(5));
     const unsubscribeBanners = onSnapshot(bannersQuery, (snapshot) => {
       setBanners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -154,19 +235,15 @@ const App: React.FC = () => {
 
     const roomsQuery = query(collection(db, "rooms"), orderBy("createdAt", "desc"), limit(20));
     const unsubscribeRooms = onSnapshot(roomsQuery, (snapshot) => {
-      setRooms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
+      const fetchedRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      setRooms(fetchedRooms.reverse());
     });
 
     return () => {
-      unsubscribeAuth();
-      if (unsubscribeUserDoc) unsubscribeUserDoc();
-      if (unsubscribeOfficial) unsubscribeOfficial();
-      if (unsubscribeSystem) unsubscribeSystem();
-      if (unsubscribeInventory) unsubscribeInventory();
       unsubscribeBanners();
       unsubscribeRooms();
     };
-  }, [lastReadTimestamp, userData?.currentFrame, userData?.currentEntry, userData?.currentRoomBackground]);
+  }, []);
 
   useEffect(() => {
     if (banners.length > 1) {
@@ -227,14 +304,35 @@ const App: React.FC = () => {
   }, [bubblePos]);
 
   const handleRoomClick = (room: Room) => {
+    // If room is locked and user is not owner
+    if (room.isLocked && room.owner?.uid !== user?.uid) {
+      setPasswordRoom(room);
+      setShowPasswordPrompt(true);
+      setJoiningPassword('');
+      return;
+    }
+    enterRoom(room);
+  };
+
+  const enterRoom = (room: Room) => {
     if (activeRoom && activeRoom.id === room.id) {
       setIsMinimized(false);
     } else {
       setRoomMicStates(Array(15).fill({ status: 'open', user: null }));
       setIsMicMuted(true);
-      setRoomMessages([]); // تصفير الرسائل عند الدخول لغرفة جديدة
+      setRoomMessages([]); 
       setActiveRoom(room);
       setIsMinimized(false);
+    }
+  };
+
+  const verifyPassword = () => {
+    if (passwordRoom && joiningPassword === passwordRoom.password) {
+      setShowPasswordPrompt(false);
+      enterRoom(passwordRoom);
+      setPasswordRoom(null);
+    } else {
+      alert("كلمة المرور غير صحيحة");
     }
   };
 
@@ -244,11 +342,32 @@ const App: React.FC = () => {
     setRoomMessages([]); // تصفير الرسائل عند الخروج النهائي
   };
 
-  if (loading) return <div className="min-h-screen bg-[#1a0b2e] flex items-center justify-center"><div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (loading) return (
+    <div className="min-h-screen bg-[#1a0b2e] flex items-center justify-center">
+      <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
+
+  if (showBanModal && banUntil) {
+    return (
+      <div className="min-h-screen bg-[#1a0b2e]">
+        <BanModal 
+          isOpen={showBanModal} 
+          onClose={() => {
+            setShowBanModal(false);
+            setBanUntil(null);
+            setUser(null);
+          }} 
+          banUntil={banUntil} 
+        />
+      </div>
+    );
+  }
+
   if (!user) return <Login onLoginSuccess={() => {}} />;
   if (!isProfileSetup) return <SetupProfile onComplete={() => setIsProfileSetup(true)} />;
 
-  const finalUserPhoto = userData?.photoURL || user?.photoURL || "https://picsum.photos/200";
+  const finalUserPhoto = userData?.photoURL || defaultImages?.profileImage || user?.photoURL || "https://picsum.photos/200";
 
   return (
     <div className="min-h-screen pb-16 max-w-md mx-auto bg-[#1a0b2e] shadow-2xl relative overflow-hidden flex flex-col border-x border-white/5" dir="rtl">
@@ -309,7 +428,7 @@ const App: React.FC = () => {
                 <h2 className="text-base font-black text-white mb-3">غرف صوتية</h2>
                 <div className="grid grid-cols-2 gap-3">
                   {rooms.map(room => (
-                    <RoomCard key={room.id} room={room} onClick={handleRoomClick} />
+                    <RoomCard key={room.id} room={room} design={designSettings} onClick={handleRoomClick} />
                   ))}
                 </div>
               </section>
@@ -326,7 +445,19 @@ const App: React.FC = () => {
         <button onClick={() => { setActiveTab('home'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'home' && !showNotifications ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-home text-sm"></i><span className="text-[8px] font-black uppercase">الرئيسية</span></button>
         <button onClick={() => { setActiveTab('news'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'news' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-newspaper text-sm"></i><span className="text-[8px] font-black uppercase">أخبار</span></button>
         <div className="relative -top-3 flex flex-col items-center gap-1">
-          <button onClick={() => setIsCreateModalOpen(true)} className="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-500 shadow-lg flex items-center justify-center text-xl border-4 border-[#1a0b2e] active:scale-90 transition-transform text-white"><i className="fas fa-plus"></i></button>
+          <button 
+            onClick={() => {
+              const userHasRoom = rooms.some(r => r.owner?.uid === user?.uid);
+              if (userHasRoom) {
+                setShowHasRoomError(true);
+              } else {
+                setIsCreateModalOpen(true);
+              }
+            }} 
+            className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-pink-500 shadow-lg flex items-center justify-center text-lg active:scale-90 transition-transform text-white"
+          >
+            <i className="fas fa-plus"></i>
+          </button>
           <span className="text-[8px] font-black uppercase text-purple-300/60">إنشاء</span>
         </div>
         <button onClick={() => { setActiveTab('messages'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'messages' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-comment-dots text-sm"></i><span className="text-[8px] font-black uppercase">رسائل</span></button>
@@ -365,6 +496,85 @@ const App: React.FC = () => {
 
       <CreateRoomModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} />
       
+      <AnimatePresence>
+        {showHasRoomError && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[700] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowHasRoomError(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#1a0b2e]/60 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 w-full max-w-[300px] text-center shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 mx-auto mb-4">
+                <i className="fas fa-exclamation-triangle text-2xl"></i>
+              </div>
+              <h4 className="text-white font-black text-sm mb-2">تنبيه</h4>
+              <p className="text-white/60 text-[11px] leading-relaxed mb-6 font-bold">عذراً لديك غرفة بالفعل</p>
+              <button 
+                onClick={() => setShowHasRoomError(false)}
+                className="w-full py-3 bg-purple-600 text-white text-xs font-black rounded-xl active:scale-95 transition-transform"
+              >
+                فهمت ذلك
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {showPasswordPrompt && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6 animate-in fade-in" dir="rtl">
+          <div className="w-full max-w-[320px] bg-[#2d0f4d]/90 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+            <header className="p-5 flex justify-between items-center border-b border-white/5">
+              <h3 className="text-white font-black text-sm">هذه الغرفة مغلقة</h3>
+              <button onClick={() => setShowPasswordPrompt(false)} className="text-white/40 hover:text-white transition-colors">
+                <i className="fas fa-times text-xs"></i>
+              </button>
+            </header>
+            
+            <div className="p-6 space-y-6">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-[1.5rem] overflow-hidden shadow-lg border border-white/10">
+                  <img src={passwordRoom?.coverImage} className="w-full h-full object-cover" />
+                </div>
+                <h4 className="text-white font-black text-xs">{passwordRoom?.title}</h4>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">أدخل كلمة المرور</label>
+                <input 
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={joiningPassword}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, '');
+                    if (val.length <= 6) setJoiningPassword(val);
+                  }}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-center text-sm font-black text-white outline-none focus:border-purple-500/40 transition-all shadow-inner tracking-[0.5em]"
+                  placeholder="••••••"
+                />
+              </div>
+
+              <button 
+                onClick={verifyPassword}
+                disabled={joiningPassword.length !== 6}
+                className="w-full bg-purple-600/20 border border-purple-500/40 backdrop-blur-md py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2"
+              >
+                <i className="fas fa-door-open"></i>
+                <span>دخول الغرفة</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* تعديل هنا: الغرفة تبقى نشطة في الـ DOM ولكنها تختفي عند التصغير للحفاظ على حالتها وعدم تكرار الترحيب */}
       {activeRoom && (
         <div className={isMinimized ? "hidden" : "contents"}>

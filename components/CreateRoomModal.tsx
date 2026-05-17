@@ -100,7 +100,8 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
         roomBackground: selectedBg,
         roomIdDisplay: customId,
         owner: {
-          uid: user?.uid,
+          id: user?.uid,
+          uid: user?.uid, // keep for backward compatibility if needed
           name: currentUserData?.displayName || user?.displayName || 'مستخدم جديد',
           avatar: currentUserData?.photoURL || user?.photoURL || '',
           customId: customId

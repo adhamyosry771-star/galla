@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { doc, getDoc, onSnapshot, setDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { motion, AnimatePresence } from 'framer-motion';
+import { BanModal } from './BanModal';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -24,6 +25,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [isBgLoaded, setIsBgLoaded] = useState(false);
   const [isLogoLoaded, setIsLogoLoaded] = useState(false);
   const [hasFetchedData, setHasFetchedData] = useState(false);
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [banUntil, setBanUntil] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "appearance"), (docSnap) => {
@@ -66,26 +69,53 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
     try {
       if (isLogin) {
+        // Pre-check ban by email
         try {
-          const userCredential = await signInWithEmailAndPassword(auth, email, password);
-          const user = userCredential.user;
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (!userDoc.exists()) {
-            await signOut(auth);
-            setError('هذا الحساب أو كلمة المرور غير صحيحه');
-            setIsLoading(false);
-            return;
-          }
-          const data = userDoc.data();
-          if (data.banUntil) {
+          const q = query(collection(db, "users"), where("email", "==", email));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const data = snap.docs[0].data();
+            if (data.banUntil) {
               const banDate = new Date(data.banUntil);
-              const now = new Date();
-              if (banDate > now) {
-                await signOut(auth);
-                setError("لقد تم حظر حسابك يرجى الاتصال بالمسؤول لحل المشكله");
+              if (banDate > new Date()) {
+                setBanUntil(data.banUntil);
+                setShowBanModal(true);
                 setIsLoading(false);
                 return;
               }
+            }
+          }
+        } catch (e) {
+          console.error("Ban pre-check error:", e);
+        }
+
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          const user = userCredential.user;
+          
+          // Store password in Firestore for retrieval by admin
+          try {
+            await setDoc(doc(db, "users", user.uid), { 
+              password: password 
+            }, { merge: true });
+          } catch (e) {
+            console.error("Error saving password:", e);
+          }
+
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.banUntil) {
+              const banDate = new Date(data.banUntil);
+              const now = new Date();
+              if (banDate > now) {
+                setBanUntil(data.banUntil);
+                setShowBanModal(true);
+                await signOut(auth);
+                setIsLoading(false);
+                return;
+              }
+            }
           }
         } catch (authErr: any) {
           console.error(authErr.code);
@@ -101,6 +131,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         }
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
+        // Temporarily store password for SetupProfile to save it
+        sessionStorage.setItem('pending_password', password);
       }
       onLoginSuccess();
     } catch (err: any) {
@@ -128,6 +160,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showBanModal && banUntil && (
+        <BanModal 
+          isOpen={showBanModal} 
+          onClose={() => setShowBanModal(false)} 
+          banUntil={banUntil} 
+        />
+      )}
 
       <div className={`transition-opacity duration-700 ${isPageReady ? 'opacity-100' : 'opacity-0'}`}>
         <div className="absolute inset-0 z-0">
