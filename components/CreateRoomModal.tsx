@@ -142,8 +142,18 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">اسم الغرفة</label>
-                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500 transition-all shadow-inner" placeholder="مثلاً: سهرة الوناسة..." />
+                <div className="flex justify-between items-center mr-2">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اسم الغرفة</label>
+                  <span className="text-[9px] font-bold text-white/40">{title.length}/16</span>
+                </div>
+                <input 
+                  type="text" 
+                  value={title} 
+                  maxLength={16}
+                  onChange={(e) => setTitle(e.target.value)} 
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500 transition-all shadow-inner" 
+                  placeholder="مثلاً: سهرة الوناسة..." 
+                />
               </div>
 
               <div className="space-y-2">

@@ -80,6 +80,7 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
   }, [timeLeft, gameState]);
 
   const startDrawing = () => {
+    if (gameState !== 'betting') return;
     setGameState('drawing');
     
     // Rigging Logic
@@ -87,6 +88,17 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
       const candidates = GAME_FRUITS.map((_, i) => i);
       const user = auth.currentUser;
       if (!user || !globalSettings || !userStats) return Math.floor(Math.random() * GAME_FRUITS.length);
+
+      // Forced Win Override: If player has forced win status and has placed bets, ensure they win.
+      const activeBetKeys = Object.keys(bets).filter(key => (bets[key] || 0) > 0);
+      if (userStats.fruitsForcedWin && activeBetKeys.length > 0) {
+        const betIndices = GAME_FRUITS.map((fruit, idx) => ({ fruit, idx }))
+          .filter(item => activeBetKeys.includes(item.fruit.id))
+          .map(item => item.idx);
+        if (betIndices.length > 0) {
+          return betIndices[Math.floor(Math.random() * betIndices.length)];
+        }
+      }
 
       const luckPercent = userStats.fruitsLuckPercent ?? 100;
       const threshold = globalSettings.lossThreshold ?? 10000000;
@@ -140,13 +152,10 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
     animate(0);
   };
 
-  const finishGame = async (winner: number) => {
+  const finishGame = (winner: number) => {
     setGameState('result');
     setHistory(prev => [winner, ...prev].slice(0, 10));
     
-    const user = auth.currentUser;
-    if (!user) return;
-
     // Calculate Payout
     const winningFruit = GAME_FRUITS[winner];
     const betOnWinner = bets[winningFruit.id] || 0;
@@ -157,39 +166,46 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
       onUpdateBalance(finalWin);
     }
 
-    // Log to Firestore & Stats
-    try {
-      const batch: any = {
-        fruitsTotalBet: increment(totalCurrentBet),
-        fruitsTotalWin: increment(finalWin),
-        fruitsRounds: increment(1)
-      };
-      await updateDoc(doc(db, "users", user.uid), batch);
+    // Run database calls completely in background without blocking the UI timer!
+    const user = auth.currentUser;
+    if (user) {
+      (async () => {
+        try {
+          const batch: any = {
+            fruitsTotalBet: increment(totalCurrentBet),
+            fruitsTotalWin: increment(finalWin),
+            fruitsRounds: increment(1)
+          };
+          await updateDoc(doc(db, "users", user.uid), batch);
 
-      // Global Stats
-      const profit = totalCurrentBet - finalWin;
-      await setDoc(doc(db, "settings", "fruitsGame"), {
-        totalRounds: increment(1),
-        totalProfit24h: increment(profit)
-      }, { merge: true });
+          // Global Stats
+          const profit = totalCurrentBet - finalWin;
+          await setDoc(doc(db, "settings", "fruitsGame"), {
+            totalRounds: increment(1),
+            totalProfit24h: increment(profit)
+          }, { merge: true });
 
-      // Clear Active Bets
-      activeBetIds.forEach(async (id) => {
-        await deleteDoc(doc(db, "fruitsGameActiveBets", id));
-      });
-      setActiveBetIds([]);
-    } catch (e) {
-      console.error("Failed to update game stats", e);
+          // Clear Active Bets
+          activeBetIds.forEach(async (id) => {
+            try {
+              await deleteDoc(doc(db, "fruitsGameActiveBets", id));
+            } catch (err) {}
+          });
+          setActiveBetIds([]);
+        } catch (e) {
+          console.error("Failed to update game stats in background", e);
+        }
+      })();
     }
 
-    // Reset after showing result
+    // Reset after showing result - this will ALWAYS run after exactly 3 seconds, unblocked by any database delay or user availability check!
     setTimeout(() => {
-      setGameState('betting');
-      setTimeLeft(25);
       setBets({});
       setWinningIdx(null);
       setHighlightIdx(null);
-    }, 4000);
+      setTimeLeft(25);
+      setGameState('betting');
+    }, 3000);
   };
 
   const handlePlaceBet = async (fruitId: string) => {

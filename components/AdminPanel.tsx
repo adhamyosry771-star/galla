@@ -943,156 +943,229 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
           <div className="space-y-6 animate-in fade-in">
             {/* Stats Overview */}
             <div className="grid grid-cols-2 gap-3 pb-2">
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
-                 <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">إجمالي الجولات</p>
-                 <p className="text-xl font-black text-white">{fruitsGlobalSettings.totalRounds || 0}</p>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[85px] hover:bg-white/10 transition-all">
+                 <div className="flex items-center justify-between">
+                   <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest leading-none">إجمالي الجولات</p>
+                   <i className="fas fa-history text-purple-400/50 text-[10px]"></i>
+                 </div>
+                 <p className="text-lg font-black text-white mt-1.5 truncate leading-none">{fruitsGlobalSettings.totalRounds || 0}</p>
               </div>
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
-                 <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">أرباح 24 ساعة</p>
-                 <p className="text-xl font-black text-white">{(fruitsGlobalSettings.totalProfit24h || 0).toLocaleString()} <i className="fas fa-coins text-[10px] text-yellow-500"></i></p>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[85px] hover:bg-white/10 transition-all">
+                 <div className="flex items-center justify-between">
+                   <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest leading-none">أرباح 24 ساعة</p>
+                   <i className="fas fa-coins text-emerald-400/50 text-[10px]"></i>
+                 </div>
+                 <p className="text-lg font-black text-white mt-1.5 truncate leading-none flex items-center gap-1">
+                   {(fruitsGlobalSettings.totalProfit24h || 0).toLocaleString()} <span className="text-[8px] text-yellow-500 font-black">كوينز</span>
+                 </p>
               </div>
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
-                 <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1">الرهانات النشطة</p>
-                 <p className="text-xl font-black text-white">{fruitsActiveBets.reduce((acc, curr) => acc + (curr.amount || 0), 0).toLocaleString()}</p>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[85px] hover:bg-white/10 transition-all">
+                 <div className="flex items-center justify-between">
+                   <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest leading-none">الرهانات النشطة</p>
+                   <i className="fas fa-dice text-orange-400/50 text-[10px]"></i>
+                 </div>
+                 <p className="text-lg font-black text-white mt-1.5 truncate leading-none">{fruitsActiveBets.reduce((acc, curr) => acc + (curr.amount || 0), 0).toLocaleString()}</p>
               </div>
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/10 shadow-xl">
-                 <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-1">اللاعبين النشطين</p>
-                 <p className="text-xl font-black text-white">{new Set(fruitsActiveBets.map(b => b.userId)).size}</p>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[85px] hover:bg-white/10 transition-all">
+                 <div className="flex items-center justify-between">
+                   <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest leading-none">اللاعبين النشطين</p>
+                   <i className="fas fa-users text-pink-400/50 text-[10px]"></i>
+                 </div>
+                 <p className="text-lg font-black text-white mt-1.5 truncate leading-none">{new Set(fruitsActiveBets.map(b => b.userId)).size}</p>
               </div>
             </div>
 
-            {/* Global Algorithm Settings */}
-            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
+            {/* Game Icon Settings */}
+            <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
               <h4 className="text-sm font-black text-white flex items-center gap-2">
-                <i className="fas fa-image text-pink-400"></i>
-                إعدادات أيقونة اللعبة
+                <i className="fas fa-image text-pink-400 flex-shrink-0"></i>
+                أيقونة اللعبة
               </h4>
               
-              <div className="flex flex-col gap-4">
-                 <div className="flex justify-center">
-                   <div 
-                     className={`w-24 h-24 rounded-3xl shadow-lg group relative overflow-hidden ${!fruitsGameIcon ? 'bg-gradient-to-br from-orange-400 to-rose-500 p-[1px]' : ''}`}
-                   >
-                     {fruitsGameIcon ? (
-                       <img src={fruitsGameIcon} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                     ) : (
-                       <div className="w-full h-full rounded-3xl bg-black/40 flex items-center justify-center border border-white/10">
-                         <span className="text-4xl group-hover:scale-110 transition-transform">🍓</span>
-                       </div>
-                     )}
-                   </div>
-                 </div>
+              <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
+                <div 
+                  className={`w-14 h-14 rounded-2xl shadow-lg group relative overflow-hidden flex-shrink-0 ${!fruitsGameIcon ? 'bg-gradient-to-br from-orange-400 to-rose-500 p-[1px]' : ''}`}
+                >
+                  {fruitsGameIcon ? (
+                    <img src={fruitsGameIcon} className="w-full h-full object-cover rounded-2xl" />
+                  ) : (
+                    <div className="w-full h-full rounded-2xl bg-[#130624] flex items-center justify-center border border-white/10">
+                      <span className="text-2xl">🍓</span>
+                    </div>
+                  )}
+                </div>
 
-                 <div className="space-y-2">
-                   <p className="text-[10px] text-white/50 font-bold px-1">رابط أيقونة اللعبة</p>
-                   <input 
-                     type="text"
-                     value={fruitsGameIcon || ''}
-                     onChange={(e) => setFruitsGameIcon(e.target.value)}
-                     placeholder="ضع رابط الصورة هنا..."
-                     className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-xs font-bold text-white focus:outline-none focus:border-purple-500/50 transition-all"
-                   />
-                 </div>
-
-                 <button 
-                   onClick={() => setDoc(doc(db, "settings", "fruitsGame"), { gameIcon: fruitsGameIcon }, { merge: true })}
-                   className="w-full py-3 bg-purple-600 rounded-2xl text-xs font-black text-white shadow-lg active:scale-95 transition-all"
-                 >
-                   حفظ أيقونة اللعبة
-                 </button>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-[10px] text-white/40 font-black">رابط أيقونة اللعبة</p>
+                  <input 
+                    type="text"
+                    value={fruitsGameIcon || ''}
+                    onChange={(e) => setFruitsGameIcon(e.target.value)}
+                    placeholder="ضع رابط الصورة هنا..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-[11px] font-bold text-white focus:outline-none focus:border-purple-500/50 transition-all truncate"
+                  />
+                </div>
               </div>
+
+              <button 
+                onClick={() => setDoc(doc(db, "settings", "fruitsGame"), { gameIcon: fruitsGameIcon }, { merge: true })}
+                className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl text-[11px] font-black text-white hover:opacity-90 active:scale-[0.98] transition-all shadow-md"
+              >
+                حفظ أيقونة اللعبة
+              </button>
             </div>
 
             {/* Global Algorithm Settings */}
-            <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
+            <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
               <h4 className="text-sm font-black text-white flex items-center gap-2">
-                <i className="fas fa-cogs text-purple-400"></i>
+                <i className="fas fa-cogs text-purple-400 flex-shrink-0"></i>
                 خوارزميات اللعبة العامة
               </h4>
               
               <div className="space-y-4">
-                 <div className="space-y-1.5">
-                   <label className="text-[9px] font-black text-purple-400/60 uppercase tracking-widest ml-2">صعوبة اللعبة (لكل المستخدمين)</label>
-                   <div className="grid grid-cols-3 gap-2">
-                      {['easy', 'balanced', 'hard'].map(mode => (
-                        <button 
-                          key={mode}
-                          onClick={() => setDoc(doc(db, "settings", "fruitsGame"), { globalDifficulty: mode }, { merge: true })}
-                          className={`py-2 px-1 rounded-xl text-[10px] font-black border transition-all ${fruitsGlobalSettings.globalDifficulty === mode ? 'bg-purple-600 border-purple-500 text-white' : 'bg-white/5 border-white/5 text-white/40'}`}
-                        >
-                          {mode === 'easy' ? 'سهل (ربح)' : mode === 'balanced' ? 'متوازن' : 'صعب (خسارة)'}
-                        </button>
-                      ))}
-                   </div>
-                 </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-purple-300/80 uppercase tracking-widest pl-2 block">صعوبة اللعبة (لكل المستخدمين)</label>
+                    <div className="grid grid-cols-3 gap-1.5 p-1 bg-black/30 rounded-2xl border border-white/5">
+                       {['easy', 'balanced', 'hard'].map(mode => (
+                         <button 
+                           key={mode}
+                           onClick={() => setDoc(doc(db, "settings", "fruitsGame"), { globalDifficulty: mode }, { merge: true })}
+                           className={`py-2 rounded-xl text-[10px] font-black transition-all flex flex-col items-center justify-center gap-0.5 border ${
+                             fruitsGlobalSettings.globalDifficulty === mode 
+                               ? 'bg-purple-600 border-purple-500 text-white shadow-md' 
+                               : 'bg-transparent border-transparent text-white/50 hover:text-white/80'
+                           }`}
+                         >
+                           <span className="text-xs">
+                             {mode === 'easy' ? '🟢' : mode === 'balanced' ? '🟡' : '🔴'}
+                           </span>
+                           <span className="text-[9px]">
+                             {mode === 'easy' ? 'سهل (ربح)' : mode === 'balanced' ? 'متوازن' : 'صعب (خسارة)'}
+                           </span>
+                         </button>
+                       ))}
+                    </div>
+                  </div>
 
-                 <div className="space-y-1.5">
-                   <label className="text-[9px] font-black text-purple-400/60 uppercase tracking-widest ml-2">حد تفعيل خوارزمية الخسارة (Threshold)</label>
-                   <div className="flex gap-2">
-                      <input 
-                        type="number" 
-                        value={fruitsGlobalSettings.lossThreshold ?? 0} 
-                        onChange={e => setDoc(doc(db, "settings", "fruitsGame"), { lossThreshold: parseInt(e.target.value) || 0 }, { merge: true })}
-                        placeholder="مثلاً: 10000000" 
-                        className="flex-1 bg-white/5 border border-white/10 rounded-xl py-2 px-4 text-xs text-white outline-none"
-                      />
-                      <div className="bg-purple-600/20 px-3 flex items-center rounded-xl text-purple-400 text-[10px] font-black border border-purple-600/30">كوينز</div>
-                   </div>
-                   <p className="text-[8px] text-white/20 font-bold leading-tight">عندما يصل أرباح المستخدم لهذا المبلغ، ستبدأ الخوارزمية بمنعه من الربح المستمر.</p>
-                 </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-purple-300/80 uppercase tracking-widest block">حد تفعيل خوارزمية الخسارة (Threshold)</label>
+                    <div className="flex gap-2">
+                       <input 
+                         type="number" 
+                         value={fruitsGlobalSettings.lossThreshold ?? 0} 
+                         onChange={e => setDoc(doc(db, "settings", "fruitsGame"), { lossThreshold: parseInt(e.target.value) || 0 }, { merge: true })}
+                         placeholder="مثلاً: 10000000" 
+                         className="flex-1 bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-purple-500 transition-all font-sans"
+                       />
+                       <div className="bg-purple-600/30 px-3 flex items-center rounded-xl text-purple-300 text-[10px] font-black border border-purple-500/20">كوينز</div>
+                    </div>
+                    <p className="text-[8px] text-white/30 font-bold leading-normal">
+                      عندما يصل أرباح المستخدم لهذا المبلغ، ستبدأ الخوارزمية تلقائياً بمنعه وتوجيهه للخسارة لمنع سحب رصيد كبير.
+                    </p>
+                  </div>
               </div>
             </div>
 
             {/* Players List with Individual Management */}
             <div className="space-y-3">
-              <div className="flex justify-between items-center px-2">
-                <h4 className="text-[10px] font-black text-purple-400 uppercase tracking-widest">إدارة اللاعبين المخصصة</h4>
-                <span className="text-[8px] font-bold text-white/30">{fruitsPlayers.length} لاعب مسجل</span>
+              <div className="flex justify-between items-center px-1">
+                <h4 className="text-[11px] font-black text-purple-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                  <i className="fas fa-users-cog"></i>
+                  إدارة اللاعبين المخصصة
+                </h4>
+                <span className="text-[9px] font-black text-white/40 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/10 uppercase font-sans">{`${fruitsPlayers.length} لاعب مسجل`}</span>
               </div>
 
               {fruitsPlayers.length === 0 ? (
-                <div className="text-center py-10 opacity-20"><i className="fas fa-users-slash text-2xl mb-1"></i><p className="text-[10px] font-bold">لا يوجد لاعبين حالياً</p></div>
-              ) : fruitsPlayers.map(player => (
-                <div key={player.id} className="bg-white/5 p-4 rounded-3xl border border-white/10 space-y-4 shadow-lg animate-in fade-in">
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                      <img src={player.photoURL} className="w-10 h-10 rounded-2xl object-cover border border-white/10" />
-                      <div>
-                        <p className="text-xs font-black text-white">{player.displayName}</p>
-                        <p className="text-[9px] text-purple-400 font-bold uppercase">ID: {player.customId}</p>
+                <div className="text-center py-12 bg-white/5 rounded-[2rem] border border-white/5 opacity-50 flex flex-col items-center justify-center gap-2">
+                  <i className="fas fa-users-slash text-2xl text-purple-400"></i>
+                  <p className="text-[11px] font-black text-white/40">لا يوجد لاعبين مسجلين في اللعبة حالياً</p>
+                </div>
+              ) : fruitsPlayers.map(player => {
+                const netProfit = (player.fruitsTotalWin || 0) - (player.fruitsTotalBet || 0);
+                return (
+                  <div key={player.id} className="bg-gradient-to-b from-white/5 to-white/[0.02] p-4 rounded-[2rem] border border-white/10 space-y-4 shadow-xl hover:bg-white/10 transition-all animate-in fade-in">
+                    {/* Player Info Header */}
+                    <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3 font-sans">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <img src={player.photoURL || "https://picsum.photos/100"} className="w-11 h-11 rounded-xl object-cover border border-white/10 shadow-lg flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-white truncate max-w-[120px]">{player.displayName}</p>
+                          <p className="text-[9px] text-purple-400 font-bold uppercase tracking-wider mt-0.5">ID: {player.customId || player.id.substring(0,8)}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-left flex-shrink-0">
+                         <div className="text-[10px] font-black flex items-center gap-1 justify-end">
+                           <span className={netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                             {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()}
+                           </span>
+                           <i className="fas fa-coins text-[8px] text-yellow-500"></i>
+                         </div>
+                         <p className="text-[8px] font-bold text-white/25 mt-0.5">إجمالي المراهنة: {player.fruitsTotalBet?.toLocaleString() || 0}</p>
                       </div>
                     </div>
-                    <div className="text-left">
-                       <p className="text-[9px] font-black text-emerald-400">صافي الربح: {(player.fruitsTotalWin - player.fruitsTotalBet).toLocaleString()}</p>
-                       <p className="text-[8px] font-bold text-white/20">إجمالي الرهان: {player.fruitsTotalBet?.toLocaleString()}</p>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3 border-t border-white/5 pt-3">
-                     <div className="space-y-1">
-                        <label className="text-[8px] font-black text-white/30 uppercase tracking-widest">نسبة الحظ (%)</label>
-                        <div className="flex items-center gap-2">
-                           <input 
-                              type="range" min="0" max="100" 
-                              value={player.fruitsLuckPercent ?? 100} 
-                              onChange={e => updateDoc(doc(db, "users", player.id), { fruitsLuckPercent: parseInt(e.target.value) })}
-                              className="flex-1 accent-purple-500 h-1 bg-white/10 rounded-full appearance-none"
-                           />
-                           <span className="text-[10px] font-black text-white w-6">{player.fruitsLuckPercent ?? 100}%</span>
-                        </div>
-                     </div>
-                     <div className="space-y-1">
-                        <label className="text-[8px] font-black text-white/30 uppercase tracking-widest">خوارزمية الخسارة</label>
-                        <button 
-                          onClick={() => updateDoc(doc(db, "users", player.id), { fruitsForcedLoss: !player.fruitsForcedLoss })}
-                          className={`w-full py-1.5 rounded-xl text-[9px] font-black border transition-all ${player.fruitsForcedLoss ? 'bg-red-600 border-red-500 text-white' : 'bg-white/5 border-white/5 text-white/40'}`}
-                        >
-                          {player.fruitsForcedLoss ? 'خسارة إجبارية نشطة' : 'تفعيل الخسارة اليدوية'}
-                        </button>
-                     </div>
+                    {/* Luck Range Slider (Full Width) */}
+                    <div className="bg-black/20 p-3 rounded-2xl border border-white/5 space-y-2 font-sans">
+                      <div className="flex justify-between items-center px-1">
+                        <label className="text-[9px] font-black text-white/40 uppercase tracking-widest">تعديل نسبة الحظ المخصص</label>
+                        <span className="text-[10px] font-black text-purple-400 bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-500/20">
+                          {player.fruitsLuckPercent ?? 100}% حظ
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                         <i className="fas fa-percentage text-[10px] text-purple-400/40"></i>
+                         <input 
+                            type="range" min="0" max="100" 
+                            value={player.fruitsLuckPercent ?? 100} 
+                            onChange={e => updateDoc(doc(db, "users", player.id), { fruitsLuckPercent: parseInt(e.target.value) })}
+                            className="flex-1 accent-purple-500 h-1.5 bg-white/10 rounded-full appearance-none outline-none cursor-pointer"
+                         />
+                      </div>
+                    </div>
+
+                    {/* Forced Loss Manual Override (Full Width) */}
+                    <div className="flex items-center justify-between gap-3 bg-black/20 p-3 rounded-2xl border border-white/5 font-sans">
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-[10px] font-black text-white/80">خسارة إجبارية فورية</span>
+                        <span className="text-[8px] text-white/30 font-bold truncate">إجبار اللاعب على خسارة جميع رهاناته للتأديب</span>
+                      </div>
+                      <button 
+                        onClick={() => updateDoc(doc(db, "users", player.id), { fruitsForcedLoss: !player.fruitsForcedLoss, fruitsForcedWin: false })}
+                        className={`px-4 py-2 rounded-xl text-[10px] font-black border transition-all flex items-center gap-1.5 shadow-md ${
+                          player.fruitsForcedLoss 
+                            ? 'bg-red-500/20 text-red-400 border-red-500/30' 
+                            : 'bg-white/5 text-white/55 border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        <i className={`fas ${player.fruitsForcedLoss ? 'fa-toggle-on text-red-400' : 'fa-toggle-off text-white/30'}`}></i>
+                        {player.fruitsForcedLoss ? 'نشط (خسارة مستمرة)' : 'خسارة يدوية'}
+                      </button>
+                    </div>
+
+                    {/* Forced Win Manual Override (Full Width) */}
+                    <div className="flex items-center justify-between gap-3 bg-black/20 p-3 rounded-2xl border border-white/5 font-sans">
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-[10px] font-black text-white/80">فوز إجباري فوري</span>
+                        <span className="text-[8px] text-white/30 font-bold truncate">إجبار اللاعب على الفوز في أي رهان يضعه</span>
+                      </div>
+                      <button 
+                        onClick={() => updateDoc(doc(db, "users", player.id), { fruitsForcedWin: !player.fruitsForcedWin, fruitsForcedLoss: false })}
+                        className={`px-4 py-2 rounded-xl text-[10px] font-black border transition-all flex items-center gap-1.5 shadow-md ${
+                          player.fruitsForcedWin 
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                            : 'bg-white/5 text-white/55 border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        <i className={`fas ${player.fruitsForcedWin ? 'fa-toggle-on text-emerald-400' : 'fa-toggle-off text-white/30'}`}></i>
+                        {player.fruitsForcedWin ? 'نشط (فوز مستمر)' : 'مكسب إجباري'}
+                      </button>
+                    </div>
+
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

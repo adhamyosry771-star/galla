@@ -66,7 +66,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   micStates, setMicStates, isMicMuted, setIsMicMuted,
   messages, setMessages
 }) => {
+  const user = auth.currentUser;
   const [currentRoom, setCurrentRoom] = useState(initialRoom);
+  const isRoomOwner = user?.uid === currentRoom.owner?.uid;
   const [inputText, setInputText] = useState('');
   const [showGifts, setShowGifts] = useState(false);
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
@@ -96,6 +98,51 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     return localStorage.getItem('effects_enabled') !== 'false';
   });
 
+  const isEffectsEnabledRef = useRef(isEffectsEnabled);
+  isEffectsEnabledRef.current = isEffectsEnabled;
+  const animatedMsgIds = useRef<Set<string>>(new Set());
+
+  // Keep a live ref to micStates for synchronous visibility of current mics
+  const micStatesRef = useRef(micStates);
+  useEffect(() => {
+    micStatesRef.current = micStates;
+  }, [micStates]);
+
+  useEffect(() => {
+    const clearMyMicPresence = async () => {
+      if (!user) return;
+      const currentMics = micStatesRef.current;
+      if (!currentMics) return;
+      const myMicIndex = currentMics.findIndex(m => m?.user?.uid === user.uid);
+      if (myMicIndex !== -1) {
+        try {
+          await updateDoc(doc(db, "rooms", currentRoom.id, "mics", myMicIndex.toString()), {
+            user: null,
+            status: 'open',
+            receivedCoins: 0
+          });
+        } catch (err) {
+          console.error("Presence cleanup error:", err);
+        }
+      }
+    };
+
+    const handleUnloadOrHide = (e: any) => {
+      clearMyMicPresence();
+    };
+
+    window.addEventListener('beforeunload', handleUnloadOrHide);
+    window.addEventListener('unload', handleUnloadOrHide);
+    window.addEventListener('pagehide', handleUnloadOrHide);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleUnloadOrHide);
+      window.removeEventListener('unload', handleUnloadOrHide);
+      window.removeEventListener('pagehide', handleUnloadOrHide);
+      clearMyMicPresence();
+    };
+  }, [currentRoom.id, user?.uid]);
+
   const [isEntryMinimized, setIsEntryMinimized] = useState(false);
   const [entryPos, setEntryPos] = useState({ x: 20, y: 100 });
   const isDraggingEntry = useRef(false);
@@ -104,6 +151,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   const [selectedMicIndex, setSelectedMicIndex] = useState<number | null>(null);
   const [showMicActions, setShowMicActions] = useState(false);
+  
+  const [profileUserUid, setProfileUserUid] = useState<string | null>(null);
+  const [profileUserData, setProfileUserData] = useState<any>(null);
   
   const [giftTab, setGiftTab] = useState<GiftTab>('normal');
   const [selectedGiftId, setSelectedGiftId] = useState<string | null>(null); 
@@ -144,9 +194,6 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [popupPartnerData, setPopupPartnerData] = useState<any>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  const user = auth.currentUser;
-  const isRoomOwner = user?.uid === currentRoom.owner?.uid;
-
   const handleUpdateBalance = async (amount: number) => {
     if (!user) return;
     try {
@@ -177,6 +224,17 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         ...doc.data()
       })) as ChatMessage[];
       setMessages(liveMsgs);
+
+      // Trigger gift animations for other users/all users
+      if (isEffectsEnabledRef.current) {
+        liveMsgs.forEach((msg: any) => {
+          if (msg.type === 'gift' && msg.giftAnimation && !animatedMsgIds.current.has(msg.id)) {
+            animatedMsgIds.current.add(msg.id);
+            setIsGiftMinimized(false);
+            setActiveGiftEffect({ url: msg.giftAnimation, id: Date.now() });
+          }
+        });
+      }
     });
     
     return () => unsub();
@@ -314,15 +372,31 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   }, [user]);
 
   useEffect(() => {
+    if (profileUserUid) {
+      const unsub = onSnapshot(doc(db, "users", profileUserUid), (docSnap) => {
+        if (docSnap.exists()) {
+          setProfileUserData({ uid: profileUserUid, ...docSnap.data() });
+        } else {
+          const micUser = micStates.map(m => m?.user).find(u => u?.uid === profileUserUid);
+          if (micUser) setProfileUserData(micUser);
+        }
+      });
+      return unsub;
+    } else {
+      setProfileUserData(null);
+    }
+  }, [profileUserUid, micStates]);
+
+  useEffect(() => {
     let unsub: any;
-    if (showUserData && user) {
-      const q = query(collection(db, "users", user.uid, "badges"), orderBy("createdAt", "desc"));
+    if (showUserData && profileUserUid) {
+      const q = query(collection(db, "users", profileUserUid, "badges"), orderBy("createdAt", "desc"));
       unsub = onSnapshot(q, (snap) => {
         setUserDataPopupBadges(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       });
     }
     return () => { if (unsub) unsub(); };
-  }, [showUserData, user]);
+  }, [showUserData, profileUserUid]);
 
   useEffect(() => {
     const unsubDesign = onSnapshot(doc(db, "settings", "design"), (docSnap) => {
@@ -364,15 +438,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   }, []);
 
   useEffect(() => {
-    if (showUserData && currentUserData?.partnerUid) {
-      const unsub = onSnapshot(doc(db, "users", currentUserData.partnerUid), (docSnap) => {
+    if (showUserData && profileUserData?.partnerUid) {
+      const unsub = onSnapshot(doc(db, "users", profileUserData.partnerUid), (docSnap) => {
         if (docSnap.exists()) setPopupPartnerData(docSnap.data());
       });
       return unsub;
     } else {
       setPopupPartnerData(null);
     }
-  }, [showUserData, currentUserData?.partnerUid]);
+  }, [showUserData, profileUserData?.partnerUid]);
 
   useEffect(() => {
     if (showRoomSettings) {
@@ -464,6 +538,18 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             diamonds: increment(diamondValue)
           });
         }
+
+        // Also update recipient's mic document in Firestore if they are on a mic!
+        const micIndex = micStates.findIndex(m => m?.user?.uid === recipientId);
+        if (micIndex !== -1) {
+          try {
+            await updateDoc(doc(db, "rooms", currentRoom.id, "mics", micIndex.toString()), {
+              receivedCoins: increment(giftValue)
+            });
+          } catch (err) {
+            console.error("Error updating recipient's mic coins in Firestore:", err);
+          }
+        }
       }
 
       setMicStates(prev => prev.map(mic => {
@@ -487,6 +573,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         text: `أرسل ${selectedQuantity} ${gift.name} إلى ${recipientNames}`, 
         type: 'gift',
         giftName: gift.name,
+        giftAnimation: gift.animation || null,
         createdAt: serverTimestamp()
       };
       
@@ -508,20 +595,27 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }
   };
 
-  const sendGifEmoji = (url: string) => {
+  const sendGifEmoji = async (url: string) => {
     const myMicIndex = micStates.findIndex(m => m?.user?.uid === user?.uid);
     if (myMicIndex !== -1) {
       const timestampedUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-      const newMicStates = [...micStates];
-      newMicStates[myMicIndex] = { ...newMicStates[myMicIndex], activeEmoji: timestampedUrl };
-      setMicStates(newMicStates);
-      setTimeout(() => {
-        setMicStates(prev => {
-          const updated = [...prev];
-          if (updated[myMicIndex]) updated[myMicIndex] = { ...updated[myMicIndex], activeEmoji: null };
-          return updated;
+      try {
+        await updateDoc(doc(db, "rooms", currentRoom.id, "mics", myMicIndex.toString()), {
+          activeEmoji: timestampedUrl
         });
-      }, 2500);
+
+        setTimeout(async () => {
+          try {
+            await updateDoc(doc(db, "rooms", currentRoom.id, "mics", myMicIndex.toString()), {
+              activeEmoji: null
+            });
+          } catch (err) {
+            console.error("Error clearing activeEmoji:", err);
+          }
+        }, 2500);
+      } catch (err) {
+        console.error("Error sending activeEmoji:", err);
+      }
     }
     setShowEmojiMenu(false);
   };
@@ -629,11 +723,30 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   };
 
   const handleMicClick = (index: number) => {
-    if (!isRoomOwner && micStates[index]?.user?.uid !== user?.uid) {
-      if (micStates[index]?.status === 'open' && !micStates[index]?.user) takeMic(index);
-      return;
+    const mic = micStates[index];
+    if (!mic) return;
+
+    if (mic.user) {
+      if (mic.user.uid === user?.uid) {
+        // Clicked own seat: show the mic control menu with "مغادرة المايك", "عرض البيانات", "إلغاء"
+        setSelectedMicIndex(index);
+        setShowMicActions(true);
+      } else {
+        // Clicked someone else's seat: directly open their profile
+        setProfileUserUid(mic.user.uid);
+        setShowUserData(true);
+      }
+    } else {
+      // Empty seat
+      if (isRoomOwner) {
+        setSelectedMicIndex(index);
+        setShowMicActions(true);
+      } else {
+        if (mic.status === 'open') {
+          takeMic(index);
+        }
+      }
     }
-    setSelectedMicIndex(index); setShowMicActions(true);
   };
 
   const takeMic = async (index: number) => {
@@ -722,10 +835,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const usersOnMics: UserOnMic[] = micStates.map(mic => mic?.user).filter((u): u is UserOnMic => u !== null && u !== undefined);
   const displayId = ownerData?.customId || currentRoom.roomIdDisplay || currentRoom.owner?.customId || currentRoom.id.substring(0,6);
   const userIsOnMic = micStates.some(m => m?.user?.uid === user?.uid);
-  const profileCustomId = currentUserData?.customId || user?.uid.substring(0, 8);
-  const profileCustomIdIcon = currentUserData?.customIdIcon;
-  const pIdX = currentUserData?.idOffsetX ?? 28;
-  const pIdY = currentUserData?.idOffsetY ?? 0.5;
+  const profileCustomId = profileUserData?.customId || profileUserData?.uid?.substring(0, 8) || '';
+  const profileCustomIdIcon = profileUserData?.customIdIcon;
+  const pIdX = profileUserData?.idOffsetX ?? 28;
+  const pIdY = profileUserData?.idOffsetY ?? 0.5;
   const ownerCustomIdIcon = ownerData?.customIdIcon;
   const idX = ownerData?.idOffsetX ?? 28;
   const idY = ownerData?.idOffsetY ?? 0.5;
@@ -1013,7 +1126,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       )}
 
       {showRoomSettings && (
-        <div className="fixed inset-0 z-[600] bg-[#1a0b2e] flex flex-col animate-in slide-in-from-bottom duration-300" dir="rtl"><header className="p-4 flex items-center justify-between border-b border-white/5 bg-[#0d051a]"><button onClick={() => setShowRoomSettings(false)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all"><i className="fas fa-times"></i></button><h2 className="text-sm font-black text-white">إعدادات الغرفة</h2><button onClick={handleUpdateRoomSettings} disabled={isUpdatingRoom} className="px-4 py-2 rounded-xl bg-purple-600/10 text-purple-400 text-sm font-black active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">{isUpdatingRoom && <i className="fas fa-circle-notch animate-spin text-[10px]"></i>}<span>حفظ</span></button></header><div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">{!showBgSelector ? (<><div className="flex flex-col items-center gap-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">صورة الغرفة</label><button onClick={() => coverInputRef.current?.click()} className="relative w-32 h-32 rounded-[2.5rem] bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden transition-all group-hover:bg-white/10"><img src={editRoomCover} className="w-full h-full object-cover" alt="Room Cover" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><i className="fas fa-camera text-white"></i></div></button><input type="file" ref={coverInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} /></div><div className="space-y-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">اسم الغرفة</label><input type="text" value={editRoomTitle} onChange={(e) => setEditRoomTitle(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500/40 transition-all shadow-inner" placeholder="اسم الغرفة..." /></div><div className="space-y-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">وصف الغرفة</label><textarea value={editRoomDescription} onChange={(e) => setEditRoomDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-sm text-white outline-none h-32 focus:border-purple-500/40 transition-all shadow-inner" placeholder="اكتب وصفاً أو ترحيباً خاصاً لزوار غرفتك..." /></div><div className="space-y-3"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">عدد الميكروفونات</label><div className="grid grid-cols-3 gap-3">{[5, 10, 15].map((count) => (<button key={count} onClick={() => setEditMicCount(count)} className={`py-3 rounded-2xl font-black text-xs transition-all border ${editMicCount === count ? 'bg-purple-600 text-white border-purple-500 shadow-lg scale-95' : 'bg-white/5 text-white/40 border-white/10'}`}>{count} ميك</button>))}</div></div><div className="space-y-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">خلفية الغرفة</label><button onClick={() => setShowBgSelector(true)} className="w-full flex items-center justify-between p-5 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all"><div className="flex items-center gap-4"><div className="w-10 h-14 rounded-lg overflow-hidden border border-white/20 bg-black/40">{isVideoUrl(editRoomBg) ? <video src={editRoomBg} muted className="w-full h-full object-cover" /> : <img src={editRoomBg || editRoomCover} className="w-full h-full object-cover" />}</div><span className="text-sm font-black text-white">اختر خلفية للغرفة</span></div><i className="fas fa-chevron-left text-purple-400"></i></button></div></>) : (<div className="space-y-6 animate-in slide-in-from-left"><div className="flex items-center gap-3"><button onClick={() => setShowBgSelector(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white"><i className="fas fa-arrow-right text-xs"></i></button><span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اختر الخلفية المفضلة</span></div><div className="grid grid-cols-3 gap-3">{availableBgs.map((bg) => (<div key={bg.id} onClick={() => { setEditRoomBg(bg.imageUrl); setShowBgSelector(false); }} className={`relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer border-2 transition-all ${editRoomBg === bg.imageUrl ? 'border-purple-500 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-60'}`}>{isVideoUrl(bg.imageUrl) ? <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <img src={bg.imageUrl} className="w-full h-full object-cover" alt="Background" />}{bg.remainingDays !== undefined && (<div className="absolute top-2 right-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-lg shadow-xl z-20 flex items-center gap-0.5"><span className="text-purple-300">{bg.remainingDays}</span><span className="opacity-80">يوم</span></div>)}{editRoomBg === bg.imageUrl && <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center"><i className="fas fa-check-circle text-white text-xl"></i></div>}</div>))}</div></div>)}</div></div>
+        <div className="fixed inset-0 z-[600] bg-[#1a0b2e] flex flex-col animate-in slide-in-from-bottom duration-300" dir="rtl"><header className="p-4 flex items-center justify-between border-b border-white/5 bg-[#0d051a]"><button onClick={() => setShowRoomSettings(false)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all"><i className="fas fa-times"></i></button><h2 className="text-sm font-black text-white">إعدادات الغرفة</h2><button onClick={handleUpdateRoomSettings} disabled={isUpdatingRoom} className="px-4 py-2 rounded-xl bg-purple-600/10 text-purple-400 text-sm font-black active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">{isUpdatingRoom && <i className="fas fa-circle-notch animate-spin text-[10px]"></i>}<span>حفظ</span></button></header><div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">{!showBgSelector ? (<><div className="flex flex-col items-center gap-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">صورة الغرفة</label><button onClick={() => coverInputRef.current?.click()} className="relative w-32 h-32 rounded-[2.5rem] bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden transition-all group-hover:bg-white/10"><img src={editRoomCover} className="w-full h-full object-cover" alt="Room Cover" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><i className="fas fa-camera text-white"></i></div></button><input type="file" ref={coverInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} /></div><div className="space-y-2"><div className="flex justify-between items-center mr-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اسم الغرفة</label><span className="text-[9px] font-bold text-white/40">{editRoomTitle.length}/16</span></div><input type="text" value={editRoomTitle} maxLength={16} onChange={(e) => setEditRoomTitle(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500/40 transition-all shadow-inner" placeholder="اسم الغرفة..." /></div><div className="space-y-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">وصف الغرفة</label><textarea value={editRoomDescription} onChange={(e) => setEditRoomDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-sm text-white outline-none h-32 focus:border-purple-500/40 transition-all shadow-inner" placeholder="اكتب وصفاً أو ترحيباً خاصاً لزوار غرفتك..." /></div><div className="space-y-3"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">عدد الميكروفونات</label><div className="grid grid-cols-3 gap-3">{[5, 10, 15].map((count) => (<button key={count} onClick={() => setEditMicCount(count)} className={`py-3 rounded-2xl font-black text-xs transition-all border ${editMicCount === count ? 'bg-purple-600 text-white border-purple-500 shadow-lg scale-95' : 'bg-white/5 text-white/40 border-white/10'}`}>{count} ميك</button>))}</div></div><div className="space-y-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">خلفية الغرفة</label><button onClick={() => setShowBgSelector(true)} className="w-full flex items-center justify-between p-5 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all"><div className="flex items-center gap-4"><div className="w-10 h-14 rounded-lg overflow-hidden border border-white/20 bg-black/40">{isVideoUrl(editRoomBg) ? <video src={editRoomBg} muted className="w-full h-full object-cover" /> : <img src={editRoomBg || editRoomCover} className="w-full h-full object-cover" />}</div><span className="text-sm font-black text-white">اختر خلفية للغرفة</span></div><i className="fas fa-chevron-left text-purple-400"></i></button></div></>) : (<div className="space-y-6 animate-in slide-in-from-left"><div className="flex items-center gap-3"><button onClick={() => setShowBgSelector(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white"><i className="fas fa-arrow-right text-xs"></i></button><span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اختر الخلفية المفضلة</span></div><div className="grid grid-cols-3 gap-3">{availableBgs.map((bg) => (<div key={bg.id} onClick={() => { setEditRoomBg(bg.imageUrl); setShowBgSelector(false); }} className={`relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer border-2 transition-all ${editRoomBg === bg.imageUrl ? 'border-purple-500 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-60'}`}>{isVideoUrl(bg.imageUrl) ? <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <img src={bg.imageUrl} className="w-full h-full object-cover" alt="Background" />}{bg.remainingDays !== undefined && (<div className="absolute top-2 right-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-lg shadow-xl z-20 flex items-center gap-0.5"><span className="text-purple-300">{bg.remainingDays}</span><span className="opacity-80">يوم</span></div>)}{editRoomBg === bg.imageUrl && <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center"><i className="fas fa-check-circle text-white text-xl"></i></div>}</div>))}</div></div>)}</div></div>
       )}
 
       {showReportModal && (
@@ -1156,130 +1269,150 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       )}
       
       {showMicActions && selectedMicIndex !== null && (
-        <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 animate-in fade-in" onClick={() => setShowMicActions(false)}><div className="w-full max-md bg-black/40 rounded-t-[1.5rem] p-6 pb-10 space-y-4 animate-slide-up border-t border-white/10" onClick={e => e.stopPropagation()}><div className="flex flex-col items-center mb-4"><div className="w-12 h-1.5 bg-white/20 rounded-full mb-6"></div><h3 className="text-white font-black text-lg text-center">تحكم المايك {selectedMicIndex + 1}</h3></div><div className="grid grid-cols-1 gap-3">{micStates[selectedMicIndex]?.user?.uid === user?.uid ? (<><button onClick={() => leaveMic(selectedMicIndex)} className="w-full py-4 bg-red-500/20 text-red-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-red-500/20 active:scale-95 transition-all"><i className="fas fa-sign-out-alt"></i> مغادرة المايك</button><button onClick={() => { setShowMicActions(false); setShowUserData(true); }} className="w-full py-4 bg-blue-600/20 text-blue-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-blue-500/20 active:scale-95 transition-all"><i className="fas fa-id-card"></i> عرض البيانات</button></>) : (<button onClick={() => takeMic(selectedMicIndex)} className="w-full py-4 bg-purple-600/20 text-purple-400 border border-purple-500/20 rounded-2xl font-black flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all">أخذ المايك</button>)}{isRoomOwner && micStates[selectedMicIndex]?.user?.uid !== user?.uid && (<button onClick={() => toggleLockMic(selectedMicIndex)} className={`w-full py-4 rounded-2xl font-black flex items-center justify-center gap-3 border transition-all active:scale-95 ${micStates[selectedMicIndex]?.status === 'locked' ? 'bg-white/10 text-white border-white/20' : 'bg-white/5 text-white/80 border-white/10'}`}><i className={`fas ${micStates[selectedMicIndex]?.status === 'locked' ? 'fa-lock-open' : 'fa-lock'}`}></i>{micStates[selectedMicIndex]?.status === 'locked' ? 'فتح المايك' : 'قفل المايك'}</button>)}<button onClick={() => setShowMicActions(false)} className="w-full py-4 bg-white/5 text-white/40 rounded-2xl font-black active:scale-95 transition-all">إلغاء</button></div></div></div>
+        <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 animate-in fade-in" onClick={() => setShowMicActions(false)}><div className="w-full max-md bg-black/40 rounded-t-[1.5rem] p-6 pb-10 space-y-4 animate-slide-up border-t border-white/10" onClick={e => e.stopPropagation()}><div className="flex flex-col items-center mb-4"><div className="w-12 h-1.5 bg-white/20 rounded-full mb-6"></div><h3 className="text-white font-black text-lg text-center">تحكم المايك {selectedMicIndex + 1}</h3></div><div className="grid grid-cols-1 gap-3">{micStates[selectedMicIndex]?.user?.uid === user?.uid ? (<><button onClick={() => leaveMic(selectedMicIndex)} className="w-full py-4 bg-red-500/20 text-red-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-red-500/20 active:scale-95 transition-all"><i className="fas fa-sign-out-alt"></i> مغادرة المايك</button><button onClick={() => { setShowMicActions(false); setProfileUserUid(user?.uid || ''); setShowUserData(true); }} className="w-full py-4 bg-blue-600/20 text-blue-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-blue-500/20 active:scale-95 transition-all"><i className="fas fa-id-card"></i> عرض البيانات</button></>) : (<button onClick={() => takeMic(selectedMicIndex)} className="w-full py-4 bg-purple-600/20 text-purple-400 border border-purple-500/20 rounded-2xl font-black flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all">أخذ المايك</button>)}{isRoomOwner && micStates[selectedMicIndex]?.user?.uid !== user?.uid && (<button onClick={() => toggleLockMic(selectedMicIndex)} className={`w-full py-4 rounded-2xl font-black flex items-center justify-center gap-3 border transition-all active:scale-95 ${micStates[selectedMicIndex]?.status === 'locked' ? 'bg-white/10 text-white border-white/20' : 'bg-white/5 text-white/80 border-white/10'}`}><i className={`fas ${micStates[selectedMicIndex]?.status === 'locked' ? 'fa-lock-open' : 'fa-lock'}`}></i>{micStates[selectedMicIndex]?.status === 'locked' ? 'فتح المايك' : 'قفل المايك'}</button>)}<button onClick={() => setShowMicActions(false)} className="w-full py-4 bg-white/5 text-white/40 rounded-2xl font-black active:scale-95 transition-all">إلغاء</button></div></div></div>
       )}
 
       {showUserData && (
-        <><div className="fixed inset-0 z-[350] bg-black/10" onClick={() => setShowUserData(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[400] bg-black/60 backdrop-blur-2px border-t border-white/10 rounded-t-[1.5rem] animate-slide-up overflow-visible h-[68%] shadow-2xl"><div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-white/10 rounded-full"></div><div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
-          <div className="relative w-28 h-28 flex items-center justify-center">
-            {currentUserData?.animatedAvatar ? (
-              isVideoUrl(currentUserData.animatedAvatar) ? (
-                <video src={currentUserData.animatedAvatar} autoPlay loop muted playsInline className="w-24 h-24 rounded-full object-cover bg-transparent" />
-              ) : (
-                <img src={currentUserData.animatedAvatar} className="w-24 h-24 rounded-full object-cover bg-transparent" alt="Profile" />
-              )
-            ) : (
-              <img src={currentUserData?.photoURL || user?.photoURL || "https://picsum.photos/200"} className="w-24 h-24 rounded-full object-cover" alt="Profile" />
-            )}
-            {(currentUserData?.currentFrame || currentUserData?.currentFrame) && (<img src={currentUserData?.currentFrame} className="absolute inset-0 w-full h-full object-contain z-10 scale-125" alt="frame" />)}
+        <><div className="fixed inset-0 z-[350] bg-black/10" onClick={() => { setShowUserData(false); setProfileUserUid(null); setProfileUserData(null); }}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[400] bg-black/60 backdrop-blur-2px border-t border-white/10 rounded-t-[1.5rem] animate-slide-up overflow-visible h-[68%] shadow-2xl"><div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-white/10 rounded-full"></div>
+        {(!profileUserData || profileUserData.uid !== profileUserUid) ? (
+          <div className="h-full flex flex-col items-center justify-center p-8 space-y-4">
+            <div className="relative w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-2 border-purple-500/10 animate-ping"></div>
+              <div className="absolute inset-2 rounded-full border-t-2 border-r-2 border-purple-500 border-b-2 border-l-2 border-b-transparent border-l-transparent animate-spin"></div>
+              <div className="absolute inset-4 rounded-full bg-gradient-to-tr from-purple-600/30 to-blue-600/30 animate-pulse border border-white/5 flex items-center justify-center">
+                <i className="fas fa-user-circle text-purple-400 text-lg"></i>
+              </div>
+            </div>
+            <p className="text-white/40 text-xs font-black tracking-widest text-center animate-pulse">جاري تحميل الملف الشخصي...</p>
           </div>
-        </div>
-        <div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto overflow-x-hidden scrollbar-hide pb-12">
-          <h3 className="text-2xl font-black text-white drop-shadow-lg py-1 mb-2 leading-relaxed relative z-10">{currentUserData?.displayName || user?.displayName}</h3>
-          
-          <div className="mb-8 flex flex-col items-center gap-3">
-            <div className="flex items-center gap-2">
-              {profileCustomIdIcon ? (
-                <div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300" style={{ backgroundImage: `url(${profileCustomIdIcon})` }}>
-                  <span className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" 
-                        style={{ 
-                          paddingLeft: `${pIdX}px`, 
-                          paddingTop: `${pIdY}px`,
-                          fontSize: `${currentUserData?.idFontSize || 10}px`
-                        }}>
-                    {profileCustomId}
-                  </span>
-                </div>
-              ) : (
-                <span className={`text-[11px] font-black w-fit ${profileCustomId === 'OFFICIAL' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : 'text-purple-300 bg-white/5 border-white/5'} px-3 py-1 rounded-xl border tracking-wider`}>ID: {profileCustomId}</span>
-              )}
-
-              {/* Gender and Region Info */}
-              <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-xl border border-white/5">
-                {currentUserData?.gender === 'male' ? (
-                  <i className="fas fa-mars text-blue-400 text-[10px]"></i>
-                ) : currentUserData?.gender === 'female' ? (
-                  <i className="fas fa-venus text-pink-400 text-[10px]"></i>
-                ) : null}
-                {currentUserData?.regionFlag && (
-                  <span className="text-sm leading-none">{currentUserData.regionFlag}</span>
+        ) : (
+          <>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
+              <div className="relative w-28 h-28 flex items-center justify-center">
+                {profileUserData?.animatedAvatar ? (
+                  isVideoUrl(profileUserData.animatedAvatar) ? (
+                    <video src={profileUserData.animatedAvatar} autoPlay loop muted playsInline className="w-24 h-24 rounded-full object-cover bg-transparent" />
+                  ) : (
+                    <img src={profileUserData.animatedAvatar} className="w-24 h-24 rounded-full object-cover bg-transparent" alt="Profile" />
+                  )
+                ) : (
+                  <img src={profileUserData?.photoURL || "https://picsum.photos/200"} className="w-24 h-24 rounded-full object-cover" alt="Profile" />
                 )}
+                {profileUserData?.currentFrame && (<img src={profileUserData.currentFrame} className="absolute inset-0 w-full h-full object-contain z-10 scale-125" alt="frame" />)}
               </div>
             </div>
-
-            {/* Compact Level Badges */}
-            <div className="flex gap-2 animate-in slide-in-from-top duration-500">
-              {/* Wealth Badge */}
-              {(() => {
-                const info = getWealthLevelInfo(currentUserData?.wealthXP || 0);
-                return (
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${info.tier.border} ${info.tier.bg} backdrop-blur-md shadow-lg`}>
-                    <div className={`w-4 h-4 rounded-full ${info.tier.bar} flex items-center justify-center text-[8px] text-white`}>
-                      <i className="fas fa-crown"></i>
+            <div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto overflow-x-hidden scrollbar-hide pb-12">
+              <h3 className="text-2xl font-black text-white drop-shadow-lg py-1 mb-2 leading-relaxed relative z-10">{profileUserData?.displayName}</h3>
+              
+              <div className="mb-8 flex flex-col items-center gap-3">
+                <div className="flex items-center gap-2">
+                  {profileCustomIdIcon ? (
+                    <div className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300" style={{ backgroundImage: `url(${profileCustomIdIcon})` }}>
+                      <span className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" 
+                            style={{ 
+                              paddingLeft: `${pIdX}px`, 
+                              paddingTop: `${pIdY}px`,
+                              fontSize: `${profileUserData?.idFontSize || 10}px`
+                            }}>
+                        {profileCustomId}
+                      </span>
                     </div>
-                    <span className={`text-[10px] font-black ${info.tier.color}`}>{info.level}</span>
-                  </div>
-                );
-              })()}
+                  ) : (
+                    <span className={`text-[11px] font-black w-fit ${profileCustomId === 'OFFICIAL' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' : 'text-purple-300 bg-white/5 border-white/5'} px-3 py-1 rounded-xl border tracking-wider`}>ID: {profileCustomId}</span>
+                  )}
 
-              {/* Charisma Badge */}
-              {(() => {
-                const info = getCharismaLevelInfo(currentUserData?.charismaXP || 0);
-                return (
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${info.tier.border} ${info.tier.bg} backdrop-blur-md shadow-lg`}>
-                    <div className={`w-4 h-4 rounded-full ${info.tier.bar} flex items-center justify-center text-[8px] text-white`}>
-                      <i className="fas fa-heart"></i>
-                    </div>
-                    <span className={`text-[10px] font-black ${info.tier.color}`}>{info.level}</span>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-
-          <div className="w-full space-y-6">
-            <div className="flex items-center justify-center gap-12 py-4 border-y border-white/10">
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-xl font-black text-white">0</span>
-                <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعين</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-xl font-black text-white">0</span>
-                <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعة</span>
-              </div>
-            </div>
-
-            {/* CP Rectangle Section - Sized to match badges box but without background */}
-            {cpConfig?.rectangleUrl && (
-              <div className="relative w-full h-32 flex items-center justify-center animate-in zoom-in duration-500 overflow-visible my-4">
-                <img src={cpConfig.rectangleUrl} className="absolute inset-0 w-full h-full object-center object-contain scale-[1.26] drop-shadow-2xl z-0" alt="CP Effect" />
-                <div className="relative w-full flex items-center justify-between px-7 z-10 translate-y-[19px]">
-                  {/* Me (Right in RTL) */}
-                  <div className="flex flex-col items-center gap-1.5">
-                    <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform">
-                      <img src={currentUserData?.photoURL || user?.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
-                    </div>
-                    <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
-                      {currentUserData?.displayName || user?.displayName || "أنا"}
-                    </span>
-                  </div>
-                  
-                  {/* Partner / Plus Icon (Left in RTL) */}
-                  <div className="flex flex-col items-center gap-1.5">
-                    <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform bg-white/5 backdrop-blur-sm flex items-center justify-center">
-                      {popupPartnerData ? (
-                        <img src={popupPartnerData.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
-                      ) : (
-                        <i className="fas fa-user text-white/20 text-xs"></i>
-                      )}
-                    </div>
-                    <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
-                      {popupPartnerData ? (popupPartnerData.displayName || "شريك") : "لا يوجد"}
-                    </span>
+                  {/* Gender and Region Info */}
+                  <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-xl border border-white/5">
+                    {profileUserData?.gender === 'male' ? (
+                      <i className="fas fa-mars text-blue-400 text-[10px]"></i>
+                    ) : profileUserData?.gender === 'female' ? (
+                      <i className="fas fa-venus text-pink-400 text-[10px]"></i>
+                    ) : null}
+                    {profileUserData?.regionFlag && (
+                      <span className="text-sm leading-none">{profileUserData.regionFlag}</span>
+                    )}
                   </div>
                 </div>
+
+                {/* Compact Level Badges */}
+                <div className="flex gap-2 animate-in slide-in-from-top duration-500">
+                  {/* Wealth Badge */}
+                  {(() => {
+                    const info = getWealthLevelInfo(profileUserData?.wealthXP || 0);
+                    return (
+                      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${info.tier.border} ${info.tier.bg} backdrop-blur-md shadow-lg`}>
+                        <div className={`w-4 h-4 rounded-full ${info.tier.bar} flex items-center justify-center text-[8px] text-white`}>
+                          <i className="fas fa-crown"></i>
+                        </div>
+                        <span className={`text-[10px] font-black ${info.tier.color}`}>{info.level}</span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Charisma Badge */}
+                  {(() => {
+                    const info = getCharismaLevelInfo(profileUserData?.charismaXP || 0);
+                    return (
+                      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${info.tier.border} ${info.tier.bg} backdrop-blur-md shadow-lg`}>
+                        <div className={`w-4 h-4 rounded-full ${info.tier.bar} flex items-center justify-center text-[8px] text-white`}>
+                          <i className="fas fa-heart"></i>
+                        </div>
+                        <span className={`text-[10px] font-black ${info.tier.color}`}>{info.level}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
-            )}
+
+              <div className="w-full space-y-6">
+                <div className="flex items-center justify-center gap-10 py-4 border-y border-white/10">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xl font-black text-white">0</span>
+                    <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">أصدقاء</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xl font-black text-white">0</span>
+                    <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعين</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-xl font-black text-white">0</span>
+                    <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعة</span>
+                  </div>
+                </div>
+
+                {/* CP Rectangle Section */}
+                {cpConfig?.rectangleUrl && (
+                  <div className="relative w-full h-32 flex items-center justify-center animate-in zoom-in duration-500 overflow-visible my-4">
+                    <img src={cpConfig.rectangleUrl} className="absolute inset-0 w-full h-full object-center object-contain scale-[1.26] drop-shadow-2xl z-0" alt="CP Effect" />
+                    <div className="relative w-full flex items-center justify-between px-7 z-10 translate-y-[19px]">
+                      {/* Me (Right in RTL) */}
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform">
+                          <img src={profileUserData?.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
+                        </div>
+                        <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
+                          {profileUserData?.displayName || "العضو"}
+                        </span>
+                      </div>
+                      
+                      {/* Partner / Plus Icon (Left in RTL) */}
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform bg-white/5 backdrop-blur-sm flex items-center justify-center">
+                          {popupPartnerData ? (
+                            <img src={popupPartnerData.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
+                          ) : (
+                            <i className="fas fa-user text-white/20 text-xs"></i>
+                          )}
+                        </div>
+                        <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
+                          {popupPartnerData ? (popupPartnerData.displayName || "شريك") : "لا يوجد"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+
 
             <div className="bg-black/20 p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-inner">
           <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] text-center">الأوسمة والجوائز</p>
@@ -1296,7 +1429,13 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </div>
             )}
           </div>
-        </div></div></div></div></>
+        </div>
+        </div>
+        </div>
+        </>
+        )}
+        </div>
+        </>
       )}
 
       {showGifts && (
@@ -1304,7 +1443,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           <div className="fixed inset-0 z-[700] bg-black/10 animate-in fade-in" onClick={() => setShowGifts(false)}></div>
           <div className="fixed bottom-0 left-0 right-0 max-md bg-black/70 border-t border-white/10 animate-slide-up h-[400px] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl mx-auto z-[710]">
             <div className="px-5 pt-4 flex items-center justify-between relative">
-              <div className="flex items-center -space-x-2 overflow-visible">
+              <div className="flex items-center gap-2 flex-wrap overflow-visible">
                 {usersOnMics.length > 0 ? (
                   usersOnMics.slice(0, 5).map((u, i) => (
                     <button 
