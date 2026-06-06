@@ -2,8 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { useLanguage } from '../LanguageContext';
 
 const CPAdmin: React.FC = () => {
+  const { t } = useLanguage();
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [middleIconUrl, setMiddleIconUrl] = useState<string | null>(null);
   const [rectangleUrl, setRectangleUrl] = useState<string | null>(null);
@@ -46,9 +48,9 @@ const CPAdmin: React.FC = () => {
         middleIconUrl: middleIconUrl,
         rectangleUrl: rectangleUrl
       }, { merge: true });
-      alert("تم حفظ إعدادات صفحة CP بنجاح");
+      alert(t("تم حفظ إعدادات صفحة CP بنجاح", "CP page settings saved successfully"));
     } catch (e) {
-      alert("حدث خطأ أثناء الحفظ");
+      alert(t("حدث خطأ أثناء الحفظ", "An error occurred while saving"));
     } finally {
       setIsSaving(false);
     }
@@ -62,13 +64,13 @@ const CPAdmin: React.FC = () => {
             <i className="fas fa-heart text-xl"></i>
           </div>
           <div>
-            <h3 className="text-sm font-black text-white">إعدادات الـ CP</h3>
-            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">تخصيص مظهر صفحة الارتباط</p>
+            <h3 className="text-sm font-black text-white">{t("إعدادات الـ CP", "CP Settings")}</h3>
+            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{t("تخصيص مظهر صفحة الارتباط", "Customize Relationship Page Appearance")}</p>
           </div>
         </div>
 
         <div className="space-y-4">
-          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">خلفية صفحة الـ CP</label>
+          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">{t("خلفية صفحة الـ CP", "CP Page Background")}</label>
           
           <div className="relative aspect-video rounded-3xl overflow-hidden bg-black/40 border-2 border-dashed border-white/10 flex flex-col items-center justify-center group">
             {backgroundUrl ? (
@@ -80,7 +82,7 @@ const CPAdmin: React.FC = () => {
             ) : (
               <div className="flex flex-col items-center gap-2 opacity-20">
                 <i className="fas fa-image text-4xl text-white"></i>
-                <p className="text-[10px] font-black text-white uppercase tracking-widest">اختر صورة أو فيديو</p>
+                <p className="text-[10px] font-black text-white uppercase tracking-widest">{t("اختر صورة أو فيديو", "Choose Image or Video")}</p>
               </div>
             )}
             
@@ -101,7 +103,7 @@ const CPAdmin: React.FC = () => {
           />
 
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">أو ضع رابط مباشر</label>
+            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">{t("أو ضع رابط مباشر", "Or enter a direct link")}</label>
             <input 
               type="text" 
               value={backgroundUrl || ''} 
@@ -114,7 +116,7 @@ const CPAdmin: React.FC = () => {
 
         {/* Middle Icon Config */}
         <div className="space-y-4 pt-4 border-t border-white/5">
-          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">أيقونة القلب (الوسط)</label>
+          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">{t("أيقونة القلب (الوسط)", "Heart Icon (Center)")}</label>
           
           <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden bg-black/40 border-2 border-dashed border-white/10 flex flex-col items-center justify-center group">
             {middleIconUrl ? (
@@ -140,7 +142,7 @@ const CPAdmin: React.FC = () => {
           />
 
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">أو ضع رابط صورة متحركة (APNG/GIF)</label>
+            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">{t("أو ضع رابط صورة متحركة (APNG/GIF)", "Or enter an animated image link (APNG/GIF)")}</label>
             <input 
               type="text" 
               value={middleIconUrl || ''} 
@@ -153,7 +155,7 @@ const CPAdmin: React.FC = () => {
 
         {/* Rectangle Config */}
         <div className="space-y-4 pt-4 border-t border-white/5">
-          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">مستطيل الـ CP (للبروفايل)</label>
+          <label className="text-[10px] font-black text-rose-400 uppercase tracking-widest block mr-2">{t("مستطيل الـ CP (للبروفايل)", "CP Rectangle (For Profile)")}</label>
           
           <div className="relative aspect-[4/1] w-full border-2 border-dashed border-white/10 flex flex-col items-center justify-center group overflow-visible">
             {rectangleUrl ? (
@@ -161,7 +163,7 @@ const CPAdmin: React.FC = () => {
             ) : (
               <div className="flex flex-col items-center gap-1 opacity-20">
                 <i className="fas fa-vector-square text-xl text-white"></i>
-                <p className="text-[8px] font-black text-white uppercase tracking-widest">اختر المستطيل</p>
+                <p className="text-[8px] font-black text-white uppercase tracking-widest">{t("اختر المستطيل", "Choose Rectangle")}</p>
               </div>
             )}
             
@@ -182,7 +184,7 @@ const CPAdmin: React.FC = () => {
           />
 
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">أو ضع رابط صورة</label>
+            <label className="text-[9px] font-black text-white/30 uppercase mr-2 tracking-widest">{t("أو ضع رابط صورة", "Or enter image link")}</label>
             <input 
               type="text" 
               value={rectangleUrl || ''} 
@@ -198,7 +200,7 @@ const CPAdmin: React.FC = () => {
           disabled={isSaving}
           className="w-full bg-gradient-to-r from-rose-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all border border-white/10"
         >
-          {isSaving ? <i className="fas fa-spinner animate-spin"></i> : <span>حفظ الخلفية الجديدة</span>}
+          {isSaving ? <i className="fas fa-spinner animate-spin"></i> : <span>{t("حفظ الخلفية الجديدة", "Save New Settings")}</span>}
         </button>
       </div>
     </div>

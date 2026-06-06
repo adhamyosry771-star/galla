@@ -5,6 +5,7 @@ import {
   collection, addDoc, serverTimestamp, onSnapshot, 
   query, orderBy, deleteDoc, doc 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { useLanguage } from '../LanguageContext';
 
 interface GMPageProps {
   isOpen: boolean;
@@ -14,12 +15,15 @@ interface GMPageProps {
   onOpenGiveItems: () => void;
   onOpenRoomsManagement: () => void;
   onOpenRoomReports: () => void;
+  language?: string;
 }
 
 export const GMPage: React.FC<GMPageProps> = ({ 
   isOpen, onClose, onOpenBanSystem, onOpenBanLogs, 
-  onOpenGiveItems, onOpenRoomsManagement, onOpenRoomReports 
+  onOpenGiveItems, onOpenRoomsManagement, onOpenRoomReports,
+  language = 'ar'
 }) => {
+  const { language: currentLang, t } = useLanguage();
   const [view, setView] = useState<'menu' | 'banners'>('menu');
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerImage, setBannerImage] = useState<string | null>(null);
@@ -48,7 +52,7 @@ export const GMPage: React.FC<GMPageProps> = ({
   };
 
   const handlePublishBanner = async () => {
-    if (!bannerImage) return alert("يرجى اختيار صورة للبنر");
+    if (!bannerImage) return alert(t("يرجى اختيار صورة للبنر", "Please specify a banner image"));
     setIsPublishing(true);
     try {
       await addDoc(collection(db, "banners"), {
@@ -58,21 +62,21 @@ export const GMPage: React.FC<GMPageProps> = ({
       });
       setBannerTitle('');
       setBannerImage(null);
-      alert("تم نشر البنر بنجاح");
+      alert(t("تم نشر البنر بنجاح", "Banner published successfully"));
     } catch (e) {
       console.error(e);
-      alert("خطأ في النشر");
+      alert(t("خطأ في النشر", "Failed to publish"));
     } finally {
       setIsPublishing(false);
     }
   };
 
   const handleDeleteBanner = async (id: string) => {
-    if (confirm("هل تريد حذف هذا البنر؟")) {
+    if (confirm(t("هل تريد حذف هذا البنر؟", "Delete this banner?"))) {
       try {
         await deleteDoc(doc(db, "banners", id));
       } catch (e) {
-        alert("خطأ في الحذف");
+        alert(t("خطأ في الحذف", "Failed to delete"));
       }
     }
   };
@@ -81,12 +85,12 @@ export const GMPage: React.FC<GMPageProps> = ({
 
   return (
     <motion.div 
-      initial={{ x: '100%' }}
+      initial={{ x: currentLang === 'ar' ? '100%' : '-100%' }}
       animate={{ x: 0 }}
-      exit={{ x: '100%' }}
+      exit={{ x: currentLang === 'ar' ? '100%' : '-100%' }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
       className="fixed inset-0 z-[550] bg-[#0d051a] flex flex-col"
-      dir="rtl"
+      dir={currentLang === 'ar' ? 'rtl' : 'ltr'}
     >
       {/* Header */}
       <header className="p-6 border-b border-white/5 flex items-center gap-4 bg-blue-600/5">
@@ -94,11 +98,11 @@ export const GMPage: React.FC<GMPageProps> = ({
           onClick={view === 'banners' ? () => setView('menu') : onClose} 
           className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-white border border-white/10 active:scale-90 transition-all"
         >
-          <i className={`fas ${view === 'banners' ? 'fa-arrow-right' : 'fa-chevron-right'}`}></i>
+          <i className={`fas ${view === 'banners' ? (currentLang === 'ar' ? 'fa-arrow-right' : 'fa-arrow-left') : (currentLang === 'ar' ? 'fa-chevron-right' : 'fa-chevron-left')}`}></i>
         </button>
         <div>
           <h2 className="text-lg font-black text-white">
-            {view === 'banners' ? 'إدارة البنارات' : 'نظام المدير العام'}
+            {view === 'banners' ? t('إدارة البنارات', 'Manage Banners') : t('نظام المدير العام', 'General Manager Panel')}
           </h2>
           <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">
             {view === 'banners' ? 'Banner Management' : 'General Manager Panel'}
@@ -123,88 +127,88 @@ export const GMPage: React.FC<GMPageProps> = ({
                     <i className="fas fa-shield-halved"></i>
                   </div>
                   <div>
-                    <h3 className="text-white font-black text-sm">مرحباً بالسيد المدير</h3>
-                    <p className="text-white/40 text-[10px] font-bold">لديك كامل الصلاحيات لإدارة المحتوى والمستخدمين.</p>
+                    <h3 className="text-white font-black text-sm">{t('مرحباً بالسيد المدير', 'Welcome, Administrator')}</h3>
+                    <p className="text-white/40 text-[10px] font-bold">{t('لديك كامل الصلاحيات لإدارة المحتوى والمستخدمين.', 'You have full administration privileges.')}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-4 text-start">
                 <button 
                   onClick={() => setView('banners')}
-                  className="w-full flex items-center gap-4 p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-emerald-500/20 group"
+                  className="w-full flex items-center gap-4 p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-emerald-500/20 group text-start"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
                     <i className="fas fa-images text-xl"></i>
                   </div>
-                  <div className="flex flex-col items-start">
-                    <span className="font-black text-sm text-emerald-100 tracking-wide">إدارة البنارات المتحركة</span>
-                    <span className="text-[10px] text-emerald-500/60 font-bold">رفع صور بنارات جديدة لواجهة التطبيق</span>
+                  <div className="flex flex-col items-start text-start min-w-0">
+                    <span className="font-black text-sm text-emerald-100 tracking-wide">{t('إدارة البنارات المتحركة', 'Manage Sliding Banners')}</span>
+                    <span className="text-[10px] text-emerald-500/60 font-bold truncate w-full">{t('رفع صور بنارات جديدة لواجهة التطبيق', 'Upload home banner slide images')}</span>
                   </div>
                 </button>
 
                 <button 
                   onClick={onOpenBanSystem}
-                  className="w-full flex items-center gap-4 p-5 bg-red-500/10 border border-red-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-red-500/20 group"
+                  className="w-full flex items-center gap-4 p-5 bg-red-500/10 border border-red-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-red-500/20 group text-start"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-500 shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-500 shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
                     <i className="fas fa-user-slash text-xl"></i>
                   </div>
-                  <div className="flex flex-col items-start">
-                    <span className="font-black text-sm text-red-100 tracking-wide">نظام حظر المستخدمين</span>
-                    <span className="text-[10px] text-red-500/60 font-bold">إدارة عمليات الحظر وفك الحظر</span>
+                  <div className="flex flex-col items-start text-start min-w-0">
+                    <span className="font-black text-sm text-red-100 tracking-wide">{t('نظام حظر المستخدمين', 'User Ban System')}</span>
+                    <span className="text-[10px] text-red-500/60 font-bold truncate w-full">{t('إدارة عمليات الحظر وفك الحظر', 'Ban and unban application users')}</span>
                   </div>
                 </button>
 
                 <button 
                   onClick={onOpenBanLogs}
-                  className="w-full flex items-center gap-4 p-5 bg-orange-500/10 border border-orange-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-orange-500/20 group"
+                  className="w-full flex items-center gap-4 p-5 bg-orange-500/10 border border-orange-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-orange-500/20 group text-start"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center text-orange-500 shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center text-orange-500 shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
                     <i className="fas fa-history text-xl"></i>
                   </div>
-                  <div className="flex flex-col items-start">
-                    <span className="font-black text-sm text-orange-100 tracking-wide">سجلات الحظر</span>
-                    <span className="text-[10px] text-orange-500/60 font-bold">عرض تاريخ جميع عمليات الحظر</span>
+                  <div className="flex flex-col items-start text-start min-w-0">
+                    <span className="font-black text-sm text-orange-100 tracking-wide">{t('سجلات الحظر', 'Ban Operations Logs')}</span>
+                    <span className="text-[10px] text-orange-500/60 font-bold truncate w-full">{t('عرض تاريخ جميع عمليات الحظر', 'View the history of all user bans')}</span>
                   </div>
                 </button>
 
                 <button 
                   onClick={onOpenGiveItems}
-                  className="w-full flex items-center gap-4 p-5 bg-purple-500/10 border border-purple-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-purple-500/20 group"
+                  className="w-full flex items-center gap-4 p-5 bg-purple-500/10 border border-purple-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-purple-500/20 group text-start"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-500 shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-500 shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
                     <i className="fas fa-gift text-xl"></i>
                   </div>
-                  <div className="flex flex-col items-start">
-                    <span className="font-black text-sm text-purple-100 tracking-wide">إعطاء عناصر المتجر</span>
-                    <span className="text-[10px] text-purple-500/60 font-bold">منح إطارات أو دخوليات أو خلفيات للمستخدمين</span>
+                  <div className="flex flex-col items-start text-start min-w-0">
+                    <span className="font-black text-sm text-purple-100 tracking-wide">{t('إعطاء عناصر المتجر', 'Grant Store Items')}</span>
+                    <span className="text-[10px] text-purple-500/60 font-bold truncate w-full">{t('منح إطارات أو دخوليات أو خلفيات للمستخدمين', 'Grant custom profile frames, room entries, or wallpapers')}</span>
                   </div>
                 </button>
 
                 <button 
                   onClick={onOpenRoomsManagement}
-                  className="w-full flex items-center gap-4 p-5 bg-blue-500/10 border border-blue-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-blue-500/20 group"
+                  className="w-full flex items-center gap-4 p-5 bg-blue-500/10 border border-blue-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-blue-500/20 group text-start"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-500 shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-500 shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
                     <i className="fas fa-door-open text-xl"></i>
                   </div>
-                  <div className="flex flex-col items-start">
-                    <span className="font-black text-sm text-blue-100 tracking-wide">إدارة وحذف الغرف</span>
-                    <span className="text-[10px] text-blue-500/60 font-bold">تحذير أصحاب الغرف أو حذفها نهائياً</span>
+                  <div className="flex flex-col items-start text-start min-w-0">
+                    <span className="font-black text-sm text-blue-100 tracking-wide">{t('إدارة وحذف الغرف', 'Rooms Management')}</span>
+                    <span className="text-[10px] text-blue-500/60 font-bold truncate w-full">{t('تحذير أصحاب الغرف أو حذفها نهائياً', 'Warn room owners or terminate active rooms')}</span>
                   </div>
                 </button>
 
                 <button 
                   onClick={onOpenRoomReports}
-                  className="w-full flex items-center gap-4 p-5 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-amber-500/20 group"
+                  className="w-full flex items-center gap-4 p-5 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] active:scale-[0.98] transition-all hover:bg-amber-500/20 group text-start"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 shadow-lg group-hover:scale-110 transition-transform flex-shrink-0">
                     <i className="fas fa-file-invoice text-xl"></i>
                   </div>
-                  <div className="flex flex-col items-start">
-                    <span className="font-black text-sm text-amber-100 tracking-wide">استلام بلاغات الغرف</span>
-                    <span className="text-[10px] text-amber-500/60 font-bold">مراجعة البلاغات المقدمة ضد الغرف</span>
+                  <div className="flex flex-col items-start text-start min-w-0">
+                    <span className="font-black text-sm text-amber-100 tracking-wide">{t('استلام بلاغات الغرف', 'Receive Room Reports')}</span>
+                    <span className="text-[10px] text-amber-500/60 font-bold truncate w-full">{t('مراجعة البلاغات المقدمة ضد الغرف', 'Investigate user reports and complaints against channels')}</span>
                   </div>
                 </button>
               </div>
@@ -212,9 +216,9 @@ export const GMPage: React.FC<GMPageProps> = ({
           ) : (
             <motion.div 
               key="banners"
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: currentLang === 'ar' ? -20 : 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
+              exit={{ opacity: 0, x: currentLang === 'ar' ? 20 : -20 }}
               className="space-y-6"
             >
               <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 space-y-4 shadow-2xl relative overflow-hidden">
@@ -222,7 +226,7 @@ export const GMPage: React.FC<GMPageProps> = ({
                 
                 <h3 className="text-sm font-black text-white flex items-center gap-2">
                   <i className="fas fa-cloud-upload-alt text-emerald-400"></i>
-                  رفع بنر جديد
+                  {t('رفع بنر جديد', 'Upload New Banner')}
                 </h3>
 
                 <div className="space-y-4">
@@ -230,7 +234,7 @@ export const GMPage: React.FC<GMPageProps> = ({
                     type="text" 
                     value={bannerTitle} 
                     onChange={e => setBannerTitle(e.target.value)} 
-                    placeholder="عنوان البنر (اختياري)..." 
+                    placeholder={t('عنوان البنر (اختياري)...', 'Banner Title (optional)...')} 
                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none focus:border-emerald-500/30 font-bold"
                   />
                   
@@ -253,7 +257,7 @@ export const GMPage: React.FC<GMPageProps> = ({
                         <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white/20 group-hover:bg-emerald-500/10 group-hover:text-emerald-400 transition-all mb-2">
                           <i className="fas fa-plus text-xl"></i>
                         </div>
-                        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest group-hover:text-emerald-400">اختر صورة البنر</span>
+                        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest group-hover:text-emerald-400">{t('اختر صورة البنر', 'Select Banner Image')}</span>
                       </>
                     )}
                   </button>
@@ -268,7 +272,7 @@ export const GMPage: React.FC<GMPageProps> = ({
                     ) : (
                       <>
                         <i className="fas fa-paper-plane"></i>
-                        <span>نشر البنر</span>
+                        <span>{t('نشر البنر', 'Publish Banner')}</span>
                       </>
                     )}
                   </button>
@@ -278,7 +282,7 @@ export const GMPage: React.FC<GMPageProps> = ({
               <div className="space-y-4">
                 <div className="flex items-center gap-2 px-1">
                   <div className="w-1 h-3 bg-emerald-500 rounded-full"></div>
-                  <h4 className="text-[10px] font-black text-white/30 uppercase tracking-widest">البنارات النشطة حالياً</h4>
+                  <h4 className="text-[10px] font-black text-white/30 uppercase tracking-widest">{t('البنارات النشطة حالياً', 'Currently Active Banners')}</h4>
                 </div>
                 
                 <div className="grid grid-cols-1 gap-4">
@@ -292,7 +296,7 @@ export const GMPage: React.FC<GMPageProps> = ({
                     >
                       <img src={banner.imageUrl} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-5 flex flex-col justify-end">
-                        <p className="text-xs font-black text-white tracking-wide">{banner.title || 'بدون عنوان'}</p>
+                        <p className="text-xs font-black text-white tracking-wide">{banner.title || t('بدون عنوان', 'Untitled')}</p>
                       </div>
                       <button 
                         onClick={() => handleDeleteBanner(banner.id)}
@@ -305,7 +309,7 @@ export const GMPage: React.FC<GMPageProps> = ({
                   {banners.length === 0 && (
                     <div className="py-20 text-center opacity-20 flex flex-col items-center">
                       <i className="fas fa-images text-4xl mb-2"></i>
-                      <p className="text-[10px] font-black uppercase tracking-widest">لا توجد بنارات حالياً</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest">{t('لا توجد بنارات حالياً', 'No banners found')}</p>
                     </div>
                   )}
                 </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, where, getDocs, doc, updateDoc, increment, addDoc, serverTimestamp, getDoc, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '../LanguageContext';
 
 interface AgencyWalletModalProps {
   isOpen: boolean;
@@ -57,6 +58,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, onClose, userBalance }) => {
+  const { language, t } = useLanguage();
   const [view, setView] = useState<'ship' | 'history'>('ship');
   const [searchId, setSearchId] = useState('');
   const [searching, setSearching] = useState(false);
@@ -108,7 +110,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
       setTransactions(sorted);
     } catch (e: any) {
       console.error("Fetch history error:", e);
-      alert("حدث خطأ أثناء تحميل السجلات: " + (e.message || ""));
+      alert(t("حدث خطأ أثناء تحميل السجلات: ", "An error occurred while loading logs: ") + (e.message || ""));
     } finally {
       setLoadingHistory(false);
     }
@@ -130,7 +132,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
       const snap = await getDocs(q);
       
       if (snap.empty) {
-        alert("لم يتم العثور على مستخدم بهذا الـ ID");
+        alert(t("لم يتم العثور على مستخدم بهذا الـ ID", "User with this ID not found"));
       } else {
         setFoundUser({ uid: snap.docs[0].id, ...snap.docs[0].data() });
       }
@@ -147,17 +149,17 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
     
     const amount = parseInt(shipAmount);
     if (!shipAmount || isNaN(amount) || amount <= 0) {
-      alert("يرجى إدخال مبلغ صحيح");
+      alert(t("يرجى إدخال مبلغ صحيح", "Please enter a valid amount"));
       return;
     }
     
     if (amount > userBalance) {
-      alert("رصيد وكالتك غير كافٍ");
+      alert(t("رصيد وكالتك غير كافٍ", "Your agency balance is insufficient"));
       return;
     }
     
     if (!foundUser) {
-      alert("يرجى البحث عن مستخدم أولاً");
+      alert(t("يرجى البحث عن مستخدم أولاً", "Please search for a user first"));
       return;
     }
 
@@ -177,7 +179,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
 
       const currentAgencyBalance = agentSnap.data().agencyBalance || 0;
       if (currentAgencyBalance < amount) {
-        alert("رصيدك الحالي غير كافٍ");
+        alert(t("رصيدك الحالي غير كافٍ", "Your current balance is insufficient"));
         setIsProcessing(false);
         return;
       }
@@ -203,8 +205,8 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
       });
 
       await addDoc(collection(db, "users", foundUser.uid, "systemNotifications"), {
-        title: "تهانينا!",
-        desc: `تهانينا قمت بإعادة الشحن ${amount.toLocaleString()} كوينز من وكيل شحن (${agentSnap.data().displayName || 'وكيل'}) (ID_${agentSnap.data().customId || 'N/A'})`,
+        title: t("تهانينا!", "Congratulations!"),
+        desc: t(`تهانينا قمت بإعادة الشحن ${amount.toLocaleString('en-US')} كوينز من وكيل شحن (${agentSnap.data().displayName || 'وكيل'}) (ID_${agentSnap.data().customId || 'N/A'})`, `Congratulations! You recharged ${amount.toLocaleString('en-US')} Coins from shipping agent (${agentSnap.data().displayName || 'Agent'}) (ID_${agentSnap.data().customId || 'N/A'})`),
         icon: 'fa-coins',
         type: 'agency_shipping',
         createdAt: serverTimestamp()
@@ -216,14 +218,13 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
       audio.play().catch(err => console.log('Audio error:', err));
 
       setShowSuccess(true);
-      // Removed setTimeout to follow StoreModal behavior (click to dismiss)
 
       setShipAmount('');
       setFoundUser(null);
       setSearchId('');
     } catch (e: any) {
       console.error("Shipping execution error:", e);
-      alert("فشلت العملية: " + (e.message || "خطأ غير متوقع"));
+      alert(t("فشلت العملية: ", "The process failed: ") + (e.message || t("خطأ غير متوقع", "Unexpected error")));
     } finally {
       setIsProcessing(false);
     }
@@ -238,12 +239,12 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className={`fixed inset-0 z-[999] ${backgroundUrl ? '' : 'bg-[#0f172a]'} flex flex-col overflow-hidden`} 
-          dir="rtl"
+          dir={language === 'ar' ? 'rtl' : 'ltr'}
         >
           {/* Custom Background */}
           {backgroundUrl && (
             <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-[#0f172a]">
-              <div className="absolute inset-0 bg-black/70 z-10"></div> {/* Dark overlay boosted to 70% for clarity */}
+              <div className="absolute inset-0 bg-black/70 z-10"></div>
               {isVideoUrl(backgroundUrl) ? (
                 <video 
                   src={backgroundUrl} 
@@ -263,7 +264,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
             </div>
           )}
 
-          {/* Content Wrapper - ensured to be above z-0 */}
+          {/* Content Wrapper */}
           <div className="relative z-20 flex flex-col h-full overflow-hidden">
             {/* Header */}
           <div className="p-4 flex justify-between items-center bg-gradient-to-b from-black/40 to-transparent safe-top">
@@ -272,11 +273,11 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                 onClick={view === 'history' ? () => setView('ship') : onClose} 
                 className="w-10 h-10 rounded-xl bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-90 transition-transform"
               >
-                <i className={`fas ${view === 'history' ? 'fa-arrow-right' : 'fa-chevron-right'} text-sm`}></i>
+                <i className={`fas ${view === 'history' ? (language === 'ar' ? 'fa-arrow-right' : 'fa-arrow-left') : (language === 'ar' ? 'fa-chevron-right' : 'fa-chevron-left')} text-sm`}></i>
               </button>
               <div className="flex flex-col">
                 <h3 className="text-base font-black text-white tracking-tight">
-                  {view === 'history' ? 'سجل الشحن' : 'محفظة الوكالة'}
+                  {view === 'history' ? t('سجل الشحن', 'Shipping History') : t('محفظة الوكالة', 'Agency Wallet')}
                 </h3>
                 <span className="text-[9px] text-emerald-500 font-bold uppercase tracking-widest">
                   {view === 'history' ? 'Shipping History' : 'Agency Wallet'}
@@ -295,21 +296,21 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
           <div className="flex-1 overflow-y-auto p-4 space-y-6 max-w-xl mx-auto w-full scrollbar-hide">
             {view === 'ship' ? (
               <>
-                {/* Balance Card - Professional Look */}
+                {/* Balance Card */}
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
                   className="bg-gradient-to-br from-emerald-600 to-teal-800 p-6 rounded-[2rem] shadow-xl border border-white/20 relative overflow-hidden group"
                 >
-                  <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-24 -mt-24 blur-2xl opacity-50 group-hover:scale-110 transition-transform duration-1000"></div>
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full_mr-24_mt-24 blur-2xl opacity-50 group-hover:scale-110 transition-transform duration-1000"></div>
                   
                   <div className="relative z-10 flex justify-between items-center">
                     <div>
-                      <label className="text-[9px] font-black text-white/70 mb-1 uppercase tracking-[0.2em] block">الرصيد المتاح</label>
+                      <label className="text-[9px] font-black text-white/70 mb-1 uppercase tracking-[0.2em] block">{t("الرصيد المتاح", "Available Balance")}</label>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black text-white">{userBalance.toLocaleString()}</span>
-                        <span className="text-xs font-bold text-emerald-200">ذهب</span>
+                        <span className="text-3xl font-black text-white">{userBalance.toLocaleString('en-US')}</span>
+                        <span className="text-xs font-bold text-emerald-200">{t("ذهب", "Gold")}</span>
                       </div>
                     </div>
                     <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
@@ -322,13 +323,13 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 mr-1">
                     <div className="w-1 h-3 bg-emerald-500 rounded-full"></div>
-                    <h4 className="text-[10px] font-black text-white/40 uppercase tracking-widest">إجراء عملية شحن</h4>
+                    <h4 className="text-[10px] font-black text-white/40 uppercase tracking-widest">{t("إجراء عملية شحن", "Create Shipping Transaction")}</h4>
                   </div>
                   
                   <div className="space-y-3">
                     <div className="flex gap-2">
                       <div className="relative flex-1">
-                        <i className="fas fa-id-card absolute right-4 top-1/2 -translate-y-1/2 text-white/20 text-xs"></i>
+                        <i className={`fas fa-id-card absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-white/20 text-xs`}></i>
                         <input 
                           type="text" 
                           value={searchId} 
@@ -336,8 +337,8 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                             setSearchId(e.target.value);
                             if (!e.target.value.trim()) setFoundUser(null);
                           }} 
-                          placeholder="رقم الـ ID للمستلم..." 
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3 pr-10 pl-4 text-xs text-white placeholder:text-white/30 outline-none focus:border-emerald-500/30 transition-all font-bold"
+                          placeholder={t("رقم الـ ID للمستلم...", "Recipient ID...")} 
+                          className={`w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3 ${language === 'ar' ? 'pr-10 pl-4' : 'pl-10 pr-4'} text-xs text-white placeholder:text-white/30 outline-none focus:border-emerald-500/30 transition-all font-bold`}
                         />
                       </div>
                       <button 
@@ -345,7 +346,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                         disabled={searching}
                         className="bg-emerald-600 hover:bg-emerald-500 px-6 rounded-2xl text-white font-black text-xs active:scale-95 transition-all disabled:opacity-50"
                       >
-                        {searching ? <i className="fas fa-spinner animate-spin"></i> : 'بحث'}
+                        {searching ? <i className="fas fa-spinner animate-spin"></i> : t('بحث', 'Search')}
                       </button>
                     </div>
 
@@ -357,7 +358,15 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                       >
                         <div className="flex items-center gap-4 pb-4 border-b border-white/5">
                           <div className="relative">
-                            <img src={foundUser.photoURL || "https://picsum.photos/100"} className="w-12 h-12 rounded-2xl object-cover border border-white/10" alt="" />
+                            {foundUser.animatedAvatar ? (
+                              isVideoUrl(foundUser.animatedAvatar) ? (
+                                <video src={foundUser.animatedAvatar} autoPlay loop muted playsInline className="w-12 h-12 rounded-2xl object-cover border border-white/10" />
+                              ) : (
+                                <img src={foundUser.animatedAvatar} className="w-12 h-12 rounded-2xl object-cover border border-white/10" alt="" />
+                              )
+                            ) : (
+                              <img src={foundUser.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-12 h-12 rounded-2xl object-cover border border-white/10" alt="" />
+                            )}
                             <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white w-5 h-5 rounded-lg flex items-center justify-center border-2 border-[#0f172a]">
                               <i className="fas fa-check text-[8px]"></i>
                             </div>
@@ -371,14 +380,14 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                         <div className="space-y-3">
                           <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
                             <div className="relative">
-                              <i className="fas fa-coins absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500/30 text-[10px]"></i>
+                              <i className={`fas fa-coins absolute ${language === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-emerald-500/30 text-[10px]`}></i>
                               <input 
                                 type="number" 
                                 inputMode="numeric"
                                 value={shipAmount}
                                 onChange={e => setShipAmount(e.target.value)}
-                                placeholder="كمية الذهب..."
-                                className="w-full bg-black/20 border border-white/5 rounded-xl py-3 pr-10 px-4 text-white placeholder:text-white/30 font-black outline-none focus:border-emerald-500/30 text-sm"
+                                placeholder={t("كمية الذهب...", "Gold amount...")}
+                                className={`w-full bg-black/20 border border-white/5 rounded-xl py-3 ${language === 'ar' ? 'pr-10' : 'pl-10'} px-4 text-white placeholder:text-white/30 font-black outline-none focus:border-emerald-500/30 text-sm`}
                               />
                             </div>
                             
@@ -388,7 +397,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                                 disabled={isProcessing || !shipAmount}
                                 className={`bg-emerald-500 hover:bg-emerald-400 px-8 rounded-xl text-white font-black text-sm active:scale-95 transition-all shadow-lg flex items-center justify-center h-11 min-w-[100px] ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                               >
-                                {isProcessing ? 'جاري...' : 'شحن'}
+                                {isProcessing ? t('جاري...', 'Processing...') : t('شحن', 'Ship')}
                               </button>
                             </div>
                           </div>
@@ -396,7 +405,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
 
                         <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl flex gap-2 items-center">
                           <i className="fas fa-info-circle text-[10px] text-blue-500"></i>
-                          <p className="text-[9px] text-blue-200/70 font-bold leading-tight">سيتم خصم المبلغ من رصيد وكالتك وإضافته فوراً للمستلم.</p>
+                          <p className="text-[9px] text-blue-200/70 font-bold leading-tight">{t("سيتم خصم المبلغ من رصيد وكالتك وإضافته فوراً للمستلم.", "The amount will be deducted from your agency balance and added to the recipient immediately.")}</p>
                         </div>
                       </motion.div>
                     )}
@@ -406,10 +415,10 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                 <div className="p-5 bg-white/[0.02] rounded-[1.5rem] border border-white/5 space-y-2">
                   <div className="flex items-center gap-2">
                     <i className="fas fa-shield-halved text-emerald-500 text-[10px]"></i>
-                    <h5 className="text-[9px] font-black text-white/40 uppercase tracking-widest">ملاحظة أمنية</h5>
+                    <h5 className="text-[9px] font-black text-white/40 uppercase tracking-widest">{t("ملاحظة أمنية", "Security Notice")}</h5>
                   </div>
                   <p className="text-[10px] text-white/30 font-bold leading-relaxed">
-                    يتم تسجيل جميع عمليات الشحن في سجلات النظام لضمان الشفافية والأمان.
+                    {t("يتم تسجيل جميع عمليات الشحن في سجلات النظام لضمان الشفافية والأمان.", "All shipping operations are recorded in systemic logs to ensure safety and transparency.")}
                   </p>
                 </div>
               </>
@@ -418,25 +427,25 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 mr-1">
                     <div className="w-1 h-3 bg-emerald-500 rounded-full"></div>
-                    <h4 className="text-[10px] font-black text-white/40 uppercase tracking-widest">السجلات الأخيرة</h4>
+                    <h4 className="text-[10px] font-black text-white/40 uppercase tracking-widest">{t("السجلات الأخيرة", "Recent Logs")}</h4>
                   </div>
                   <button onClick={fetchHistory} className="text-[9px] font-black text-emerald-500 flex items-center gap-1">
                     <i className={`fas fa-rotate ${loadingHistory ? 'animate-spin' : ''}`}></i>
-                    تحديث
+                    {t("تحديث", "Refresh")}
                   </button>
                 </div>
 
                 {loadingHistory ? (
                   <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-50">
                     <i className="fas fa-spinner animate-spin text-2xl text-emerald-500"></i>
-                    <p className="text-xs font-bold text-white/50">جاري تحميل السجلات...</p>
+                    <p className="text-xs font-bold text-white/50">{t("جاري تحميل السجلات...", "Loading logs...")}</p>
                   </div>
                 ) : transactions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-50 grayscale">
                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
                       <i className="fas fa-folder-open text-2xl"></i>
                     </div>
-                    <p className="text-xs font-bold text-white/50">لا توجد عمليات شحن حتى الآن</p>
+                    <p className="text-xs font-bold text-white/50">{t("لا توجد عمليات شحن حتى الآن", "No shipping transactions yet")}</p>
                   </div>
                 ) : (
                   <div className="space-y-4 px-1">
@@ -461,19 +470,20 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                             </div>
                             <div className="text-[9px] text-white/30 font-bold mt-1 flex items-center gap-2">
                               <i className="far fa-clock text-[8px]"></i>
-                              {tx.createdAt?.toDate ? new Date(tx.createdAt.toDate()).toLocaleString('ar-EG', {
+                              {tx.createdAt?.toDate ? new Date(tx.createdAt.toDate()).toLocaleString(language === 'ar' ? 'ar-EG-u-nu-latn' : 'en-US', {
                                 hour: '2-digit',
                                 minute: '2-digit',
                                 day: 'numeric',
-                                month: 'short'
-                              }) : 'قيد المعالجة...'}
+                                month: 'short',
+                                numberingSystem: 'latn'
+                              }) : t('قيد المعالجة...', 'Processing...')}
                             </div>
                           </div>
                         </div>
                         
                         <div className="flex flex-col items-end gap-1">
                           <div className="bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 flex items-center gap-2">
-                            <span className="text-sm font-black text-emerald-400">+{tx.amount.toLocaleString()}</span>
+                            <span className="text-sm font-black text-emerald-400">+{tx.amount.toLocaleString('en-US')}</span>
                             <i className="fas fa-coins text-[10px] text-emerald-500"></i>
                           </div>
                           <span className="text-[8px] text-white/10 font-black tracking-widest mr-1">SUCCESS</span>
@@ -485,7 +495,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
               </div>
             )}
 
-            <div className="h-20"></div> {/* Bottom Spacer */}
+            <div className="h-20"></div>
           </div>
 
           {/* Success Notification Inside Modal */}
@@ -510,9 +520,9 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                   </div>
 
                   <div className="z-10 space-y-2">
-                    <h3 className="text-lg font-black text-white">تمت العمليه بنجاح</h3>
+                    <h3 className="text-lg font-black text-white">{t("تمت العمليه بنجاح", "Operation Completed Successfully")}</h3>
                     <p className="text-[11px] font-bold text-white/70 leading-relaxed">
-                      تم تحويل الرصيد بنجاح
+                      {t("تم تحويل الرصيد بنجاح", "The balance has been successfully transferred")}
                     </p>
                   </div>
 
@@ -520,7 +530,7 @@ export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, on
                     onClick={() => setShowSuccess(false)}
                     className="w-full py-4 bg-emerald-600/20 text-emerald-300 font-black text-xs rounded-2xl border border-emerald-500/30 active:scale-95 transition-all z-10"
                   >
-                    رائع
+                    {t("رائع", "Awesome")}
                   </button>
                 </motion.div>
               </motion.div>

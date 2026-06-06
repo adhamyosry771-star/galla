@@ -5,12 +5,23 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } f
 import { doc, getDoc, onSnapshot, setDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { motion, AnimatePresence } from 'framer-motion';
 import { BanModal } from './BanModal';
+import { useLanguage } from '../LanguageContext';
 
 interface LoginProps {
   onLoginSuccess: () => void;
 }
 
+const getDeviceId = () => {
+  let devId = localStorage.getItem('yalla_device_id');
+  if (!devId) {
+    devId = 'dev_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('yalla_device_id', devId);
+  }
+  return devId;
+};
+
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+  const { language, t } = useLanguage();
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -27,6 +38,27 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [hasFetchedData, setHasFetchedData] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
   const [banUntil, setBanUntil] = useState<string | null>(null);
+  const [deviceBanUntil, setDeviceBanUntil] = useState<string | null>(null);
+
+  useEffect(() => {
+    const devId = getDeviceId();
+    const unsub = onSnapshot(doc(db, "bannedDevices", devId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.banUntil) {
+          const banDate = new Date(data.banUntil);
+          if (banDate > new Date()) {
+            setDeviceBanUntil(data.banUntil);
+            setBanUntil(data.banUntil);
+            setShowBanModal(true);
+            return;
+          }
+        }
+      }
+      setDeviceBanUntil(null);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "appearance"), (docSnap) => {
@@ -42,7 +74,17 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       }
       setHasFetchedData(true);
     });
-    return unsub;
+
+    // Safety timeout to ensure loading completes even if image/video onload/canplay events fail
+    const safetyTimer = setTimeout(() => {
+      setIsBgLoaded(true);
+      setIsLogoLoaded(true);
+    }, 2500);
+
+    return () => {
+      unsub();
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -61,8 +103,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     setError('');
     
+    if (deviceBanUntil) {
+      setBanUntil(deviceBanUntil);
+      setShowBanModal(true);
+      return;
+    }
+    
     if (!email || !password) {
-      setError("يرجى إدخال البيانات");
+      setError(t("يرجى إدخال البيانات", "Please enter your info"));
       return;
     }
     
@@ -120,11 +168,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         } catch (authErr: any) {
           console.error(authErr.code);
           if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-email') {
-            setError('الإيميل غير صحيح');
+            setError(t('الإيميل غير صحيح', 'Incorrect Email Address'));
           } else if (authErr.code === 'auth/wrong-password') {
-            setError('الباسورد غير صحيح');
+            setError(t('الباسورد غير صحيح', 'Incorrect Password'));
           } else {
-            setError('حدث خطأ في الدخول، تأكد من البيانات');
+            setError(t('حدث خطأ في الدخول، تأكد من البيانات', 'Account login failed, please check details'));
           }
           setIsLoading(false);
           return;
@@ -137,14 +185,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       onLoginSuccess();
     } catch (err: any) {
       console.error(err);
-      setError('حدث خطأ غير متوقع');
+      setError(t('حدث خطأ غير متوقع', 'An unexpected error occurred'));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen max-w-md mx-auto bg-[#1a0b2e] flex flex-col justify-center px-6 relative overflow-hidden text-purple-50" dir="rtl">
+    <div className="min-h-screen max-w-md mx-auto bg-[#1a0b2e] flex flex-col justify-center px-6 relative overflow-hidden text-purple-50" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <AnimatePresence>
         {!isPageReady && (
           <motion.div 
@@ -155,7 +203,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           >
             <div className="flex flex-col items-center gap-4">
               <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin"></div>
-              <p className="text-[10px] font-black text-purple-400 uppercase tracking-[0.3em]">Yalla Games</p>
+              <p className="text-[10px] font-black text-purple-400 uppercase tracking-[0.3em]">Yalla Party</p>
             </div>
           </motion.div>
         )}
@@ -197,24 +245,31 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <i className="fas fa-gamepad text-3xl text-white"></i>
             )}
           </div>
-          <h1 className="text-4xl font-black mb-2 tracking-tighter bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent italic">Yalla Games</h1>
-          <p className="text-purple-400/60 text-[10px] font-black uppercase tracking-[0.3em]">عالم الترفيه والدردشة</p>
+          <h1 className="text-4xl font-black mb-2 tracking-tighter bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent italic">Yalla Party</h1>
+          <p className="text-purple-400/60 text-[10px] font-black uppercase tracking-[0.3em]">{t("عالم الترفيه والدردشة", "The World of Entertainment and Voice Chat")}</p>
         </div>
 
         <div className="z-10 w-full max-w-[340px] mx-auto relative">
           <AnimatePresence mode="wait">
             {!showEmailForm ? (
               <motion.div key="options" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="space-y-4">
-                <button type="button" onClick={() => setShowEmailForm(true)} className="w-full bg-white/10 backdrop-blur-md border border-white/20 h-14 rounded-full flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all group">
+                <button type="button" onClick={() => {
+                  if (deviceBanUntil) {
+                    setBanUntil(deviceBanUntil);
+                    setShowBanModal(true);
+                    return;
+                  }
+                  setShowEmailForm(true);
+                }} className="w-full bg-white/10 backdrop-blur-md border border-white/20 h-14 rounded-full flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all group">
                   <i className="fas fa-envelope text-white text-sm"></i>
-                  <span className="text-white font-black text-sm">تسجيل الدخول بالبريد الإلكتروني</span>
+                  <span className="text-white font-black text-sm">{t("تسجيل الدخول بالبريد الإلكتروني", "Login with Email Address")}</span>
                 </button>
               </motion.div>
             ) : (
               <motion.div key="form" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white/5 backdrop-blur-2xl border border-white/10 p-6 rounded-[2.5rem] shadow-2xl">
                 <div className="flex justify-between items-center mb-6">
                   <button onClick={() => setShowEmailForm(false)} className="text-white/40 hover:text-white transition-colors"><i className="fas fa-arrow-right"></i></button>
-                  <h3 className="text-white font-black text-sm">{isLogin ? 'دخول بالبريد' : 'إنشاء حساب جديد'}</h3>
+                  <h3 className="text-white font-black text-sm">{isLogin ? t('دخول بالبريد', 'Email Login') : t('إنشاء حساب جديد', 'Create New Account')}</h3>
                   <div className="w-4"></div>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -224,29 +279,43 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                     </div>
                   )}
                   <div className="space-y-1.5">
-                    <label className="block text-[9px] font-black text-purple-400/60 mr-2 uppercase">البريد الإلكتروني</label>
+                    <label className="block text-[9px] font-black text-purple-400/60 mr-2 uppercase">{t("البريد الإلكتروني", "Email Address")}</label>
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-full py-3.5 px-6 text-xs text-white outline-none focus:border-purple-500/40 transition-all" placeholder="mail@example.com" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-[9px] font-black text-purple-400/60 mr-2 uppercase">كلمة المرور</label>
+                    <label className="block text-[9px] font-black text-purple-400/60 mr-2 uppercase">{t("كلمة المرور", "Password")}</label>
                     <div className="relative">
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/40 text-xs"><i className={`fas ${showPassword ? 'fa-eye' : 'fa-eye-slash'}`}></i></button>
                       <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-full py-3.5 pl-12 pr-6 text-xs text-white outline-none focus:border-purple-500/40 transition-all" placeholder="••••••••" />
                     </div>
                   </div>
                   <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-full font-black text-xs text-white shadow-lg active:scale-95 transition-all mt-4 border border-white/10">
-                    {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : (isLogin ? 'تسجيل الدخول' : 'إنشاء حساب')}
+                    {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : (isLogin ? t('تسجيل الدخول', 'Login') : t('إنشاء حساب', 'Sign Up'))}
                   </button>
                 </form>
                 <div className="mt-6 text-center">
-                  <button onClick={() => setIsLogin(!isLogin)} className="text-[10px] text-purple-400/60 font-bold hover:text-purple-300 transition-colors">{isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ ادخل هنا'}</button>
+                  <button onClick={() => {
+                    const isAccountBanned = banUntil && new Date(banUntil) > new Date();
+                    if (deviceBanUntil) {
+                      setBanUntil(deviceBanUntil);
+                      setShowBanModal(true);
+                      return;
+                    }
+                    if (isAccountBanned) {
+                      setShowBanModal(true);
+                      return;
+                    }
+                    setIsLogin(!isLogin);
+                  }} className="text-[10px] text-purple-400/60 font-bold hover:text-purple-300 transition-colors">
+                    {isLogin ? t('ليس لديك حساب؟ سجل الآن', 'Don\'t have an account? Sign Up') : t('لديك حساب بالفعل؟ ادخل هنا', 'Already have an account? Login')}
+                  </button>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
         <div className="mt-12 text-center px-10 z-10 relative">
-          <p className="text-[9px] font-bold text-purple-300/30 leading-relaxed uppercase tracking-widest">من خلال المتابعة، أنت توافق على شروط الخدمة وسياسة الخصوصية</p>
+          <p className="text-[9px] font-bold text-purple-300/30 leading-relaxed uppercase tracking-widest">{t("من خلال المتابعة، أنت توافق على شروط الخدمة وسياسة الخصوصية", "By continuing, you agree to our Terms of Service & Privacy Policy")}</p>
         </div>
       </div>
     </div>

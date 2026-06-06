@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, addDoc, getDocs, serverTimestamp, doc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { useLanguage } from '../LanguageContext';
 
 interface CreateRoomModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface CreateRoomModalProps {
 }
 
 export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClose }) => {
+  const { language, t } = useLanguage();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [coverImage, setCoverImage] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
   };
 
   const handleCreate = async () => {
-    if (!title || !coverImage || !selectedBg) return alert("يرجى إكمال جميع البيانات واختيار خلفية");
+    if (!title || !coverImage || !selectedBg) return alert(t("يرجى إكمال جميع البيانات واختيار خلفية", "Please complete all fields and choose a background"));
     setIsLoading(true);
     try {
       const user = auth.currentUser;
@@ -102,7 +104,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
         owner: {
           id: user?.uid,
           uid: user?.uid, // keep for backward compatibility if needed
-          name: currentUserData?.displayName || user?.displayName || 'مستخدم جديد',
+          name: currentUserData?.displayName || user?.displayName || t('مستخدم جديد', 'New User'),
           avatar: currentUserData?.photoURL || user?.photoURL || '',
           customId: customId
         },
@@ -111,7 +113,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
       });
       onClose();
       setTitle(''); setDescription(''); setCoverImage(null); setSelectedBg(null);
-      alert("تم إنشاء الغرفة بنجاح!");
+      alert(t("تم إنشاء الغرفة بنجاح!", "Room created successfully!"));
     } catch (err) { console.error(err); }
     finally { setIsLoading(false); }
   };
@@ -119,10 +121,10 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[600] bg-[#1a0b2e] animate-in slide-in-from-bottom duration-300 flex flex-col" dir="rtl">
+    <div className="fixed inset-0 z-[600] bg-[#1a0b2e] animate-in slide-in-from-bottom duration-300 flex flex-col" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <header className="p-4 flex items-center justify-between border-b border-white/5 bg-[#0d051a]/50 backdrop-blur-md">
         <button onClick={onClose} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white"><i className="fas fa-times"></i></button>
-        <h2 className="text-lg font-black text-white">إنشاء غرفة صوتية</h2>
+        <h2 className="text-lg font-black text-white">{t("إنشاء غرفة صوتية", "Create Voice Room")}</h2>
         <div className="w-10"></div>
       </header>
 
@@ -133,7 +135,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
               <label className="relative cursor-pointer group">
                 <div className="w-32 h-32 rounded-[2.5rem] bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden transition-all group-hover:bg-white/10">
                   {coverImage ? <img src={coverImage} className="w-full h-full object-cover" alt="Cover" /> : (
-                    <div className="flex flex-col items-center text-purple-300/40"><i className="fas fa-camera text-2xl mb-2"></i><span className="text-[10px] font-black uppercase">صورة الغرفة</span></div>
+                    <div className="flex flex-col items-center text-purple-300/40"><i className="fas fa-camera text-2xl mb-2"></i><span className="text-[10px] font-black uppercase">{t("صورة الغرفة", "Room Image")}</span></div>
                   )}
                 </div>
                 <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
@@ -143,7 +145,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
             <div className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between items-center mr-2">
-                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اسم الغرفة</label>
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("اسم الغرفة", "Room Name")}</label>
                   <span className="text-[9px] font-bold text-white/40">{title.length}/16</span>
                 </div>
                 <input 
@@ -152,32 +154,40 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
                   maxLength={16}
                   onChange={(e) => setTitle(e.target.value)} 
                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500 transition-all shadow-inner" 
-                  placeholder="مثلاً: سهرة الوناسة..." 
+                  placeholder={t("مثلاً: سهرة الوناسة...", "e.g., Chill night...")} 
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">وصف الغرفة</label>
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">{t("وصف الغرفة", "Room Description")}</label>
                 <textarea 
                   value={description} 
                   onChange={(e) => setDescription(e.target.value)} 
                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none h-24 focus:border-purple-500 transition-all shadow-inner" 
-                  placeholder="وصف ترحيبي لزوار الغرفة..." 
+                  placeholder={t("وصف ترحيبي لزوار الغرفة...", "A welcoming description for your visitors...")} 
                 />
               </div>
 
               <div className="flex items-center gap-3 px-2 py-1">
                 <div className="w-10 h-10 rounded-full border-2 border-purple-500/30 overflow-hidden bg-purple-900 shadow-lg">
-                  <img src={currentUserData?.photoURL || auth.currentUser?.photoURL || "https://picsum.photos/200"} className="w-full h-full object-cover" />
+                  {currentUserData?.animatedAvatar ? (
+                    isVideoUrl(currentUserData.animatedAvatar) ? (
+                      <video src={currentUserData.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                    ) : (
+                      <img src={currentUserData.animatedAvatar} className="w-full h-full object-cover" />
+                    )
+                  ) : (
+                    <img src={currentUserData?.photoURL || auth.currentUser?.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover" />
+                  )}
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs font-black text-white">{currentUserData?.displayName || auth.currentUser?.displayName || 'المستخدم'}</span>
-                  <span className="text-[9px] text-purple-400 font-bold uppercase tracking-wider">المنشئ (ID: {currentUserData?.customId})</span>
+                  <span className="text-xs font-black text-white">{currentUserData?.displayName || auth.currentUser?.displayName || t('المستخدم', 'User')}</span>
+                  <span className="text-[9px] text-purple-400 font-bold uppercase tracking-wider">{t("المنشئ", "Creator")} (ID: {currentUserData?.customId})</span>
                 </div>
               </div>
 
               <div className="space-y-4 pt-4">
-                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">خلفية الغرفة</label>
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">{t("خلفية الغرفة", "Room Background")}</label>
                 <button 
                   onClick={() => setShowBgSelector(true)}
                   className="w-full flex items-center justify-between p-5 bg-white/5 border border-white/10 rounded-[1.5rem] active:scale-95 transition-all"
@@ -192,9 +202,9 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
                         )
                       ) : <div className="w-full h-full flex items-center justify-center opacity-20"><i className="fas fa-image"></i></div>}
                     </div>
-                    <span className="text-sm font-black text-white">اختر خلفية مميزة لغرفتك</span>
+                    <span className="text-sm font-black text-white">{t("اختر خلفية مميزة لغرفتك", "Choose a unique background")}</span>
                   </div>
-                  <i className="fas fa-chevron-left text-purple-400"></i>
+                  <i className={`fas ${language === 'ar' ? 'fa-chevron-left' : 'fa-chevron-right'} text-purple-400`}></i>
                 </button>
               </div>
             </div>
@@ -202,8 +212,8 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
         ) : (
           <div className="space-y-6 animate-in slide-in-from-left">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowBgSelector(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white"><i className="fas fa-arrow-right"></i></button>
-              <h3 className="text-sm font-black text-white">اختر خلفية الغرفة</h3>
+              <button onClick={() => setShowBgSelector(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white"><i className={`fas ${language === 'ar' ? 'fa-arrow-right' : 'fa-arrow-left'}`}></i></button>
+              <h3 className="text-sm font-black text-white">{t("اختر خلفية الغرفة", "Select Room Background")}</h3>
             </div>
             <div className="grid grid-cols-3 gap-3">
               {availableBgs.map((bg) => (
@@ -216,7 +226,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
                   {bg.remainingDays !== undefined && (
                     <div className="absolute top-2 right-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-lg shadow-xl z-20 flex items-center gap-0.5">
                       <span className="text-purple-300">{bg.remainingDays}</span>
-                      <span className="opacity-80">يوم</span>
+                      <span className="opacity-80">{t("يوم", "days")}</span>
                     </div>
                   )}
                   {selectedBg === bg.imageUrl && <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center"><i className="fas fa-check-circle text-white text-xl"></i></div>}
@@ -229,7 +239,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
 
       <div className="p-6 bg-[#0d051a]/50 backdrop-blur-md border-t border-white/5">
         <button onClick={handleCreate} disabled={isLoading || showBgSelector} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-white shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-          {isLoading ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-magic"></i><span>إطلاق الغرفة الآن</span></>}
+          {isLoading ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-magic"></i><span>{t("إطلاق الغرفة الآن", "Launch Room Now")}</span></>}
         </button>
       </div>
     </div>

@@ -1,15 +1,17 @@
-
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, getDocs, updateDoc, doc, addDoc, serverTimestamp, Timestamp, orderBy, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '../LanguageContext';
 
 interface GiveItemsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  language?: string;
 }
 
-export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose }) => {
+export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose, language = 'ar' }) => {
+  const { language: currentLang, t } = useLanguage();
   const [users, setUsers] = useState<any[]>([]);
   const [storeItems, setStoreItems] = useState<{frames: any[], entries: any[], backgrounds: any[]}>({ frames: [], entries: [], backgrounds: [] });
   const [loading, setLoading] = useState(true);
@@ -21,6 +23,11 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  const isVideoUrl = (url?: string | null) => {
+    if (!url) return false;
+    return url.match(/\.(mp4|webm|ogg|mov)$/) !== null || url.includes('video');
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchData();
@@ -30,7 +37,7 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch some users (limited for performance, search will filter client-side for now or we can implement real search)
+      // Fetch some users
       const userSnap = await getDocs(query(collection(db, "users"), orderBy("displayName", "asc")));
       setUsers(userSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
@@ -71,7 +78,6 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
       let existingItemDoc: any = null;
       querySnap.forEach(snap => {
         const data = snap.data();
-        // Even if expired, we can extend from current time or from old expiry if still valid
         if (!existingItemDoc) existingItemDoc = { id: snap.id, ...data };
       });
 
@@ -126,7 +132,7 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
 
     } catch (e) {
       console.error(e);
-      alert("حدث خطأ أثناء منح العنصر");
+      alert(t("حدث خطأ أثناء منح العنصر", "An error occurred while granting the item"));
     } finally {
       setIsProcessing(false);
     }
@@ -135,7 +141,7 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[600] bg-black/60 backdrop-blur-md flex items-center justify-center p-4" dir="rtl">
+    <div className="fixed inset-0 z-[600] bg-black/60 backdrop-blur-md flex items-center justify-center p-4" dir={currentLang === 'ar' ? 'rtl' : 'ltr'}>
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -146,8 +152,8 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
             <div className="w-10 h-10 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-400">
               <i className="fas fa-gift"></i>
             </div>
-            <div>
-              <h3 className="text-white font-black text-sm">إعطاء عناصر المتجر</h3>
+            <div className="text-start">
+              <h3 className="text-white font-black text-sm">{t("إعطاء عناصر المتجر", "Give Store Items")}</h3>
               <p className="text-[9px] text-purple-300/50 font-bold uppercase tracking-wider">Gift Management</p>
             </div>
           </div>
@@ -158,59 +164,87 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           {/* Step 1: Select User */}
-          <section className="space-y-4">
+          <section className="space-y-4 text-start">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-[10px] text-white/40 font-black">1</span>
-              <h4 className="text-white font-black text-xs">اختر المستخدم</h4>
+              <h4 className="text-white font-black text-xs">{t("اختر المستخدم", "Select User")}</h4>
             </div>
             
             {!selectedUser ? (
               <div className="space-y-3">
-                <div className="relative">
-                  <i className="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-white/20 text-xs"></i>
+                <div className="relative group">
+                  <div className={`absolute ${currentLang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-purple-500 transition-colors`}>
+                    <i className="fas fa-search text-xs"></i>
+                  </div>
                   <input 
                     type="text" 
                     value={userSearch} 
                     onChange={e => setUserSearch(e.target.value)} 
-                    placeholder="ابحث بالاسم أو ID..." 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pr-11 pl-4 text-xs text-white outline-none focus:border-purple-500/40"
+                    placeholder={t("ابحث بالاسم أو ID...", "Search by name or ID...")} 
+                    className={`w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 ${currentLang === 'ar' ? 'pr-11 pl-4' : 'pl-11 pr-4'} text-xs text-white outline-none focus:border-purple-500/40 text-start`}
                   />
                 </div>
-                <div className="max-h-[150px] overflow-y-auto space-y-2 pr-1">
-                  {filteredUsers.slice(0, 10).map(u => (
-                    <button 
-                      key={u.id} 
-                      onClick={() => setSelectedUser(u)}
-                      className="w-full bg-white/5 p-3 rounded-2xl flex items-center gap-3 border border-white/5 hover:border-purple-500/30 transition-all"
-                    >
-                      <img src={u.photoURL || "https://picsum.photos/50"} className="w-8 h-8 rounded-full object-cover border border-white/10" />
-                      <div className="text-right">
-                        <p className="text-[10px] font-black text-white">{u.displayName}</p>
-                        <p className="text-[8px] font-bold text-white/40">ID: {u.customId}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                {loading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <i className="fas fa-circle-notch animate-spin text-purple-500"></i>
+                  </div>
+                ) : (
+                  <div className="max-h-[150px] overflow-y-auto space-y-2 pr-1">
+                    {filteredUsers.slice(0, 10).map(u => (
+                      <button 
+                        key={u.id} 
+                        onClick={() => setSelectedUser(u)}
+                        className="w-full bg-white/5 p-3 rounded-2xl flex items-center gap-3 border border-white/5 hover:border-purple-500/30 transition-all text-start"
+                      >
+                        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+                          {u.animatedAvatar ? (
+                            isVideoUrl(u.animatedAvatar) ? (
+                              <video src={u.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                            ) : (
+                              <img src={u.animatedAvatar} className="w-full h-full object-cover" />
+                            )
+                          ) : (
+                            <img src={u.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black text-white truncate">{u.displayName}</p>
+                          <p className="text-[8px] font-bold text-white/40">ID: {u.customId}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-purple-500/10 border border-purple-500/20 p-4 rounded-3xl flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <img src={selectedUser.photoURL || "https://picsum.photos/50"} className="w-10 h-10 rounded-full border border-purple-500/30" />
-                  <div>
-                    <p className="text-xs font-black text-white">{selectedUser.displayName}</p>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+                    {selectedUser.animatedAvatar ? (
+                      isVideoUrl(selectedUser.animatedAvatar) ? (
+                        <video src={selectedUser.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                      ) : (
+                        <img src={selectedUser.animatedAvatar} className="w-full h-full object-cover" />
+                      )
+                    ) : (
+                      <img src={selectedUser.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                  <div className="min-w-0 text-start">
+                    <p className="text-xs font-black text-white truncate">{selectedUser.displayName}</p>
                     <p className="text-[9px] font-bold text-purple-300/40">ID: {selectedUser.customId}</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedUser(null)} className="text-[10px] font-black text-purple-400 uppercase">تغيير</button>
+                <button onClick={() => setSelectedUser(null)} className="text-[10px] font-black text-purple-400 uppercase flex-shrink-0">{t("تغيير", "Change")}</button>
               </div>
             )}
           </section>
 
           {/* Step 2: Select Category & Item */}
-          <section className="space-y-4">
+          <section className="space-y-4 text-start">
              <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-[10px] text-white/40 font-black">2</span>
-              <h4 className="text-white font-black text-xs">اختر العنصر</h4>
+              <h4 className="text-white font-black text-xs">{t("اختر العنصر", "Select Item")}</h4>
             </div>
 
             <div className="flex gap-2 p-1 bg-white/5 rounded-2xl">
@@ -220,36 +254,42 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
                   onClick={() => { setCategory(cat); setSelectedItem(null); }}
                   className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all ${category === cat ? 'bg-purple-600 text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
                 >
-                  {cat === 'frames' ? 'إطارات' : cat === 'entries' ? 'دخوليات' : 'خلفيات'}
+                  {cat === 'frames' ? t('إطارات', 'Frames') : cat === 'entries' ? t('دخوليات', 'Entries') : t('خلفيات', 'Backgrounds')}
                 </button>
               ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {storeItems[category].map(item => (
-                <button 
-                  key={item.id} 
-                  onClick={() => setSelectedItem(item)}
-                  className={`aspect-square rounded-2xl border transition-all flex flex-col items-center justify-center p-2 gap-2 ${selectedItem?.id === item.id ? 'bg-purple-600/20 border-purple-500 shadow-lg' : 'bg-white/5 border-white/5'}`}
-                >
-                  <div className="w-12 h-12 rounded-xl bg-black/20 flex items-center justify-center overflow-hidden">
-                    {item.imageUrl || item.previewImage ? (
-                      <img src={item.imageUrl || item.previewImage} className="w-full h-full object-cover" />
-                    ) : (
-                      <i className={`fas ${category === 'frames' ? 'fa-border-none' : category === 'entries' ? 'fa-door-open' : 'fa-image'} text-white/20`}></i>
-                    )}
-                  </div>
-                  <span className="text-[8px] font-bold text-white truncate w-full text-center">{item.name}</span>
-                </button>
-              ))}
-            </div>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <i className="fas fa-circle-notch animate-spin text-purple-500"></i>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                {storeItems[category].map(item => (
+                  <button 
+                    key={item.id} 
+                    onClick={() => setSelectedItem(item)}
+                    className={`aspect-square rounded-2xl border transition-all flex flex-col items-center justify-center p-2 gap-2 ${selectedItem?.id === item.id ? 'bg-purple-600/20 border-purple-500 shadow-lg' : 'bg-white/5 border-white/5'}`}
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-black/20 flex items-center justify-center overflow-hidden">
+                      {item.imageUrl || item.previewImage ? (
+                        <img src={item.imageUrl || item.previewImage} className="w-full h-full object-cover" />
+                      ) : (
+                        <i className={`fas ${category === 'frames' ? 'fa-border-none' : category === 'entries' ? 'fa-door-open' : 'fa-image'} text-white/20`}></i>
+                      )}
+                    </div>
+                    <span className="text-[8px] font-bold text-white truncate w-full text-center">{t(item.name, item.name)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Step 3: Select Duration */}
-          <section className="space-y-4">
+          <section className="space-y-4 text-start">
             <div className="flex items-center gap-2 mb-2">
               <span className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-[10px] text-white/40 font-black">3</span>
-              <h4 className="text-white font-black text-xs">المدة بالأيام</h4>
+              <h4 className="text-white font-black text-xs">{t("المدة بالأيام", "Duration in Days")}</h4>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {[7, 15, 30, 90].map(d => (
@@ -258,7 +298,7 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
                   onClick={() => setDuration(d)}
                   className={`py-3 rounded-2xl text-[10px] font-black transition-all ${duration === d ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/40'}`}
                 >
-                  {d} يوم
+                  {d} {t("يوم", "Days")}
                 </button>
               ))}
             </div>
@@ -276,7 +316,7 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
             ) : (
               <>
                 <i className="fas fa-gift"></i>
-                <span>منح العنصر الآن</span>
+                <span>{t("منح العنصر الآن", "Grant Item Now")}</span>
               </>
             )}
             
@@ -289,7 +329,7 @@ export const GiveItemsModal: React.FC<GiveItemsModalProps> = ({ isOpen, onClose 
                   className="absolute inset-0 bg-green-500 flex items-center justify-center gap-2"
                 >
                   <i className="fas fa-check-circle"></i>
-                  <span>تم المنح بنجاح!</span>
+                  <span>{t("تم المنح بنجاح!", "Granted successfully!")}</span>
                 </motion.div>
               )}
             </AnimatePresence>

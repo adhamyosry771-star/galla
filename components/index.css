@@ -14,8 +14,10 @@
 }
 
 @layer base {
-  body {
+  html, body {
     @apply bg-slate-950 text-slate-50 font-sans antialiased overflow-x-hidden;
+    overscroll-behavior: none;
+    overscroll-behavior-y: none;
   }
 }
 

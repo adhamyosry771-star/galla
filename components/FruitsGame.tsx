@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { db, auth } from '../firebase';
 import { 
   doc, getDoc, updateDoc, setDoc, addDoc, collection, 
   serverTimestamp, increment, deleteDoc, onSnapshot 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { useLanguage } from '../LanguageContext';
 
 interface FruitsGameProps {
   onClose: () => void;
@@ -27,6 +29,7 @@ const GAME_FRUITS = [
 const BET_AMOUNTS = [1000, 10000, 100000, 500000];
 
 export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, onUpdateBalance }) => {
+  const { language, t } = useLanguage();
   const [gameState, setGameState] = useState<'betting' | 'drawing' | 'result'>('betting');
   const [timeLeft, setTimeLeft] = useState(25);
   const [selectedAmount, setSelectedAmount] = useState(1000);
@@ -38,24 +41,42 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
   // Rigging & Sync States
   const [globalSettings, setGlobalSettings] = useState<any>(null);
   const [userStats, setUserStats] = useState<any>(null);
+  const userStatsRef = useRef<any>(null);
   const [activeBetIds, setActiveBetIds] = useState<string[]>([]);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync Settings & Stats
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
-
     const unsubSettings = onSnapshot(doc(db, "settings", "fruitsGame"), (snap) => {
       if (snap.exists()) setGlobalSettings(snap.data());
     });
 
-    const unsubStats = onSnapshot(doc(db, "users", user.uid), (snap) => {
-      if (snap.exists()) setUserStats(snap.data());
+    let unsubStats: (() => void) | null = null;
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubStats) {
+        unsubStats();
+        unsubStats = null;
+      }
+      if (user) {
+        unsubStats = onSnapshot(doc(db, "users", user.uid), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            setUserStats(data);
+            userStatsRef.current = data;
+          }
+        });
+      } else {
+        setUserStats(null);
+        userStatsRef.current = null;
+      }
     });
 
-    return () => { unsubSettings(); unsubStats(); };
+    return () => {
+      unsubSettings();
+      unsubAuth();
+      if (unsubStats) unsubStats();
+    };
   }, []);
 
   // Cleanup Active Bets on Unmount
@@ -87,11 +108,12 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
     const determineWinner = () => {
       const candidates = GAME_FRUITS.map((_, i) => i);
       const user = auth.currentUser;
-      if (!user || !globalSettings || !userStats) return Math.floor(Math.random() * GAME_FRUITS.length);
+      const stats = userStatsRef.current;
+      if (!user || !globalSettings || !stats) return Math.floor(Math.random() * GAME_FRUITS.length);
 
       // Forced Win Override: If player has forced win status and has placed bets, ensure they win.
       const activeBetKeys = Object.keys(bets).filter(key => (bets[key] || 0) > 0);
-      if (userStats.fruitsForcedWin && activeBetKeys.length > 0) {
+      if (stats.fruitsForcedWin && activeBetKeys.length > 0) {
         const betIndices = GAME_FRUITS.map((fruit, idx) => ({ fruit, idx }))
           .filter(item => activeBetKeys.includes(item.fruit.id))
           .map(item => item.idx);
@@ -100,10 +122,10 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
         }
       }
 
-      const luckPercent = userStats.fruitsLuckPercent ?? 100;
+      const luckPercent = stats.fruitsLuckPercent ?? 100;
       const threshold = globalSettings.lossThreshold ?? 10000000;
-      const userProfit = (userStats.fruitsTotalWin || 0) - (userStats.fruitsTotalBet || 0);
-      const isForcedLoss = userStats.fruitsForcedLoss || userProfit >= threshold;
+      const userProfit = (stats.fruitsTotalWin || 0) - (stats.fruitsTotalBet || 0);
+      const isForcedLoss = stats.fruitsForcedLoss || userProfit >= threshold;
       const difficulty = globalSettings.globalDifficulty || 'balanced';
 
       // 1. Filter out winners if forced loss or luck fails
@@ -247,7 +269,7 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
       <div className="absolute inset-0 bg-black/20" onClick={() => { if(totalBet === 0 && gameState === 'betting') onClose(); }} />
       
       {/* Game Bottom Sheet */}
-      <div className="relative w-full max-w-md mx-auto bg-purple-700/85 border-t border-white/20 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden h-[85%]" dir="rtl">
+      <div className="relative w-full max-w-md mx-auto bg-purple-700/85 border-t border-white/20 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden h-[85%]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
         
         {/* Decorative Handle */}
         <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-4 mb-2 flex-shrink-0"></div>
@@ -255,10 +277,10 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
         {/* Header */}
         <div className="px-6 py-2 flex items-center justify-between border-b border-white/5">
            <div className="flex flex-col">
-              <h2 className="text-sm font-black text-white tracking-widest leading-none">لعبة الفواكه</h2>
-              <div className="flex items-center gap-1 mt-1">
+              <h2 className="text-sm font-black text-white tracking-widest leading-none text-start">{t("لعبة فواكه", "Fruits Game")}</h2>
+              <div className="flex items-center gap-1 mt-1 justify-start">
                 <i className="fas fa-coins text-yellow-500 text-[8px]"></i>
-                <span className="text-[10px] font-black text-yellow-400">{userBalance.toLocaleString()}</span>
+                <span className="text-[10px] font-black text-yellow-400">{userBalance.toLocaleString('en-US')}</span>
               </div>
            </div>
            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white active:scale-90 transition-all border border-white/10">
@@ -273,15 +295,15 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
           <div className="bg-black/30 rounded-[2rem] p-6 flex flex-col items-center justify-center relative overflow-hidden border border-white/10 min-h-[140px]">
             {gameState === 'betting' && (
               <div className="flex flex-col items-center gap-1 animate-in zoom-in duration-300">
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">فترة الرهان</span>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">{t("فترة الرهان", "Betting Period")}</span>
                 <div className="text-5xl font-black text-white tabular-nums drop-shadow-xl">{timeLeft}</div>
-                <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">ثانية</span>
+                <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">{t("ثانية", "Seconds")}</span>
               </div>
             )}
             
             {gameState === 'drawing' && (
               <div className="flex flex-col items-center gap-3 animate-pulse">
-                <div className="text-2xl font-black text-white tracking-widest text-center">جاري تحديد الفائز...</div>
+                <div className="text-2xl font-black text-white tracking-widest text-center">{t("جاري تحديد الفائز...", "Drawing winner...")}</div>
                 <div className="flex gap-1">
                   {[0, 1, 2].map(i => (
                     <div key={i} className="w-2 h-2 bg-yellow-500 rounded-full animate-bounce" style={{animationDelay: `${i * 0.2}s`}}></div>
@@ -297,14 +319,14 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
                 className="flex flex-col items-center gap-1"
               >
                 <div className="text-6xl drop-shadow-[0_0_20px_rgba(255,255,255,0.6)]">{GAME_FRUITS[winningIdx].emoji}</div>
-                <span className="text-sm font-black text-yellow-400 mt-2">{GAME_FRUITS[winningIdx].name} هو الرابح!</span>
+                <span className="text-sm font-black text-yellow-400 mt-2">{t(GAME_FRUITS[winningIdx].name, GAME_FRUITS[winningIdx].id)} {t("هو الرابح!", "is the winner!")}</span>
                 {bets[GAME_FRUITS[winningIdx].id] > 0 && (
                   <motion.div 
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     className="bg-green-500 text-white text-[10px] font-black px-4 py-1 rounded-full mt-2 shadow-lg shadow-green-500/40"
                   >
-                    مبارك! ربحت {(bets[GAME_FRUITS[winningIdx].id] * GAME_FRUITS[winningIdx].multiplier).toLocaleString()}
+                    {t("مبارك! ربحت ", "Congratulations! You won ")}{(bets[GAME_FRUITS[winningIdx].id] * GAME_FRUITS[winningIdx].multiplier).toLocaleString('en-US')}
                   </motion.div>
                 )}
               </motion.div>
@@ -330,7 +352,10 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
                    `}
                  >
                     <span className="text-3xl drop-shadow-md">{fruit.emoji}</span>
-                    <div className="text-[9px] font-black text-white/50 uppercase tracking-tighter">x{fruit.multiplier}</div>
+                    <div className="text-[10px] font-black text-white/50 uppercase tracking-tighter">
+                      {t(fruit.name, fruit.id)}
+                    </div>
+                    <div className="text-[9px] font-black text-white/40 uppercase tracking-tighter">x{fruit.multiplier}</div>
                     
                     {myBet > 0 && (
                       <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-yellow-500 text-black text-[7px] font-black rounded-md shadow-md">
@@ -345,34 +370,34 @@ export const FruitsGame: React.FC<FruitsGameProps> = ({ onClose, userBalance, on
           {/* Bet Amount Selector */}
           <div className="space-y-4">
              <div className="flex justify-between items-center px-1">
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">اختر مبلغ الرهان</span>
-                {totalBet > 0 && <span className="text-[10px] font-black text-yellow-400 uppercase tracking-widest">المراهنة: {totalBet.toLocaleString()}</span>}
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{t("اختر مبلغ الرهان", "Select Bet Amount")}</span>
+                {totalBet > 0 && <span className="text-[10px] font-black text-yellow-400 uppercase tracking-widest">{t("المراهنة: ", "Bet: ")}{totalBet.toLocaleString('en-US')}</span>}
              </div>
              <div className="grid grid-cols-4 gap-2">
                 {BET_AMOUNTS.map(amount => (
-                  <button
-                    key={amount}
-                    onClick={() => setSelectedAmount(amount)}
-                    className={`py-3 rounded-2xl text-xs font-black border transition-all shadow-sm
-                      ${selectedAmount === amount ? 'bg-white text-purple-700 border-white shadow-white/20 scale-95' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}
-                    `}
-                  >
-                    {amount >= 1000000 ? `${amount/1000000}M` : `${amount/1000}k`}
-                  </button>
+                   <button
+                     key={amount}
+                     onClick={() => setSelectedAmount(amount)}
+                     className={`py-3 rounded-2xl text-xs font-black border transition-all shadow-sm
+                       ${selectedAmount === amount ? 'bg-white text-purple-700 border-white shadow-white/20 scale-95' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}
+                     `}
+                   >
+                     {amount >= 1000000 ? `${amount/1000000}M` : `${amount/1000}k`}
+                   </button>
                 ))}
              </div>
           </div>
 
           {/* History */}
           <div className="mt-4 pb-4">
-             <span className="text-[9px] font-black text-white/30 uppercase tracking-widest block mb-3 px-1">النتائج السابقة</span>
+             <span className="text-[9px] font-black text-white/30 uppercase tracking-widest block mb-3 px-1">{t("النتائج السابقة", "Previous Results")}</span>
              <div className="flex gap-2 justify-center">
                 {history.length > 0 ? history.map((idx, i) => (
                   <div key={i} className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center text-lg border border-white/5 transition-all">
                     {GAME_FRUITS[idx].emoji}
                   </div>
                 )) : (
-                  <div className="text-[9px] font-black text-white/10 py-2">بانتظار الجولة الأولى...</div>
+                  <div className="text-[9px] font-black text-white/10 py-2">{t("بانتظار الجولة الأولى...", "Waiting for first round...")}</div>
                 )}
              </div>
           </div>

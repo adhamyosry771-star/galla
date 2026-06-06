@@ -2,8 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { useLanguage } from '../LanguageContext';
 
 export const NewsPage: React.FC = () => {
+  const { language, t } = useLanguage();
   const [news, setNews] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -21,13 +23,13 @@ export const NewsPage: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-[#1a0b2e]">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-black text-white tracking-tight">آخر الأخبار</h2>
+        <h2 className="text-2xl font-black text-white tracking-tight">{t("آخر الأخبار", "Latest News")}</h2>
       </div>
 
       {news.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 opacity-20">
           <i className="fas fa-newspaper text-5xl mb-4"></i>
-          <p className="text-sm font-bold">لا توجد أخبار حالياً</p>
+          <p className="text-sm font-bold">{t("لا توجد أخبار حالياً", "No news at the moment")}</p>
         </div>
       ) : news.map(item => (
         <div key={item.id} className="bg-white/5 border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl hover:bg-white/10 transition-all cursor-pointer group">
@@ -35,7 +37,7 @@ export const NewsPage: React.FC = () => {
           <div className="h-[11rem] overflow-hidden relative">
             <img src={item.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" />
             <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-xl text-[9px] text-white font-black border border-white/10">
-              {item.time || "جديد"}
+              {item.time || t("جديد", "New")}
             </div>
           </div>
           {/* تم تقليل الحشوة p-6 إلى p-5 لتقليل الطول الكلي للمستطيل */}

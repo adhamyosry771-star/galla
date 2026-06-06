@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { doc, updateDoc, onSnapshot, collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, Timestamp, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { useLanguage } from '../LanguageContext';
 
 interface StoreModalProps {
   isOpen: boolean; 
@@ -24,6 +24,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
   currentEntry,
   onOpenWallet 
 }) => {
+  const { language, t } = useLanguage();
   const [storeTab, setStoreTab] = useState<'frames' | 'entries' | 'backgrounds' | 'my_bag'>('frames');
   const [bagTab, setBagTab] = useState<'frames' | 'entries' | 'backgrounds'>('frames');
   const [isStoreLoading, setIsStoreLoading] = useState(true);
@@ -112,7 +113,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
     const duration = purchaseModalItem.durationDays || 7;
 
     if (userCoins < price) {
-      alert("رصيدك غير كافٍ لإتمام عملية الشراء!");
+      alert(t("رصيدك غير كافٍ لإتمام عملية الشراء!", "Your balance is insufficient to complete the purchase!"));
       setPurchaseModalItem(null);
       return;
     }
@@ -147,7 +148,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
           expiresAt: Timestamp.fromDate(newExpiresAt),
           purchasedAt: serverTimestamp()
         });
-        setSuccessMsg(`تم تجديد المدة بنجاح! تم إضافة ${duration} أيام إلى مدة العنصر الحالية.`);
+        setSuccessMsg(t(`تم تجديد المدة بنجاح! تم إضافة ${duration} أيام إلى مدة العنصر الحالية.`, `Duration renewed successfully! Added ${duration} days to the current item duration.`));
         setShowSuccess(true);
       } else {
         // Fresh purchase
@@ -164,7 +165,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
           expiresAt: Timestamp.fromDate(expiresAt),
           isEquipped: false 
         });
-        setSuccessMsg(`تم الشراء بنجاح! تم نقل العنصر إلى حقيبتك.`);
+        setSuccessMsg(t("تم الشراء بنجاح! تم نقل العنصر إلى حقيبتك.", "Purchase successful! The item has been moved to your bag."));
         setShowSuccess(true);
       }
 
@@ -173,7 +174,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
       setBagTab(purchaseModalItem.type === 'frame' ? 'frames' : purchaseModalItem.type === 'entry' ? 'entries' : 'backgrounds');
     } catch (error) {
       console.error(error);
-      alert("حدث خطأ أثناء الشراء.");
+      alert(t("حدث خطأ أثناء الشراء.", "An error occurred during purchase."));
     } finally {
       setIsPurchasing(false);
     }
@@ -193,9 +194,9 @@ export const StoreModal: React.FC<StoreModalProps> = ({
       if (Object.keys(updates).length > 0) {
         await updateDoc(doc(db, "users", user.uid), updates);
       }
-      alert("تم الارتداء بنجاح");
+      alert(t("تم الارتداء بنجاح", "Successfully equipped"));
     } catch(e) { 
-      alert("فشل الارتداء.");
+      alert(t("فشل الارتداء.", "Failed to equip."));
     }
   };
 
@@ -213,7 +214,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
       if (Object.keys(updates).length > 0) {
         await updateDoc(doc(db, "users", user.uid), updates);
       }
-      alert("تم الخلع بنجاح");
+      alert(t("تم الخلع بنجاح", "Successfully unequipped"));
     } catch(e) { console.error(e); }
   };
 
@@ -236,11 +237,11 @@ export const StoreModal: React.FC<StoreModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-[500] bg-[#0d051a]/98 backdrop-blur-2xl flex flex-col animate-in slide-in-from-bottom duration-300 overflow-hidden" dir="rtl">
+    <div className="fixed inset-0 z-[500] bg-[#0d051a]/98 backdrop-blur-2xl flex flex-col animate-in slide-in-from-bottom duration-300 overflow-hidden" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <header className="p-5 flex justify-between items-center border-b border-white/5 bg-[#1a0b2e]">
         <h3 className="text-lg font-black text-white flex items-center gap-2">
           <i className="fas fa-store text-pink-400 text-sm"></i>
-          <span>متجر يلا جيمز</span>
+          <span>{t("متجر يلا بارتي", "Yalla Party Store")}</span>
         </h3>
         <div className="flex items-center gap-2">
           <button 
@@ -255,9 +256,9 @@ export const StoreModal: React.FC<StoreModalProps> = ({
       
       <div className="flex bg-[#1a0b2e] border-b border-white/5">
         {[
-          {id: 'frames', name: 'الإطارات'},
-          {id: 'entries', name: 'الدخوليات'},
-          {id: 'backgrounds', name: 'الخلفيات'}
+          {id: 'frames', name: t('الإطارات', 'Frames')},
+          {id: 'entries', name: t('الدخوليات', 'Entries')},
+          {id: 'backgrounds', name: t('الخلفيات', 'Backgrounds')}
         ].map(tab => (
           <button 
             key={tab.id}
@@ -274,22 +275,22 @@ export const StoreModal: React.FC<StoreModalProps> = ({
         {isStoreLoading ? (
           <div className="h-full w-full flex flex-col items-center justify-center py-20">
             <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-[10px] font-black text-purple-400 uppercase tracking-widest">جاري تحميل المتجر...</p>
+            <p className="mt-4 text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("جاري تحميل المتجر...", "Loading store...")}</p>
           </div>
         ) : (
           <>
             {storeTab === 'my_bag' && (
               <div className="h-full animate-in fade-in flex flex-col">
                   <div className="flex gap-2 mb-6 p-1 bg-white/5 rounded-2xl border border-white/5 flex-shrink-0">
-                     <button onClick={() => setBagTab('frames')} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${bagTab === 'frames' ? 'bg-purple-600/30 text-white shadow-lg border border-purple-500/20' : 'text-white/30'}`}>إطارات</button>
-                     <button onClick={() => setBagTab('entries')} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${bagTab === 'entries' ? 'bg-purple-600/30 text-white shadow-lg border border-purple-500/20' : 'text-white/30'}`}>دخوليات</button>
-                     <button onClick={() => setBagTab('backgrounds')} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${bagTab === 'backgrounds' ? 'bg-purple-600/30 text-white shadow-lg border border-purple-500/20' : 'text-white/30'}`}>خلفيات</button>
+                     <button onClick={() => setBagTab('frames')} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${bagTab === 'frames' ? 'bg-purple-600/30 text-white shadow-lg border border-purple-500/20' : 'text-white/30'}`}>{t("إطارات", "Frames")}</button>
+                     <button onClick={() => setBagTab('entries')} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${bagTab === 'entries' ? 'bg-purple-600/30 text-white shadow-lg border border-purple-500/20' : 'text-white/30'}`}>{t("دخوليات", "Entrances")}</button>
+                     <button onClick={() => setBagTab('backgrounds')} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${bagTab === 'backgrounds' ? 'bg-purple-600/30 text-white shadow-lg border border-purple-500/20' : 'text-white/30'}`}>{t("خلفيات", "Backgrounds")}</button>
                   </div>
 
                   {filteredBagItems.length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-20 opacity-30 animate-in fade-in zoom-in duration-500">
                       <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
-                      <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
+                      <p className="text-sm font-black text-white/60 uppercase tracking-widest">{t("لا يوجد شيء هنا", "Nothing here yet")}</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4 pb-10">
@@ -318,7 +319,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                               ) : item.type === 'background' && isVideoUrl(item.imageUrl || item.videoUrl || '') ? (
                                 <video src={item.imageUrl || item.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" />
                               ) : (
-                                <img src={item.type === 'entry' ? (item.previewImage || "https://picsum.photos/100") : item.imageUrl} className="w-full h-full object-cover" alt="media" />
+                                <img src={item.type === 'entry' ? (item.previewImage || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%232e1a4a'/><path d='M30 40l40 10-40 10z' fill='%23ffffff' fill-opacity='0.4'/></svg>") : item.imageUrl} className="w-full h-full object-cover" alt="media" />
                               )}
                               {item.type === 'entry' && (
                                 <button onClick={() => setPreviewEntryVideo(item.videoUrl)} className="absolute inset-0 bg-black/30 flex items-center justify-center group/item">
@@ -327,14 +328,14 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                               )}
                             </div>
                             <div className="w-full text-center space-y-1">
-                              <span className="text-[11px] font-black text-white truncate block">{item.name}</span>
-                              <span className="text-[9px] font-black text-purple-400/60 uppercase">متبقي: {remainingDays} يوم</span>
+                              <span className="text-[11px] font-black text-white truncate block">{t(item.name)}</span>
+                              <span className="text-[9px] font-black text-purple-400/60 uppercase">{t("متبقي: ", "Remaining: ") + remainingDays + " " + t("يوم", "days")}</span>
                             </div>
                             <button 
                               onClick={() => isWorn ? handleRemoveItem(item.type, item.id) : handleWearItem(item)}
                               className={`w-full py-2.5 rounded-xl text-[10px] font-black active:scale-95 transition-all border backdrop-blur-md ${isWorn ? 'bg-red-500/15 text-red-400 border-red-500/25 shadow-sm' : 'bg-purple-600/15 text-purple-300 border-purple-500/25 shadow-sm'}`}
                             >
-                              {isWorn ? 'خلع' : 'ارتداء'}
+                              {isWorn ? t('خلع', 'Unequip') : t('ارتداء', 'Equip')}
                             </button>
                           </div>
                          );
@@ -349,7 +350,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                 {storeItems.frames.length === 0 ? (
                   <div className="w-full flex flex-col items-center justify-center py-24 opacity-30 animate-in fade-in zoom-in duration-500">
                     <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
-                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
+                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">{t("لا يوجد شيء هنا", "Nothing here yet")}</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
@@ -368,19 +369,19 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                         
                         <div className="w-full space-y-1.5">
                           <div className="text-center">
-                            <span className="text-[11px] font-black text-white truncate w-full block opacity-90">{frame.name}</span>
-                            <span className="text-[7px] font-black text-white/30 uppercase tracking-widest">{frame.durationDays || 7} أيام</span>
+                            <span className="text-[11px] font-black text-white truncate w-full block opacity-90">{t(frame.name)}</span>
+                            <span className="text-[7px] font-black text-white/30 uppercase tracking-widest">{(frame.durationDays || 7) + " " + t("أيام", "days")}</span>
                           </div>
                           <div className="flex items-center gap-1.5 h-7 w-full">
                             <div className="flex-1 h-full flex items-center justify-center gap-1">
-                              <span className="text-[10px] font-black text-yellow-500">{frame.price?.toLocaleString('ar-EG')}</span>
+                              <span className="text-[10px] font-black text-yellow-500">{frame.price?.toLocaleString('en-US')}</span>
                               <i className="fas fa-coins text-[7px] text-yellow-500"></i>
                             </div>
                             <button 
                               onClick={() => setPurchaseModalItem({...frame, type: 'frame'})} 
                               className="px-3 h-full bg-purple-500/15 text-purple-300 rounded-lg text-[8px] font-black active:scale-95 border border-purple-500/25 transition-all"
                             >
-                              شراء
+                              {t("شراء", "Buy")}
                             </button>
                           </div>
                         </div>
@@ -396,7 +397,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                 {storeItems.entries.length === 0 ? (
                   <div className="w-full flex flex-col items-center justify-center py-24 opacity-30 animate-in fade-in zoom-in duration-500">
                     <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
-                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
+                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">{t("لا يوجد شيء هنا", "Nothing here yet")}</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
@@ -413,19 +414,19 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                         </button>
                         <div className="w-full space-y-2">
                           <div className="text-center">
-                            <span className="text-[12px] font-black text-white truncate w-full block">{entry.name}</span>
-                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{entry.durationDays || 7} أيام</span>
+                            <span className="text-[12px] font-black text-white truncate w-full block">{t(entry.name)}</span>
+                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{(entry.durationDays || 7) + " " + t("أيام", "days")}</span>
                           </div>
                           <div className="flex items-center gap-1.5 h-7 w-full">
                             <div className="flex-1 h-full flex items-center justify-center gap-1">
-                              <span className="text-[10px] font-black text-yellow-500">{entry.price?.toLocaleString('ar-EG')}</span>
+                              <span className="text-[10px] font-black text-yellow-500">{entry.price?.toLocaleString('en-US')}</span>
                               <i className="fas fa-coins text-[7px] text-yellow-500"></i>
                             </div>
                             <button 
                               onClick={() => setPurchaseModalItem({...entry, type: 'entry'})} 
                               className="px-3 h-full bg-purple-500/15 text-purple-300 rounded-lg text-[8px] font-black active:scale-95 border border-purple-500/25 transition-all"
                             >
-                              شراء
+                              {t("شراء", "Buy")}
                             </button>
                           </div>
                         </div>
@@ -441,7 +442,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                 {storeItems.backgrounds.length === 0 ? (
                   <div className="w-full flex flex-col items-center justify-center py-24 opacity-30 animate-in fade-in zoom-in duration-500">
                     <i className="fas fa-box-open text-6xl mb-4 text-white/20"></i>
-                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
+                    <p className="text-sm font-black text-white/60 uppercase tracking-widest">{t("لا يوجد شيء هنا", "Nothing here yet")}</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
@@ -456,12 +457,12 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                         </div>
                         <div className="flex flex-col items-center gap-2">
                           <div className="text-center">
-                            <span className="text-[12px] font-black text-white truncate w-full block">{bg.name}</span>
-                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{bg.durationDays || 7} أيام</span>
+                            <span className="text-[12px] font-black text-white truncate w-full block">{t(bg.name)}</span>
+                            <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{(bg.durationDays || 7) + " " + t("أيام", "days")}</span>
                           </div>
                           
                           <div className="flex items-center justify-center gap-1.5">
-                            <span className="text-[11px] font-black text-yellow-500">{(bg.price || 0).toLocaleString('ar-EG')}</span>
+                            <span className="text-[11px] font-black text-yellow-500">{(bg.price || 0).toLocaleString('en-US')}</span>
                             <i className="fas fa-coins text-[8px] text-yellow-500"></i>
                           </div>
 
@@ -469,7 +470,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                             onClick={() => setPurchaseModalItem({...bg, type: 'background'})} 
                             className="w-full py-2.5 bg-purple-600/15 text-purple-300 rounded-xl text-[10px] font-black active:scale-95 border border-purple-500/25 transition-all"
                           >
-                            شراء
+                            {t("شراء", "Buy")}
                           </button>
                         </div>
                       </div>
@@ -489,10 +490,10 @@ export const StoreModal: React.FC<StoreModalProps> = ({
           </div>
           <div className="flex items-center gap-1.5">
             <i className="fas fa-coins text-yellow-500 text-xs"></i>
-            <span className="text-sm font-black text-white">{userCoins.toLocaleString('ar-EG')}</span>
+            <span className="text-sm font-black text-white">{userCoins.toLocaleString('en-US')}</span>
           </div>
         </div>
-        <button onClick={() => { onClose(); onOpenWallet(); }} className="bg-white/5 px-4 py-2 rounded-xl border border-white/10 text-[10px] font-black text-purple-400 active:scale-95">شحن رصيد</button>
+        <button onClick={() => { onClose(); onOpenWallet(); }} className="bg-white/5 px-4 py-2 rounded-xl border border-white/10 text-[10px] font-black text-purple-400 active:scale-95">{t("شحن رصيد", "Recharge")}</button>
       </div>
 
       {previewEntryVideo && (
@@ -515,7 +516,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
           <div className="bg-[#1a0b2e]/80 backdrop-blur-2xl w-full max-w-[320px] rounded-[2.5rem] border border-white/10 p-8 flex flex-col items-center gap-6 shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-purple-600/20 to-transparent"></div>
             
-            <h3 className="text-lg font-black text-white z-10">تأكيد عملية الشراء</h3>
+            <h3 className="text-lg font-black text-white z-10">{t("تأكيد عملية الشراء", "Confirm Purchase")}</h3>
             
             <div className="w-32 h-32 relative flex items-center justify-center z-10">
               {purchaseModalItem.imageUrl ? (
@@ -540,13 +541,13 @@ export const StoreModal: React.FC<StoreModalProps> = ({
             </div>
 
             <div className="text-center z-10">
-              <p className="text-base font-black text-white mb-1">{purchaseModalItem.name}</p>
+              <p className="text-base font-black text-white mb-1">{t(purchaseModalItem.name)}</p>
               <div className="flex flex-col items-center justify-center gap-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl font-black text-yellow-500">{(purchaseModalItem.price || 0).toLocaleString('ar-EG')}</span>
+                  <span className="text-2xl font-black text-yellow-500">{(purchaseModalItem.price || 0).toLocaleString('en-US')}</span>
                   <i className="fas fa-coins text-sm text-yellow-500"></i>
                 </div>
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">المدة: {purchaseModalItem.durationDays || 7} أيام</span>
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{t("المدة: ", "Duration: ") + (purchaseModalItem.durationDays || 7) + " " + t("أيام", "days")}</span>
               </div>
             </div>
 
@@ -556,14 +557,14 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                 disabled={isPurchasing} 
                 className="w-full bg-purple-600/20 backdrop-blur-md py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-purple-500/30 hover:bg-purple-600/30"
               >
-                {isPurchasing ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-check-circle text-purple-400"></i><span>تأكيد وشراء الآن</span></>}
+                {isPurchasing ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-check-circle text-purple-400"></i><span>{t("تأكيد وشراء الآن", "Confirm & Buy Now")}</span></>}
               </button>
               <button 
                 onClick={() => setPurchaseModalItem(null)} 
                 disabled={isPurchasing} 
                 className="w-full bg-white/5 py-4 rounded-2xl font-black text-xs text-white/40 active:scale-95 transition-all border border-white/5"
               >
-                تراجع
+                {t("تراجع", "Cancel")}
               </button>
             </div>
           </div>
@@ -582,7 +583,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
               </div>
 
               <div className="z-10 space-y-2">
-                <h3 className="text-lg font-black text-white">تم بنجاح!</h3>
+                <h3 className="text-lg font-black text-white">{t("تم بنجاح!", "Completed Successfully!")}</h3>
                 <p className="text-[11px] font-bold text-white/60 leading-relaxed">{successMsg}</p>
               </div>
 
@@ -590,7 +591,7 @@ export const StoreModal: React.FC<StoreModalProps> = ({
                 onClick={() => setShowSuccess(false)}
                 className="w-full py-4 bg-purple-600/20 text-purple-300 font-black text-xs rounded-2xl border border-purple-500/30 active:scale-95 transition-all z-10"
               >
-                رائع
+                {t("رائع", "Awesome")}
               </button>
            </div>
         </div>

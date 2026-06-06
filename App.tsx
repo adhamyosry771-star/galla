@@ -4,6 +4,7 @@ import { Room, ChatMessage } from './types';
 import { RoomCard } from './components/RoomCard';
 import { VoiceRoom } from './components/VoiceRoom';
 import { Login } from './components/Login';
+import { registerBackAction } from './backButtonManager';
 import { SetupProfile } from './components/SetupProfile';
 import { NewsPage } from './components/NewsPage';
 import { MessagesPage } from './components/MessagesPage';
@@ -11,17 +12,32 @@ import { ProfilePage } from './components/ProfilePage';
 import { CreateRoomModal } from './components/CreateRoomModal';
 import { NotificationsPage } from './components/NotificationsPage';
 import { BanModal } from './components/BanModal';
+import { RoomBanModal } from './components/RoomBanModal';
 import { auth, db } from './firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { doc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp, deleteDoc, updateDoc, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { doc, onSnapshot, collection, query, orderBy, limit, addDoc, serverTimestamp, deleteDoc, updateDoc, getDocs, getDoc, deleteField, where, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { useLanguage } from './LanguageContext';
+
+const getDeviceId = () => {
+  let devId = localStorage.getItem('yalla_device_id');
+  if (!devId) {
+    devId = 'dev_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('yalla_device_id', devId);
+  }
+  return devId;
+};
 
 const App: React.FC = () => {
+  const { language, t } = useLanguage();
   const [user, setUser] = useState<any>(null);
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showBanModal, setShowBanModal] = useState(false);
+  const [showRoomBanModal, setShowRoomBanModal] = useState(false);
+  const [kickedRoomName, setKickedRoomName] = useState("");
   const [banUntil, setBanUntil] = useState<string | null>(null);
+  const [deviceBanUntil, setDeviceBanUntil] = useState<string | null>(null);
   const [isProfileSetup, setIsProfileSetup] = useState(false);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -35,6 +51,7 @@ const App: React.FC = () => {
   const [shouldOpenWalletOnProfile, setShouldOpenWalletOnProfile] = useState(false);
   
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadPrivateCount, setUnreadPrivateCount] = useState(0);
   const [lastReadTimestamp, setLastReadTimestamp] = useState<number>(() => {
     return parseInt(localStorage.getItem('last_read_notifications') || '0');
   });
@@ -65,20 +82,120 @@ const App: React.FC = () => {
     const unsubDefaultImages = onSnapshot(doc(db, "settings", "default_images"), (snap) => {
       if (snap.exists()) setDefaultImages(snap.data());
     });
-    return () => { unsubDesign(); unsubDefaultImages(); };
+
+    // منع النسخ والقص وتحديد النصوص بشكل كامل لجميع عناصر التطبيق
+    const handlePreventCopy = (e: ClipboardEvent) => {
+      if (auth.currentUser?.email === 'admin@yalla.com') return;
+      e.preventDefault();
+    };
+    const handlePreventSelect = (e: Event) => {
+      if (auth.currentUser?.email === 'admin@yalla.com') return;
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    // منع زر الفأرة الأيمن والضغط المطول بالكامل لمنع حفظ أو تحميل الصور والملفات
+    const handleContextMenu = (e: MouseEvent) => {
+      if (auth.currentUser?.email === 'admin@yalla.com') return;
+      e.preventDefault();
+    };
+
+    // منع سحب الصور تماما لمنع تصفحها أو تحميلها
+    const handleDragStart = (e: DragEvent) => {
+      if (auth.currentUser?.email === 'admin@yalla.com') return;
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'IMG' || target.tagName === 'IMAGE' || target.tagName === 'svg' || target.style.backgroundImage)) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('copy', handlePreventCopy);
+    document.addEventListener('cut', handlePreventCopy);
+    document.addEventListener('selectstart', handlePreventSelect);
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('dragstart', handleDragStart);
+
+    return () => {
+      unsubDesign();
+      unsubDefaultImages();
+      document.removeEventListener('copy', handlePreventCopy);
+      document.removeEventListener('cut', handlePreventCopy);
+      document.removeEventListener('selectstart', handlePreventSelect);
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('dragstart', handleDragStart);
+    };
   }, []);
+
+  useEffect(() => {
+    if (user?.email === 'admin@yalla.com') {
+      document.body.classList.add('admin-user');
+    } else {
+      document.body.classList.remove('admin-user');
+    }
+  }, [user]);
 
   const isVideoUrl = (url?: string | null) => {
     if (!url) return false;
     return url.match(/\.(mp4|webm|ogg|mov)$/) !== null || url.includes('video');
   };
 
+  // Real-time listener for current device ban
+  useEffect(() => {
+    const devId = getDeviceId();
+    const unsub = onSnapshot(doc(db, "bannedDevices", devId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.banUntil) {
+          const banDate = new Date(data.banUntil);
+          if (banDate > new Date()) {
+            setDeviceBanUntil(data.banUntil);
+            setBanUntil(data.banUntil);
+            setShowBanModal(true);
+            signOut(auth).catch(console.error);
+            return;
+          }
+        }
+      }
+      setDeviceBanUntil(null);
+    });
+    return () => unsub();
+  }, []);
+
   // 1. Auth Listener (Runs once)
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
+      const devId = getDeviceId();
+      setLoading(true);
+      
+      // Device Ban check
+      try {
+        const devSnap = await getDoc(doc(db, "bannedDevices", devId));
+        if (devSnap.exists()) {
+          const devData = devSnap.data();
+          if (devData.banUntil) {
+            const banDate = new Date(devData.banUntil);
+            if (banDate > new Date()) {
+              setBanUntil(devData.banUntil);
+              setDeviceBanUntil(devData.banUntil);
+              setShowBanModal(true);
+              await signOut(auth);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+      } catch (devError) {
+        console.error("Device ban check error:", devError);
+      }
+
       if (currentUser) {
-        setLoading(true);
         try {
+          // Store deviceId on successful check
+          await setDoc(doc(db, "users", currentUser.uid), { deviceId: devId }, { merge: true });
+
           const userDoc = await getDoc(doc(db, "users", currentUser.uid));
           if (userDoc.exists()) {
             const data = userDoc.data();
@@ -131,6 +248,33 @@ const App: React.FC = () => {
           }
         }
 
+        // Self-healing: shrink document if size approaches Firestore 1MB limits to prevent Quota Exceeded errors
+        try {
+          const docString = JSON.stringify(data);
+          if (docString.length > 700000) { // More than 700KB (strict limit is 1MB)
+            console.warn("User document size is extremely large: " + docString.length + " bytes. Pruning base64 fields to prevent Firestore limit crash!");
+            const prunes: any = {};
+            if (data.headerURL && data.headerURL.startsWith("data:")) {
+              prunes.headerURL = deleteField();
+            }
+            if (data.animatedAvatar && data.animatedAvatar.startsWith("data:")) {
+              prunes.animatedAvatar = deleteField();
+            }
+            if (docString.length > 900000) {
+              // Extremely critical size, prune photoURL if it's base64, replacing it with a lighter random image
+              if (data.photoURL && data.photoURL.startsWith("data:")) {
+                prunes.photoURL = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>";
+              }
+            }
+            if (Object.keys(prunes).length > 0) {
+              await updateDoc(doc(db, "users", user.uid), prunes);
+              alert(t("تنبيه: تم تحسين مساحة التخزين لملفك الشخصي بنجاح لمنع توقف الحساب متجاوز الحد الأقصى.", "Warning: Your profile storage has been optimized to prevent account suspension. Massive images were removed."));
+            }
+          }
+        } catch (shrinkErr) {
+          console.error("Error running user self-healing shrink scheme:", shrinkErr);
+        }
+
         if (user.email && data.email !== user.email) {
           updateDoc(doc(db, "users", user.uid), { email: user.email });
         }
@@ -156,13 +300,15 @@ const App: React.FC = () => {
           const expiration = item.expiresAt.toDate();
           if (expiration < now) {
             processedExpirations.current.add(itemId);
-            const itemTypeLabel = item.type === 'frame' ? 'الإطار' : item.type === 'entry' ? 'الدخولية' : 'الخلفية';
+            const itemTypeLabel = item.type === 'frame' ? t('الإطار', 'Frame') : item.type === 'entry' ? t('الدخولية', 'Entrance') : t('الخلفية', 'Background');
             const itemIcon = item.type === 'frame' ? 'fa-id-badge' : item.type === 'entry' ? 'fa-door-open' : 'fa-image';
 
             try {
               await addDoc(collection(db, "users", user.uid, "systemNotifications"), {
-                title: "انتهت صلاحية العنصر",
-                desc: `تم انتهاء وقت ${itemTypeLabel} الخاص بك: "${item.name}". يمكنك التوجه للمتجر للحصول عليه مرة أخرى.`,
+                title: t("انتهت صلاحية العنصر", "Item Expired"),
+                desc: language === 'ar' 
+                  ? `تم انتهاء وقت ${itemTypeLabel} الخاص بك: "${item.name}". يمكنك التوجه للمتجر للحصول عليه مرة أخرى.`
+                  : `Your ${itemTypeLabel} has expired: "${item.name}". You can head to the store to get it again.`,
                 icon: itemIcon,
                 createdAt: serverTimestamp()
               });
@@ -207,14 +353,18 @@ const App: React.FC = () => {
     const unsubscribeOfficial = onSnapshot(collection(db, "officialNotifications"), (snap) => {
       const newOfficial = snap.docs.filter(doc => {
         const data = doc.data();
-        const createdAt = data.createdAt?.toMillis() || 0;
+        const createdAt = typeof data.createdAt?.toMillis === 'function'
+          ? data.createdAt.toMillis()
+          : (data.createdAt ? new Date(data.createdAt).getTime() : 0);
         return createdAt > lastReadTimestamp;
       }).length;
       
       const unsubscribeSystem = onSnapshot(collection(db, "users", user.uid, "systemNotifications"), (sysSnap) => {
         const newSystem = sysSnap.docs.filter(doc => {
           const data = doc.data();
-          const createdAt = data.createdAt?.toMillis() || 0;
+          const createdAt = typeof data.createdAt?.toMillis === 'function'
+            ? data.createdAt.toMillis()
+            : (data.createdAt ? new Date(data.createdAt).getTime() : 0);
           return createdAt > lastReadTimestamp;
         }).length;
         setUnreadCount(newOfficial + newSystem);
@@ -225,6 +375,28 @@ const App: React.FC = () => {
 
     return () => unsubscribeOfficial();
   }, [user, lastReadTimestamp]);
+
+  // Listen for unread private messages
+  useEffect(() => {
+    if (!user) {
+      setUnreadPrivateCount(0);
+      return;
+    }
+    const chatsRef = collection(db, "privateChats");
+    const q = query(chatsRef, where("participants", "array-contains", user.uid));
+    const unsub = onSnapshot(q, (snapshot) => {
+      let sum = 0;
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const unreadMsgCount = data[`unread_${user.uid}`] || 0;
+        sum += unreadMsgCount;
+      });
+      setUnreadPrivateCount(sum);
+    }, (err) => {
+      console.error("Error listening for unread private chats:", err);
+    });
+    return () => unsub();
+  }, [user]);
 
   // 4. Global Data Listeners (Rooms, Banners)
   useEffect(() => {
@@ -253,6 +425,53 @@ const App: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [banners]);
+
+  // Back key event interceptors for App-level state
+  useEffect(() => {
+    if (showNotifications) {
+      return registerBackAction(() => {
+        setShowNotifications(false);
+        return true;
+      });
+    }
+  }, [showNotifications]);
+
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      return registerBackAction(() => {
+        setIsCreateModalOpen(false);
+        return true;
+      });
+    }
+  }, [isCreateModalOpen]);
+
+  useEffect(() => {
+    if (showPasswordPrompt) {
+      return registerBackAction(() => {
+        setShowPasswordPrompt(false);
+        setPasswordRoom(null);
+        return true;
+      });
+    }
+  }, [showPasswordPrompt]);
+
+  useEffect(() => {
+    if (showHasRoomError) {
+      return registerBackAction(() => {
+        setShowHasRoomError(false);
+        return true;
+      });
+    }
+  }, [showHasRoomError]);
+
+  useEffect(() => {
+    if (activeTab !== 'home' && !showNotifications) {
+      return registerBackAction(() => {
+        setActiveTab('home');
+        return true;
+      });
+    }
+  }, [activeTab, showNotifications]);
 
   const handleOpenNotifications = () => {
     setShowNotifications(true);
@@ -304,6 +523,13 @@ const App: React.FC = () => {
   }, [bubblePos]);
 
   const handleRoomClick = (room: Room) => {
+    // Check if user is banned from this room
+    if (room.bannedUsers && user?.uid && room.bannedUsers.includes(user.uid)) {
+      setKickedRoomName(room.title || room.name || t("الغرفة", "the room"));
+      setShowRoomBanModal(true);
+      return;
+    }
+
     // If room is locked and user is not owner
     if (room.isLocked && room.owner?.uid !== user?.uid) {
       setPasswordRoom(room);
@@ -332,7 +558,7 @@ const App: React.FC = () => {
       enterRoom(passwordRoom);
       setPasswordRoom(null);
     } else {
-      alert("كلمة المرور غير صحيحة");
+      alert(t("كلمة المرور غير صحيحة", "Incorrect Password"));
     }
   };
 
@@ -367,14 +593,20 @@ const App: React.FC = () => {
   if (!user) return <Login onLoginSuccess={() => {}} />;
   if (!isProfileSetup) return <SetupProfile onComplete={() => setIsProfileSetup(true)} />;
 
-  const finalUserPhoto = userData?.photoURL || defaultImages?.profileImage || user?.photoURL || "https://picsum.photos/200";
+  const finalUserPhoto = userData?.photoURL || defaultImages?.profileImage || user?.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>";
 
   return (
-    <div className="min-h-screen pb-16 max-w-md mx-auto bg-[#1a0b2e] shadow-2xl relative overflow-hidden flex flex-col border-x border-white/5" dir="rtl">
+    <div className="min-h-screen pb-16 max-w-md mx-auto bg-[#1a0b2e] shadow-2xl relative overflow-hidden flex flex-col border-x border-white/5" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {activeTab === 'home' && !showNotifications && (
         <header className="px-5 py-3 flex justify-between items-center sticky top-0 z-10 bg-[#1a0b2e]/90 backdrop-blur-md">
-          <h1 className="text-lg font-black tracking-tighter bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Yalla Games</h1>
+          <h1 className="text-lg font-black tracking-tighter bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Yalla Party</h1>
           <div className="flex gap-2">
+            <button 
+              className="w-8 h-8 relative bg-white/5 rounded-xl flex items-center justify-center border border-white/10 text-white active:scale-90 transition-all"
+              onClick={() => {}}
+            >
+              <i className="fas fa-search text-xs"></i>
+            </button>
             <button 
               onClick={handleOpenNotifications}
               className="w-8 h-8 relative bg-white/5 rounded-xl flex items-center justify-center border border-white/10 text-white active:scale-90 transition-all"
@@ -425,7 +657,7 @@ const App: React.FC = () => {
                 )) : <div className="h-full flex items-center justify-center opacity-20"><i className="fas fa-images"></i></div>}
               </div>
               <section>
-                <h2 className="text-base font-black text-white mb-3">غرف صوتية</h2>
+                <h2 className="text-base font-black text-white mb-3">{t("غرف صوتية", "Voice Rooms")}</h2>
                 <div className="grid grid-cols-2 gap-3">
                   {rooms.map(room => (
                     <RoomCard key={room.id} room={room} design={designSettings} onClick={handleRoomClick} />
@@ -436,14 +668,14 @@ const App: React.FC = () => {
           )}
 
           {activeTab === 'news' && <NewsPage />}
-          {activeTab === 'messages' && <MessagesPage />}
+          {activeTab === 'messages' && <MessagesPage db={db} user={user} currentUserData={userData} defaultImages={defaultImages} />}
           {activeTab === 'me' && <ProfilePage initialUserData={userData} forceOpenWallet={shouldOpenWalletOnProfile} onWalletOpened={() => setShouldOpenWalletOnProfile(false)} />}
         </>
       )}
 
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto h-16 bg-[#0d051a]/98 backdrop-blur-xl border-t border-white/5 flex justify-around items-center px-2 z-50 rounded-t-3xl">
-        <button onClick={() => { setActiveTab('home'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'home' && !showNotifications ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-home text-sm"></i><span className="text-[8px] font-black uppercase">الرئيسية</span></button>
-        <button onClick={() => { setActiveTab('news'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'news' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-newspaper text-sm"></i><span className="text-[8px] font-black uppercase">أخبار</span></button>
+        <button onClick={() => { setActiveTab('home'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'home' && !showNotifications ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-home text-sm"></i><span className="text-[8px] font-black uppercase">{t("الرئيسية", "Home")}</span></button>
+        <button onClick={() => { setActiveTab('news'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'news' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-newspaper text-sm"></i><span className="text-[8px] font-black uppercase">{t("أخبار", "News")}</span></button>
         <div className="relative -top-3 flex flex-col items-center gap-1">
           <button 
             onClick={() => {
@@ -458,10 +690,23 @@ const App: React.FC = () => {
           >
             <i className="fas fa-plus"></i>
           </button>
-          <span className="text-[8px] font-black uppercase text-purple-300/60">إنشاء</span>
+          <span className="text-[8px] font-black uppercase text-purple-300/60">{t("إنشاء", "Create")}</span>
         </div>
-        <button onClick={() => { setActiveTab('messages'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'messages' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-comment-dots text-sm"></i><span className="text-[8px] font-black uppercase">رسائل</span></button>
-        <button onClick={() => { setActiveTab('me'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'me' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-user text-sm"></i><span className="text-[8px] font-black uppercase">أنا</span></button>
+        <button 
+          onClick={() => { setActiveTab('messages'); setShowNotifications(false); }} 
+          className={`flex flex-col items-center gap-0.5 ${activeTab === 'messages' ? 'text-purple-400' : 'text-purple-300/30'}`}
+        >
+          <div className="relative">
+            <i className="fas fa-comment-dots text-sm"></i>
+            {unreadPrivateCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-[#0d051a]">
+                {unreadPrivateCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[8px] font-black uppercase">{t("رسائل", "Messages")}</span>
+        </button>
+        <button onClick={() => { setActiveTab('me'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'me' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-user text-sm"></i><span className="text-[8px] font-black uppercase">{t("أنا", "Me")}</span></button>
       </nav>
 
       {isMinimized && activeRoom && (
@@ -515,13 +760,13 @@ const App: React.FC = () => {
               <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-500 mx-auto mb-4">
                 <i className="fas fa-exclamation-triangle text-2xl"></i>
               </div>
-              <h4 className="text-white font-black text-sm mb-2">تنبيه</h4>
-              <p className="text-white/60 text-[11px] leading-relaxed mb-6 font-bold">عذراً لديك غرفة بالفعل</p>
+              <h4 className="text-white font-black text-sm mb-2">{t("تنبيه", "Warning")}</h4>
+              <p className="text-white/60 text-[11px] leading-relaxed mb-6 font-bold">{t("عذراً لديك غرفة بالفعل", "Sorry, you already have a room")}</p>
               <button 
                 onClick={() => setShowHasRoomError(false)}
                 className="w-full py-3 bg-purple-600 text-white text-xs font-black rounded-xl active:scale-95 transition-transform"
               >
-                فهمت ذلك
+                {t("فهمت ذلك", "I understand")}
               </button>
             </motion.div>
           </motion.div>
@@ -529,10 +774,10 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       {showPasswordPrompt && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6 animate-in fade-in" dir="rtl">
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6 animate-in fade-in" dir={language === 'ar' ? 'rtl' : 'ltr'}>
           <div className="w-full max-w-[320px] bg-[#2d0f4d]/90 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
             <header className="p-5 flex justify-between items-center border-b border-white/5">
-              <h3 className="text-white font-black text-sm">هذه الغرفة مغلقة</h3>
+              <h3 className="text-white font-black text-sm">{t("هذه الغرفة مغلقة", "This room is locked")}</h3>
               <button onClick={() => setShowPasswordPrompt(false)} className="text-white/40 hover:text-white transition-colors">
                 <i className="fas fa-times text-xs"></i>
               </button>
@@ -547,7 +792,7 @@ const App: React.FC = () => {
               </div>
 
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">أدخل كلمة المرور</label>
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">{t("أدخل كلمة المرور", "Enter Password")}</label>
                 <input 
                   type="text"
                   inputMode="numeric"
@@ -568,7 +813,7 @@ const App: React.FC = () => {
                 className="w-full bg-purple-600/20 border border-purple-500/40 backdrop-blur-md py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2"
               >
                 <i className="fas fa-door-open"></i>
-                <span>دخول الغرفة</span>
+                <span>{t("دخول الغرفة", "Enter Room")}</span>
               </button>
             </div>
           </div>
@@ -582,17 +827,34 @@ const App: React.FC = () => {
             key={activeRoom.id}
             room={activeRoom as any} 
             onLeave={handleLeaveRoom} 
+            onKicked={(roomName) => {
+              setKickedRoomName(roomName);
+              setShowRoomBanModal(true);
+            }}
             onMinimize={() => setIsMinimized(true)}
             onOpenWallet={() => { setActiveTab('me'); setIsMinimized(false); setShouldOpenWalletOnProfile(true); handleLeaveRoom(); }}
+            onOpenChat={(otherUid: string) => {
+              setActiveTab('messages');
+              setIsMinimized(false);
+              localStorage.setItem("autoOpenChatWith", otherUid);
+              window.dispatchEvent(new CustomEvent("triggerAutoOpenChat", { detail: otherUid }));
+            }}
             micStates={roomMicStates}
             setMicStates={setRoomMicStates}
             isMicMuted={isMicMuted}
             setIsMicMuted={setIsMicMuted}
             messages={roomMessages}
             setMessages={setRoomMessages}
+            isMinimized={isMinimized}
           />
         </div>
       )}
+
+      <RoomBanModal 
+        isOpen={showRoomBanModal} 
+        onClose={() => setShowRoomBanModal(false)} 
+        roomName={kickedRoomName} 
+      />
 
       <style>{`
         @keyframes slowRotate {

@@ -1,4 +1,4 @@
-export type Language = 'ar' | 'en';
+export type Language = 'ar' | 'en' | 'zh';
 
 export interface FrameDesign {
   id: string;

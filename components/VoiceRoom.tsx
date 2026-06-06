@@ -1,23 +1,30 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useLanguage } from '../LanguageContext';
 import { Room, Gift, ChatMessage } from '../types';
 import { GIFTS as STATIC_GIFTS } from '../constants';
 import { auth, db } from '../firebase';
 import { FruitsGame } from './FruitsGame';
+import { AviatorGame } from './AviatorGame';
 import { getWealthLevelInfo, getCharismaLevelInfo } from '../utils';
-import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, orderBy, addDoc, serverTimestamp, Timestamp, increment, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { FlagIcon } from './ProfilePage';
+import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, orderBy, addDoc, serverTimestamp, Timestamp, increment, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { registerBackAction } from '../backButtonManager';
 
 interface VoiceRoomProps {
   room: Room & { roomBackground?: string; roomIdDisplay?: string; description?: string; micCount?: number };
   onLeave: () => void;
+  onKicked?: (roomName: string) => void;
   onMinimize: () => void;
   onOpenWallet?: () => void;
+  onOpenChat?: (otherUid: string) => void;
   micStates: any[];
   setMicStates: React.Dispatch<React.SetStateAction<any[]>>;
   isMicMuted: boolean;
   setIsMicMuted: React.Dispatch<React.SetStateAction<boolean>>;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  isMinimized?: boolean;
 }
 
 interface UserOnMic {
@@ -62,13 +69,14 @@ const SafeImage: React.FC<{ src: string; className?: string; alt?: string; fallb
 };
 
 export const VoiceRoom: React.FC<VoiceRoomProps> = ({ 
-  room: initialRoom, onLeave, onMinimize, onOpenWallet, 
+  room: initialRoom, onLeave, onKicked, onMinimize, onOpenWallet, onOpenChat,
   micStates, setMicStates, isMicMuted, setIsMicMuted,
-  messages, setMessages
+  messages, setMessages, isMinimized = false
 }) => {
+  const { language, t } = useLanguage();
   const user = auth.currentUser;
   const [currentRoom, setCurrentRoom] = useState(initialRoom);
-  const isRoomOwner = user?.uid === currentRoom.owner?.uid;
+  const isRoomOwner = user?.uid === currentRoom.owner?.uid || user?.email === "admin@yalla.com";
   const [inputText, setInputText] = useState('');
   const [showGifts, setShowGifts] = useState(false);
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
@@ -151,9 +159,12 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   const [selectedMicIndex, setSelectedMicIndex] = useState<number | null>(null);
   const [showMicActions, setShowMicActions] = useState(false);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
   
   const [profileUserUid, setProfileUserUid] = useState<string | null>(null);
   const [profileUserData, setProfileUserData] = useState<any>(null);
+  const [profileFollowersCount, setProfileFollowersCount] = useState<number>(0);
+  const [profileFriendsCount, setProfileFriendsCount] = useState<number>(0);
   
   const [giftTab, setGiftTab] = useState<GiftTab>('normal');
   const [selectedGiftId, setSelectedGiftId] = useState<string | null>(null); 
@@ -161,6 +172,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [currentUserData, setCurrentUserData] = useState<any>(null);
   const [userDataPopupBadges, setUserDataPopupBadges] = useState<any[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const sendingGiftRef = useRef(false);
 
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('manual');
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
@@ -168,6 +181,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   const [selectedQuantity, setSelectedQuantity] = useState<number>(1);
   const [showQuantityMenu, setShowQuantityMenu] = useState(false);
+  const [isSendingGift, setIsSendingGift] = useState(false);
   const quantities = [1, 7, 38, 66, 188, 520, 1314, 2628];
 
   const [designSettings, setDesignSettings] = useState<any>(null);
@@ -182,6 +196,59 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [availableBgs, setAvailableBgs] = useState<any[]>([]);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
   const [showBgSelector, setShowBgSelector] = useState(false);
+  const [showBlacklist, setShowBlacklist] = useState(false);
+  const [blacklistUsers, setBlacklistUsers] = useState<any[]>([]);
+  const [isLoadingBlacklist, setIsLoadingBlacklist] = useState(false);
+
+  const fetchBlacklistUsers = async () => {
+    if (!currentRoom.bannedUsers || currentRoom.bannedUsers.length === 0) {
+      setBlacklistUsers([]);
+      return;
+    }
+    setIsLoadingBlacklist(true);
+    try {
+      const { collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+      const chunks: string[][] = [];
+      const tempBanned = [...currentRoom.bannedUsers];
+      while (tempBanned.length > 0) {
+        chunks.push(tempBanned.splice(0, 10));
+      }
+      
+      let fetched: any[] = [];
+      for (const chunk of chunks) {
+        const q = query(collection(db, "users"), where("uid", "in", chunk));
+        const snap = await getDocs(q);
+        snap.forEach(docSnap => {
+          fetched.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      }
+      setBlacklistUsers(fetched);
+    } catch (err) {
+      console.error("Error fetching blacklist users:", err);
+    } finally {
+      setIsLoadingBlacklist(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showBlacklist) {
+      fetchBlacklistUsers();
+    }
+  }, [showBlacklist, currentRoom.bannedUsers]);
+
+  const handleUnbanUser = async (targetUid: string) => {
+    try {
+      const { arrayRemove } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+      await updateDoc(doc(db, "rooms", currentRoom.id), {
+        bannedUsers: arrayRemove(targetUid)
+      });
+      setBlacklistUsers(prev => prev.filter(u => u.uid !== targetUid));
+      alert(t("تم إلغاء طرد العضو من الغرفة بنجاح", "User unbanned from room successfully"));
+    } catch (err) {
+      console.error("Error unbanning user:", err);
+      alert(t("فشلت العملية، يرجى المحاولة لاحقاً", "Operation failed, please try again later"));
+    }
+  };
   const [showReportModal, setShowReportModal] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [roomPasswordInput, setRoomPasswordInput] = useState(currentRoom.password || '');
@@ -191,8 +258,96 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [cpConfig, setCpConfig] = useState<any>(null);
   const [fruitsSettings, setFruitsSettings] = useState<any>(null);
+  const [aviatorSettings, setAviatorSettings] = useState<any>(null);
   const [popupPartnerData, setPopupPartnerData] = useState<any>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+
+  // Intercept browser back button so it doesn't leave or quit the whole app
+  useEffect(() => {
+    if (isMinimized) return; // Skip if maximized is not active/minimized is true
+
+    return registerBackAction(() => {
+      if (showQuantityMenu) {
+        setShowQuantityMenu(false);
+        return true;
+      }
+      if (showSelectionMenu) {
+        setShowSelectionMenu(false);
+        return true;
+      }
+      if (showBgSelector) {
+        setShowBgSelector(false);
+        return true;
+      }
+      if (showBlacklist) {
+        setShowBlacklist(false);
+        return true;
+      }
+      if (showLockModal) {
+        setShowLockModal(false);
+        return true;
+      }
+      if (showMicActions) {
+        setShowMicActions(false);
+        return true;
+      }
+      if (activeGame) {
+        setActiveGame(null);
+        return true;
+      }
+      if (showGamesMenu) {
+        setShowGamesMenu(false);
+        return true;
+      }
+      if (showEmojiMenu) {
+        setShowEmojiMenu(false);
+        return true;
+      }
+      if (showGifts) {
+        setShowGifts(false);
+        return true;
+      }
+      if (showExtraMenu) {
+        setShowExtraMenu(false);
+        return true;
+      }
+      if (showRoomSettings) {
+        setShowRoomSettings(false);
+        return true;
+      }
+      if (showUserData) {
+        setShowUserData(false);
+        return true;
+      }
+      if (showParticipants) {
+        setShowParticipants(false);
+        return true;
+      }
+      if (showReportModal) {
+        setShowReportModal(false);
+        return true;
+      }
+      if (showReportSuccess) {
+        setShowReportSuccess(false);
+        return true;
+      }
+      
+      // If none of the specific modal overlays are open, trigger the exit / minimize confirmation dialog
+      if (showExitDialog) {
+        setShowExitDialog(false);
+        return true;
+      }
+      
+      // Open the Keep/Exit dialog inside the room instead of leaving the application!
+      setShowExitDialog(true);
+      return true;
+    });
+  }, [
+    isMinimized, showQuantityMenu, showSelectionMenu, showBgSelector, showLockModal, 
+    showMicActions, activeGame, showGamesMenu, showEmojiMenu, showGifts, 
+    showExtraMenu, showRoomSettings, showUserData, showParticipants, 
+    showReportModal, showReportSuccess, showExitDialog
+  ]);
 
   const handleUpdateBalance = async (amount: number) => {
     if (!user) return;
@@ -255,6 +410,105 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }, 4000);
     return () => clearTimeout(msgTimer);
   }, [currentUserData?.currentEntry]); 
+
+  const renderMessageText = (msgText: string) => {
+    if (!msgText) return null;
+
+    const myName = currentUserData?.displayName || user?.displayName || '';
+    
+    // Gather all unique display names in the room to target them for custom color mentions
+    const names = new Set<string>();
+    if (myName) names.add(myName);
+    if (allPresentUsers) {
+      allPresentUsers.forEach(u => {
+        if (u.displayName && u.displayName.trim()) names.add(u.displayName.trim());
+      });
+    }
+    if (displayedMics) {
+      displayedMics.forEach(mic => {
+        if (mic?.user?.displayName && mic?.user?.displayName.trim()) {
+          names.add(mic.user.displayName.trim());
+        }
+      });
+    }
+
+    // Sort by descending length so that longer names match and tokenise first e.g. "@Adham Yosry" rather than "@Adham"
+    const sortedNames = Array.from(names).sort((a, b) => b.length - a.length);
+
+    let parts: { text: string; isMention: boolean; isMeMention: boolean }[] = [{ text: msgText, isMention: false, isMeMention: false }];
+
+    for (const name of sortedNames) {
+      const isMyName = name === myName;
+      const searchStr = `@${name}`;
+      
+      let newParts: typeof parts = [];
+      for (const part of parts) {
+        if (part.isMention) {
+          newParts.push(part);
+          continue;
+        }
+
+        let text = part.text;
+        let index = text.indexOf(searchStr);
+        while (index !== -1) {
+          if (index > 0) {
+            newParts.push({ text: text.substring(0, index), isMention: false, isMeMention: false });
+          }
+          newParts.push({ text: searchStr, isMention: true, isMeMention: isMyName });
+          text = text.substring(index + searchStr.length);
+          index = text.indexOf(searchStr);
+        }
+        if (text.length > 0) {
+          newParts.push({ text, isMention: false, isMeMention: false });
+        }
+      }
+      parts = newParts;
+    }
+
+    // General fallback for usernames without spaces parsed using non-whitespace regex matching (e.g., @Adham)
+    let finalParts: typeof parts = [];
+    for (const part of parts) {
+      if (part.isMention) {
+        finalParts.push(part);
+        continue;
+      }
+
+      const regex = /(@[^\s]+)/g;
+      const splitText = part.text.split(regex);
+      for (const segment of splitText) {
+        if (segment.startsWith('@') && segment.length > 1) {
+          const rawName = segment.substring(1);
+          const isMyName = myName && (rawName.toLowerCase() === myName.toLowerCase() || rawName === myName);
+          finalParts.push({ text: segment, isMention: true, isMeMention: !!isMyName });
+        } else if (segment) {
+          finalParts.push({ text: segment, isMention: false, isMeMention: false });
+        }
+      }
+    }
+
+    return (
+      <span dir="rtl" className="text-right inline/inline-block text-[12px] leading-tight select-text w-full">
+        {finalParts.map((part, idx) => {
+          if (part.isMention) {
+            let dispText = part.text;
+            if (part.isMeMention) {
+              dispText = `@${t('أنا', 'Me')}`;
+            }
+            return (
+              <span 
+                key={idx} 
+                className="font-black text-purple-400 bg-purple-500/10 px-1 py-0.5 rounded-md border border-purple-500/20 mx-0.5 inline-block align-middle cursor-pointer text-right"
+                dir="rtl"
+              >
+                {dispText}
+              </span>
+            );
+          }
+          return <span key={idx} className="align-middle inline text-right" dir="rtl">{part.text}</span>;
+        })}
+      </span>
+    );
+  };
 
   const handleEntryPointerDown = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isEntryMinimized) return;
@@ -325,6 +579,16 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     const unsubRoom = onSnapshot(doc(db, "rooms", currentRoom.id), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as any;
+        if (data.bannedUsers && user?.uid && data.bannedUsers.includes(user.uid)) {
+          if (onKicked) {
+            onKicked(data.title || currentRoom.name || t("الغرفة", "the room"));
+          } else {
+            alert(t("لقد تم طردك من هذه الغرفة", "You have been kicked/banned from this room."));
+          }
+          onLeave();
+          return;
+        }
+
         setCurrentRoom(prev => ({ ...prev, ...data }));
         if (!showRoomSettings) {
           setEditRoomTitle(data.title);
@@ -372,6 +636,18 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   }, [user]);
 
   useEffect(() => {
+    if (user) {
+      const isMutedInRoom = currentRoom.mutedUsers && currentRoom.mutedUsers.includes(user.uid);
+      const myMicIndex = micStates.findIndex(m => m?.user?.uid === user.uid);
+      const isMicSlotMuted = myMicIndex !== -1 && micStates[myMicIndex]?.isMuted;
+      
+      if (isMutedInRoom || isMicSlotMuted) {
+        setIsMicMuted(true);
+      }
+    }
+  }, [currentRoom.mutedUsers, micStates, user, setIsMicMuted]);
+
+  useEffect(() => {
     if (profileUserUid) {
       const unsub = onSnapshot(doc(db, "users", profileUserUid), (docSnap) => {
         if (docSnap.exists()) {
@@ -386,6 +662,24 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       setProfileUserData(null);
     }
   }, [profileUserUid, micStates]);
+
+  useEffect(() => {
+    if (!profileUserUid) {
+      setProfileFollowersCount(0);
+      setProfileFriendsCount(0);
+      return;
+    }
+    const q = query(collection(db, "users"), where("following", "array-contains", profileUserUid));
+    const unsub = onSnapshot(q, (snap) => {
+      const followersUids = snap.docs.map(doc => doc.id);
+      setProfileFollowersCount(followersUids.length);
+      
+      const targetFollowing = profileUserData?.following || [];
+      const friendsUids = targetFollowing.filter((uid: string) => followersUids.includes(uid));
+      setProfileFriendsCount(friendsUids.length);
+    });
+    return unsub;
+  }, [profileUserUid, profileUserData?.following]);
 
   useEffect(() => {
     let unsub: any;
@@ -432,8 +726,11 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     const unsubFruits = onSnapshot(doc(db, "settings", "fruitsGame"), (snap) => {
       if (snap.exists()) setFruitsSettings(snap.data());
     });
+    const unsubAviator = onSnapshot(doc(db, "settings", "aviatorGame"), (snap) => {
+      if (snap.exists()) setAviatorSettings(snap.data());
+    });
     return () => {
-      unsubDesign(); unsubEmojis(); unsubGifts(); unsubCp(); unsubFruits();
+      unsubDesign(); unsubEmojis(); unsubGifts(); unsubCp(); unsubFruits(); unsubAviator();
     };
   }, []);
 
@@ -482,10 +779,37 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     if (e) e.preventDefault();
     if (inputText === '') return; 
     
+    if (currentRoom.mutedUsers && user?.uid && currentRoom.mutedUsers.includes(user.uid)) {
+      alert(t("لقد تم كتمك من الكتابة والدردشة في هذه الغرفة", "You have been muted from chatting in this room."));
+      return;
+    }
+
+    const myName = currentUserData?.displayName || user?.displayName || '';
+    if (myName) {
+      const normalizedMyName = myName.trim().toLowerCase();
+      const lowerInput = inputText.toLowerCase();
+      const nameParts = myName.split(/\s+/).map(p => p.trim().toLowerCase()).filter(p => p.length > 1);
+      
+      const hasSelfMentionText = lowerInput.includes(`@${normalizedMyName}`);
+      const words = inputText.split(/\s+/);
+      const hasSelfMentionParts = words.some(word => {
+        if (word.startsWith('@')) {
+          const rawMentionedWord = word.substring(1).toLowerCase();
+          return nameParts.includes(rawMentionedWord);
+        }
+        return false;
+      });
+
+      if (hasSelfMentionText || hasSelfMentionParts) {
+        alert(t("لا يمكنك منشنة نفسك في الغرفة", "You cannot mention yourself in the room."));
+        return;
+      }
+    }
+    
     try {
       await addDoc(collection(db, "rooms", currentRoom.id, "chat"), {
         userId: user?.uid || 'anonymous',
-        userName: currentUserData?.displayName || 'مستخدم',
+        userName: currentUserData?.displayName || t('مستخدم', 'User'),
         text: inputText,
         type: 'text',
         createdAt: serverTimestamp()
@@ -497,8 +821,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   };
 
   const handleSendGift = async () => {
-    if (!selectedGiftId) return alert("يرجى اختيار هدية أولاً");
-    if (selectedUserIds.size === 0) return alert("يرجى اختيار شخص واحد على الأقل لإرسال الهدية");
+    if (sendingGiftRef.current || isSendingGift) return;
+    if (!selectedGiftId) return alert(t("يرجى اختيار هدية أولاً", "Please select a gift first"));
+    if (selectedUserIds.size === 0) return alert(t("يرجى اختيار شخص واحد على الأقل لإرسال الهدية", "Please select at least one recipient to send the gift"));
     
     const gift = dynamicGifts.find(g => g.id === selectedGiftId);
     if (!gift) return;
@@ -508,9 +833,11 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     const totalCost = giftValue * totalRecipients;
 
     if ((currentUserData?.coins || 0) < totalCost) {
-      return alert("رصيدك غير كافٍ لإرسال الهدية");
+      return alert(t("رصيدك غير كافٍ لإرسال الهدية", "Your balance is insufficient to send the gift"));
     }
 
+    sendingGiftRef.current = true;
+    setIsSendingGift(true);
     try {
       // 1. تحديث بيانات المرسل (ثروة)
       const newWealthXP = (currentUserData.wealthXP || 0) + totalCost;
@@ -564,13 +891,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
       const recipientNames = Array.from(selectedUserIds).map(uid => {
         const p = allPresentUsers.find(u => u.uid === uid);
-        return p?.displayName || "مستخدم";
-      }).join('، ');
+        return p?.displayName || t("مستخدم", "User");
+      }).join(language === 'ar' ? '، ' : ', ');
 
       const giftMsg = {
         userId: user!.uid,
-        userName: currentUserData?.displayName || 'أنا',
-        text: `أرسل ${selectedQuantity} ${gift.name} إلى ${recipientNames}`, 
+        userName: currentUserData?.displayName || t('أنا', 'Me'),
+        text: language === 'ar' 
+          ? `أرسل ${selectedQuantity} ${gift.name} إلى ${recipientNames}` 
+          : `sent ${selectedQuantity} ${gift.name} to ${recipientNames}`, 
         type: 'gift',
         giftName: gift.name,
         giftAnimation: gift.animation || null,
@@ -591,7 +920,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
     } catch (err) {
       console.error(err);
-      alert("حدث خطأ أثناء إرسال الهدية");
+      alert(t("حدث خطأ أثناء إرسال الهدية", "An error occurred while sending the gift"));
+    } finally {
+      sendingGiftRef.current = false;
+      setIsSendingGift(false);
     }
   };
 
@@ -621,17 +953,17 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   };
 
   const handleUpdateRoomSettings = async () => {
-    if (!editRoomTitle.trim()) return alert("يرجى إدخل اسم للغرفة");
+    if (!editRoomTitle.trim()) return alert(t("يرجى إدخل اسم للغرفة", "Please enter a room name"));
     setIsUpdatingRoom(true);
     try {
       await updateDoc(doc(db, "rooms", currentRoom.id), { title: editRoomTitle, description: editRoomDescription, coverImage: editRoomCover, roomBackground: editRoomBg, micCount: editMicCount });
       setShowRoomSettings(false);
-    } catch (err) { alert("حدث خطأ أثناء التحديث"); } finally { setIsUpdatingRoom(false); }
+    } catch (err) { alert(t("حدث خطأ أثناء التحديث", "An error occurred during update")); } finally { setIsUpdatingRoom(false); }
   };
 
   const handleSendReport = async () => {
     if (!user) return;
-    if (reportDetails.length < 5) return alert("يرجى شرح ما حدث بمزيد من التفاصيل");
+    if (reportDetails.length < 5) return alert(t("يرجى شرح ما حدث بمزيد من التفاصيل", "Please explain what happened in more details"));
     
     setIsSubmittingReport(true);
     try {
@@ -650,7 +982,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       setShowReportModal(false);
       setShowReportSuccess(true);
       setReportDetails('');
-    } catch (err) { alert("خطأ في إرسال البلاغ"); } finally { setIsSubmittingReport(false); }
+    } catch (err) { alert(t("خطأ في إرسال البلاغ", "Error submitting report")); } finally { setIsSubmittingReport(false); }
   };
 
   const handleToggleLockRoom = async () => {
@@ -670,7 +1002,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       }
       setShowLockModal(false);
     } catch (err) {
-      alert("خطأ في تحديث قفل الغرفة");
+      alert(t("خطأ في تحديث قفل الغرفة", "Error updating room lock status"));
     } finally {
       setIsUpdatingRoom(false);
     }
@@ -828,6 +1160,123 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }
   };
 
+  const handleAdminAction = async (action: 'kick_mic' | 'mute_mic' | 'mute_room' | 'kick_room') => {
+    if (!profileUserData) return;
+    const targetUid = profileUserData.uid;
+    const userMicIndex = micStates.findIndex(m => m?.user?.uid === targetUid);
+
+    try {
+      if (action === 'kick_mic') {
+        if (userMicIndex !== -1) {
+          await updateDoc(doc(db, "rooms", currentRoom.id, "mics", userMicIndex.toString()), {
+            user: null,
+            status: 'open',
+            receivedCoins: 0
+          });
+          alert(t("تم طرد العضو من المايك بنجاح", "Member kicked from mic successfully"));
+        } else {
+          alert(t("العضو ليس متواجداً على أي مايك حالياً", "Member is not currently on any mic"));
+        }
+      } else if (action === 'mute_mic') {
+        if (userMicIndex !== -1) {
+          const currentMicMute = micStates[userMicIndex]?.isMuted || false;
+          await updateDoc(doc(db, "rooms", currentRoom.id, "mics", userMicIndex.toString()), {
+            isMuted: !currentMicMute
+          });
+          alert(!currentMicMute ? t("تم كتم مايك العضو بنجاح", "Member mic muted successfully") : t("تم إلغاء كتم مايك العضو", "Member mic unmuted successfully"));
+        } else {
+          alert(t("العضو ليس متواجداً على أي مايك حالياً", "Member is not currently on any mic"));
+        }
+      } else if (action === 'mute_room') {
+        const isMuted = currentRoom.mutedUsers && currentRoom.mutedUsers.includes(targetUid);
+        const { arrayUnion, arrayRemove } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+        await updateDoc(doc(db, "rooms", currentRoom.id), {
+          mutedUsers: isMuted ? arrayRemove(targetUid) : arrayUnion(targetUid)
+        });
+        alert(!isMuted ? t("تم إصمات العضو من الغرفة بنجاح", "Member silenced in room successfully") : t("تم إلغاء إصمات العضو في الغرفة", "Member unsilenced in room successfully"));
+      } else if (action === 'kick_room') {
+        const isBanned = currentRoom.bannedUsers && currentRoom.bannedUsers.includes(targetUid);
+        const { arrayUnion, arrayRemove } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+        await updateDoc(doc(db, "rooms", currentRoom.id), {
+          bannedUsers: isBanned ? arrayRemove(targetUid) : arrayUnion(targetUid)
+        });
+        
+        // Also kick them from mic if they are on one!
+        if (!isBanned && userMicIndex !== -1) {
+          await updateDoc(doc(db, "rooms", currentRoom.id, "mics", userMicIndex.toString()), {
+            user: null,
+            status: 'open',
+            receivedCoins: 0
+          });
+        }
+        alert(!isBanned ? t("تم طرد العضو من الغرفة بنجاح", "Member kicked from room successfully") : t("تم إلغاء طرد العضو من الغرفة", "Member unbanned from room successfully"));
+      }
+    } catch (err) {
+      console.error("Error performing admin action:", err);
+      alert(t("فشلت العملية، يرجى المحاولة لاحقاً", "Operation failed, please try again later"));
+    } finally {
+      setShowAdminMenu(false);
+    }
+  };
+
+  const handleFollowUser = async () => {
+    if (!user || !profileUserData) return;
+    try {
+      const targetUid = profileUserData.uid;
+      const alreadyFollowing = currentUserData?.following?.includes(targetUid);
+      
+      const firestore = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+      const arrayUnion = firestore.arrayUnion;
+      const arrayRemove = firestore.arrayRemove;
+      
+      const userRef = doc(db, "users", user.uid);
+      const targetRef = doc(db, "users", targetUid);
+      
+      await updateDoc(userRef, {
+        following: alreadyFollowing ? arrayRemove(targetUid) : arrayUnion(targetUid)
+      });
+      
+      try {
+        await updateDoc(targetRef, {
+          followers: alreadyFollowing ? arrayRemove(user.uid) : arrayUnion(user.uid)
+        });
+      } catch (err) {
+        console.warn("Could not write followers component directly (this is expected under security rules, it is computed dynamically):", err);
+      }
+      
+      if (!alreadyFollowing) {
+        const reqRef = doc(db, "users", targetUid, "followRequests", user.uid);
+        await setDoc(reqRef, {
+          uid: user.uid,
+          displayName: currentUserData?.displayName || user.displayName || 'User',
+          photoURL: currentUserData?.photoURL || user.photoURL || '',
+          animatedAvatar: currentUserData?.animatedAvatar || '',
+          createdAt: serverTimestamp()
+        });
+      } else {
+        try {
+          await deleteDoc(doc(db, "users", targetUid, "followRequests", user.uid));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      
+      // Update local profileUserData state so change is immediate
+      setProfileUserData((prev: any) => {
+        if (!prev) return prev;
+        const currentFollowers = prev.followers || [];
+        return {
+          ...prev,
+          followers: alreadyFollowing 
+            ? currentFollowers.filter((id: string) => id !== user.uid)
+            : [...currentFollowers, user.uid]
+        };
+      });
+    } catch (err) {
+      console.error("Error following/unfollowing user:", err);
+    }
+  };
+
   const allPresentUsers: any[] = [];
   if (currentUserData || user) allPresentUsers.push(currentUserData || { uid: user?.uid, displayName: user?.displayName, photoURL: user?.photoURL, customId: user?.uid.substring(0,8), animatedAvatar: currentUserData?.animatedAvatar || null });
   micStates.forEach(mic => { if (mic?.user && !allPresentUsers.find(p => p.uid === mic.user.uid)) allPresentUsers.push(mic.user); });
@@ -837,11 +1286,16 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const userIsOnMic = micStates.some(m => m?.user?.uid === user?.uid);
   const profileCustomId = profileUserData?.customId || profileUserData?.uid?.substring(0, 8) || '';
   const profileCustomIdIcon = profileUserData?.customIdIcon;
-  const pIdX = profileUserData?.idOffsetX ?? 28;
-  const pIdY = profileUserData?.idOffsetY ?? 0.5;
+  const pIdX = profileUserData?.profileIdOffsetX ?? profileUserData?.idOffsetX ?? 28;
+  const pIdY = profileUserData?.profileIdOffsetY ?? profileUserData?.idOffsetY ?? 0.5;
+  const pIdFS = profileUserData?.profileIdFontSize ?? profileUserData?.idFontSize ?? 11;
   const ownerCustomIdIcon = ownerData?.customIdIcon;
   const idX = ownerData?.idOffsetX ?? 28;
   const idY = ownerData?.idOffsetY ?? 0.5;
+  const hasRoomCustomId = ownerData?.roomIdOffsetX !== undefined;
+  const roomIdX = ownerData?.roomIdOffsetX ?? 28;
+  const roomIdY = ownerData?.roomIdOffsetY ?? 0.5;
+  const roomIdFS = ownerData?.roomIdFontSize ?? 11;
   const activeMicCount = currentRoom.micCount || 10;
   const displayedMics = micStates.slice(0, activeMicCount);
   const micSizeClass = activeMicCount === 15 ? 'w-[51px] h-[51px] sm:w-[57px] sm:h-[57px]' : activeMicCount === 10 ? 'w-[53px] h-[53px] sm:w-[63px] sm:h-[63px]' : 'w-[60px] h-[60px] sm:w-[70px] sm:h-[70px]';
@@ -921,9 +1375,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     <div className="relative w-[70px] h-[22px] flex items-center bg-contain bg-center bg-no-repeat mt-0.5 flex-shrink-0" style={{ backgroundImage: `url(${ownerCustomIdIcon})` }}>
                       <span className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" 
                             style={{ 
-                              paddingLeft: `${(idX * 70) / 90}px`, 
-                              paddingTop: `${(idY * 22) / 28}px`,
-                              fontSize: `${((ownerData?.idFontSize || 10) * 70) / 90}px`
+                              paddingLeft: hasRoomCustomId ? `${roomIdX}px` : `${(idX * 70) / 90}px`, 
+                              paddingTop: hasRoomCustomId ? `${roomIdY}px` : `${(idY * 22) / 28}px`,
+                              fontSize: hasRoomCustomId ? `${roomIdFS}px` : `${((ownerData?.idFontSize || 10) * 70) / 90}px`
                             }}>
                         {displayId}
                       </span>
@@ -947,7 +1401,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         <div className={`grid grid-cols-5 px-2 transition-all duration-500 ${micGapClass}`}>
           {displayedMics.map((mic, i) => {
             const displayName = mic?.user ? mic.user.displayName : (i + 1).toString();
-            const isLongName = displayName.length > 7;
+            const isLongName = displayName.length > 9;
             const coins = mic?.receivedCoins || 0;
             
             return (
@@ -963,7 +1417,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                             <img src={mic.user.animatedAvatar} className="w-full h-full object-cover" alt={mic.user.displayName} />
                           )
                         ) : (
-                          <img src={mic.user.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" alt={mic.user.displayName} />
+                          <img src={mic.user.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover" alt={mic.user.displayName} />
                         )}
                       </div>
                       {mic.user.currentFrame && <img src={mic.user.currentFrame} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-125" alt="frame" />}
@@ -1016,27 +1470,55 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-hide relative">
           <div className="flex flex-col gap-2 w-full animate-in fade-in duration-500">
-            <div className="bg-black/40 rounded-lg p-2 px-3 relative overflow-hidden flex items-center justify-start min-h-[32px] max-w-[85%]"><p className="text-[9px] font-black text-white/80 leading-tight tracking-wide text-right">مرحبا بك في يلا جيمز برجاء الالتزام بقواعد التطبيق والدردشه بشكل لائق يليق بالمجتمع في حال المخالفه سيتم حظر الحساب</p></div>
-            {currentRoom.description && <div className="bg-black/50 rounded-lg p-2.5 px-4 relative overflow-hidden flex flex-col items-start justify-center min-h-[32px] w-fit max-w-[85%]"><span className="text-[7px] font-black text-white/40 mb-1 uppercase tracking-tighter">إشعار الغرفة</span><p className="text-[10px] font-black text-yellow-400 leading-normal tracking-wide text-right whitespace-pre-wrap break-words w-full">{currentRoom.description}</p></div>}
+            <div className="bg-black/40 rounded-lg p-2 px-3 relative overflow-hidden flex items-center justify-start min-h-[32px] max-w-[85%]"><p className="text-[9px] font-black text-white/80 leading-tight tracking-wide text-start">{t("مرحبا بك في يلا بارتي برجاء الالتزام بقواعد التطبيق والدردشه بشكل لائق يليق بالمجتمع في حال المخالفه سيتم حظر الحساب", "Welcome to Yalla Party! Please adhere to the application rules and chat in an appropriate manner. In case of violation, your account will be banned.")}</p></div>
+            {currentRoom.description && <div className="bg-black/50 rounded-lg p-2.5 px-4 relative overflow-hidden flex flex-col items-start justify-center min-h-[32px] w-fit max-w-[85%]"><span className="text-[7px] font-black text-white/40 mb-1 uppercase tracking-tighter">{t("إشعار الغرفة", "Room Announcement")}</span><p className="text-[10px] font-black text-yellow-400 leading-normal tracking-wide text-start whitespace-pre-wrap break-words w-full">{currentRoom.description}</p></div>}
           </div>
-          {messages.map(msg => (
-            <div key={msg.id} className="flex flex-col items-start gap-1 animate-in slide-in-from-right duration-300">
-              <span className="font-black text-[10px] text-purple-300/80 mr-2">{msg.userId === user?.uid || msg.userId === 'me' ? 'أنا' : msg.userName}</span>
-              <div className={`bg-black/20 backdrop-blur-sm px-3 py-2 rounded-xl max-w-[85%] shadow-sm overflow-hidden ${msg.type === 'gift' ? 'border border-yellow-500/30 bg-yellow-500/5' : ''}`}>
-                {msg.image ? <img src={msg.image} className="max-w-full max-h-32 object-contain rounded-lg" alt="emoji" /> : <span className={`text-[12px] leading-tight ${msg.type === 'gift' ? 'text-yellow-400 font-black' : 'text-white/95'}`}>{msg.text}</span>}
+          {messages.map(msg => {
+            const isMe = msg.userId === user?.uid || msg.userId === 'me' || (currentUserData?.displayName && msg.userName === currentUserData.displayName) || (user?.displayName && msg.userName === user.displayName);
+            return (
+              <div key={msg.id} className="flex flex-col items-start gap-1 animate-in slide-in-from-right duration-300">
+                <span className="font-black text-[10px] text-purple-300/80 mr-2">{isMe ? t('أنا', 'Me') : msg.userName}</span>
+                <div className={`bg-black/20 backdrop-blur-sm px-3 py-2 rounded-xl max-w-[85%] shadow-sm overflow-hidden ${msg.type === 'gift' ? 'border border-yellow-500/30 bg-yellow-500/5' : ''}`}>
+                  {msg.image ? (
+                    <img src={msg.image} className="max-w-full max-h-32 object-contain rounded-lg" alt="emoji" />
+                  ) : (
+                    <span 
+                      dir="rtl" 
+                      className={`text-[12px] leading-tight text-right block w-full select-text ${msg.type === 'gift' ? 'text-yellow-400 font-black' : 'text-white/95'}`}
+                    >
+                      {renderMessageText(msg.text)}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-          {showJoinMessage && <div className="flex flex-col items-start animate-in fade-in slide-in-from-bottom duration-500"><div className="bg-purple-600/30 backdrop-blur-md border border-purple-500/20 px-4 py-1.5 rounded-full shadow-lg"><p className="text-[10px] font-black text-white">مرحباً بـ <span className="text-yellow-400">{currentUserData?.displayName || user?.displayName || 'مستخدم جديد'}</span> لقد دخل الغرفة</p></div></div>}
+            );
+          })}
+          {showJoinMessage && <div className="flex flex-col items-start animate-in fade-in slide-in-from-bottom duration-500"><div className="bg-purple-600/30 backdrop-blur-md border border-purple-500/20 px-4 py-1.5 rounded-full shadow-lg"><p className="text-[10px] font-black text-white">{t("مرحباً بـ ", "Welcome ")}<span className="text-yellow-400">{currentUserData?.displayName || user?.displayName || t('مستخدم جديد', 'New User')}</span>{t(" لقد دخل الغرفة", " has entered the room")}</p></div></div>}
           <div ref={chatEndRef} />
         </div>
         <div className="px-3 pb-6 flex items-center gap-2 mt-auto relative">
-          {userIsOnMic && <button onClick={() => setIsMicMuted(!isMicMuted)} className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 transition-all bg-white/10 text-white shadow-lg active:scale-90 overflow-hidden flex-shrink-0"><i className={`fas ${!isMicMuted ? 'fa-microphone' : 'fa-microphone-slash'} text-sm ${isMicMuted ? 'text-white/30' : 'text-purple-400'}`}></i></button>}
+          {userIsOnMic && (
+            <button 
+              onClick={() => {
+                const isMutedInRoom = currentRoom.mutedUsers && user?.uid && currentRoom.mutedUsers.includes(user.uid);
+                const myMicIndex = micStates.findIndex(m => m?.user?.uid === user?.uid);
+                const isMicSlotMuted = myMicIndex !== -1 && micStates[myMicIndex]?.isMuted;
+                if (isMutedInRoom || isMicSlotMuted) {
+                  alert(t("تم كتم المايكروفون الخاص بك من قبل الإدارة", "Your microphone has been muted by the admin."));
+                  return;
+                }
+                setIsMicMuted(!isMicMuted);
+              }} 
+              className="w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 transition-all bg-white/10 text-white shadow-lg active:scale-90 overflow-hidden flex-shrink-0"
+            >
+              <i className={`fas ${!isMicMuted ? 'fa-microphone' : 'fa-microphone-slash'} text-sm ${isMicMuted ? 'text-white/30' : 'text-purple-400'}`}></i>
+            </button>
+          )}
           <div className="flex-1 h-10 flex items-center gap-2">
             <div className="flex-1 h-full relative">
               <form onSubmit={handleSendMessage} className="h-full flex items-center">
                 <div className="flex-1 h-full relative">
-                  <input value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="تفاعل مع الجميع..." className="w-full h-full bg-white/10 backdrop-blur-md border border-white/10 rounded-full px-11 pr-11 pl-11 text-[11px] text-white outline-none placeholder:text-white/30 shadow-lg" />
+                  <input ref={chatInputRef} value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder={t("تفاعل مع الجميع...", "Interact with everyone...")} className="w-full h-full bg-white/10 backdrop-blur-md border border-white/10 rounded-full px-11 pr-11 pl-11 text-[11px] text-white outline-none placeholder:text-white/30 shadow-lg" />
                   <button type="submit" className={`absolute left-1 top-1 bottom-1 aspect-square rounded-full flex items-center justify-center transition-all duration-500 border border-white/5 ${inputText !== '' ? 'bg-purple-500/30 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-white/5 text-white/10 opacity-40 pointer-events-none'}`}><i className="fas fa-paper-plane text-[10px]"></i></button>
                   <button type="button" onClick={() => setShowEmojiMenu(true)} className="absolute right-1 top-1 bottom-1 aspect-square rounded-full flex items-center justify-center transition-all duration-300 border border-white/5 active:scale-90 bg-white/5 text-white/40"><i className="fas fa-smile text-[12px]"></i></button>
                 </div>
@@ -1058,21 +1540,21 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       </div>
       
       {showEmojiMenu && (
-        <><div className="fixed inset-0 z-[700] bg-black/10 animate-in fade-in" onClick={() => setShowEmojiMenu(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md bg-black/70 border-t border-white/10 animate-slide-up h-[350px] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl mx-auto z-[710]"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 flex-shrink-0"></div><div className="flex-1 overflow-y-auto p-4 scrollbar-hide"><div className="space-y-6">{dynamicEmojis.length > 0 ? (<div><div className="grid grid-cols-4 gap-3">{dynamicEmojis.map((emoji) => (<button key={emoji.id} onClick={() => sendGifEmoji(emoji.imageUrl)} className="aspect-square flex items-center justify-center bg-white/5 rounded-xl transition-all active:scale-90 overflow-hidden border border-white/5"><img src={emoji.imageUrl} className="w-full h-full object-contain" alt="GIF" /></button>))}</div></div>) : (<div className="flex flex-col items-center justify-center py-20 opacity-20"><i className="fas fa-smile text-4xl mb-2"></i><p className="text-[10px] font-black uppercase">لا توجد إيموجيات حالياً</p></div>)}</div></div></div></>
+        <><div className="fixed inset-0 z-[700] bg-black/10 animate-in fade-in" onClick={() => setShowEmojiMenu(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md bg-black/70 border-t border-white/10 animate-slide-up h-[350px] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl mx-auto z-[710]"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 flex-shrink-0"></div><div className="flex-1 overflow-y-auto p-4 scrollbar-hide"><div className="space-y-6">{dynamicEmojis.length > 0 ? (<div><div className="grid grid-cols-4 gap-3">{dynamicEmojis.map((emoji) => (<button key={emoji.id} onClick={() => sendGifEmoji(emoji.imageUrl)} className="aspect-square flex items-center justify-center bg-white/5 rounded-xl transition-all active:scale-90 overflow-hidden border border-white/5"><img src={emoji.imageUrl} className="w-full h-full object-contain" alt="GIF" /></button>))}</div></div>) : (<div className="flex flex-col items-center justify-center py-20 opacity-20"><i className="fas fa-smile text-4xl mb-2"></i><p className="text-[10px] font-black uppercase">{t("لا توجد إيموجيات حالياً", "No emojis currently available")}</p></div>)}</div></div></div></>
       )}
 
       {showExtraMenu && (
-        <><div className="fixed inset-0 z-[105] bg-black/10 animate-in fade-in" onClick={() => setShowExtraMenu(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[110] bg-black/60 backdrop-blur-2px border-t border-white/10 animate-slide-up h-[50%] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 flex-shrink-0"></div><div className="p-8 grid grid-cols-4 gap-y-4 gap-x-4 flex-1 overflow-y-auto scrollbar-hide mt-4">
+        <><div className="fixed inset-0 z-[105] bg-black/10 animate-in fade-in" onClick={() => setShowExtraMenu(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[110] bg-black/60 backdrop-blur-2px border-t border-white/10 animate-slide-up h-[250px] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 flex-shrink-0"></div><div className="p-6 pt-2 grid grid-cols-4 gap-y-3 gap-x-4 flex-1 overflow-y-auto scrollbar-hide mt-2">
           {isRoomOwner && (
-            <button onClick={() => { setShowRoomSettings(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-cog text-xl"></i></div><span className="text-[10px] font-black text-white/60">الإعدادات</span></button>
+            <button onClick={() => { setShowRoomSettings(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-cog text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الإعدادات", "Settings")}</span></button>
           )}
-          <button onClick={() => { setShowGamesMenu(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">الألعاب</span></button><button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">الموسيقى</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>المؤثرات</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">كتم الغرفة</span></button><button className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">مشاركة</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">إبلاغ</span></button>
+          <button onClick={() => { setShowGamesMenu(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الألعاب", "Games")}</span></button><button className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الموسيقى", "Music")}</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>{t("المؤثرات", "Effects")}</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">{isRoomMuted ? t("إلغاء الكتم", "Unmute") : t("كتم الغرفة", "Mute Room")}</span></button><button className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("مشاركة", "Share")}</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("إبلاغ", "Report")}</span></button>
 {isRoomOwner && (
-  <button onClick={() => { setShowLockModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-3 active:scale-90 transition-transform">
+  <button onClick={() => { setShowLockModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform">
     <div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center ${currentRoom.isLocked ? 'text-white' : 'text-white/80'}`}>
       <i className={`fas ${currentRoom.isLocked ? 'fa-lock' : 'fa-lock-open'} text-xl`}></i>
     </div>
-    <span className="text-[10px] font-black text-white/60">قفل الغرفة</span>
+    <span className="text-[10px] font-black text-white/60">{t("قفل الغرفة", "Lock Room")}</span>
   </button>
 )}
 </div></div></>
@@ -1081,11 +1563,11 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       {showGamesMenu && (
         <>
           <div className="fixed inset-0 z-[120] bg-black/10 animate-in fade-in" onClick={() => setShowGamesMenu(false)}></div>
-          <div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[130] bg-black/60 border-t border-white/10 animate-slide-up h-[60%] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl">
+          <div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[130] bg-black/60 border-t border-white/10 animate-slide-up h-[250px] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl">
             <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 mb-2 flex-shrink-0"></div>
-            <div className="p-6 overflow-y-auto scrollbar-hide">
-              <h3 className="text-white font-black text-sm mb-6 text-center tracking-tighter">قائمة الألعاب</h3>
-              <div className="grid grid-cols-4 gap-4">
+            <div className="p-6 pt-2 overflow-y-auto scrollbar-hide">
+              <h3 className="text-white font-black text-xs mb-3 text-center tracking-tighter">{t("قائمة الألعاب", "Games Menu")}</h3>
+              <div className="grid grid-cols-4 gap-y-3 gap-x-4">
                 <button 
                   onClick={() => { setActiveGame('fruits'); setShowGamesMenu(false); }}
                   className="flex flex-col items-center gap-2 group active:scale-95 transition-all"
@@ -1099,16 +1581,32 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                       </div>
                     )}
                   </div>
-                  <span className="text-[10px] font-black text-white/70 tracking-tighter">لعبة الفواكه</span>
+                  <span className="text-[10px] font-black text-white/70 tracking-tighter text-center">{t("لعبة الفواكه", "Fruits Game")}</span>
+                </button>
+
+                <button 
+                  onClick={() => { setActiveGame('aviator'); setShowGamesMenu(false); }}
+                  className="flex flex-col items-center gap-2 group active:scale-95 transition-all"
+                >
+                  <div className={`w-14 h-14 rounded-2xl shadow-lg overflow-hidden ${!aviatorSettings?.gameIcon ? 'bg-gradient-to-br from-rose-500 to-purple-600 p-[1px]' : ''}`}>
+                    {aviatorSettings?.gameIcon ? (
+                      <img src={aviatorSettings.gameIcon} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                    ) : (
+                      <div className="w-full h-full rounded-2xl bg-black/40 flex items-center justify-center border border-white/10">
+                        <span className="text-2xl group-hover:scale-110 group-hover:rotate-12 transition-all duration-300">✈️</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-black text-white/70 tracking-tighter text-center">{t("لعبة الطائرة", "Aviator Game")}</span>
                 </button>
                 
                 {/* Placeholder for future games */}
-                {[...Array(7)].map((_, i) => (
+                {[...Array(6)].map((_, i) => (
                   <div key={i} className="flex flex-col items-center gap-2 opacity-20">
                     <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
                       <i className="fas fa-lock text-xs text-white/40"></i>
                     </div>
-                    <span className="text-[10px] font-black text-white/40 tracking-tighter">قريباً</span>
+                    <span className="text-[10px] font-black text-white/40 tracking-tighter">{t("قريباً", "Soon")}</span>
                   </div>
                 ))}
               </div>
@@ -1125,15 +1623,186 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         />
       )}
 
+      {activeGame === 'aviator' && (
+        <AviatorGame 
+          onClose={() => setActiveGame(null)} 
+          userBalance={currentUserData?.coins || 0}
+          onUpdateBalance={handleUpdateBalance}
+        />
+      )}
+
       {showRoomSettings && (
-        <div className="fixed inset-0 z-[600] bg-[#1a0b2e] flex flex-col animate-in slide-in-from-bottom duration-300" dir="rtl"><header className="p-4 flex items-center justify-between border-b border-white/5 bg-[#0d051a]"><button onClick={() => setShowRoomSettings(false)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all"><i className="fas fa-times"></i></button><h2 className="text-sm font-black text-white">إعدادات الغرفة</h2><button onClick={handleUpdateRoomSettings} disabled={isUpdatingRoom} className="px-4 py-2 rounded-xl bg-purple-600/10 text-purple-400 text-sm font-black active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">{isUpdatingRoom && <i className="fas fa-circle-notch animate-spin text-[10px]"></i>}<span>حفظ</span></button></header><div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">{!showBgSelector ? (<><div className="flex flex-col items-center gap-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">صورة الغرفة</label><button onClick={() => coverInputRef.current?.click()} className="relative w-32 h-32 rounded-[2.5rem] bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden transition-all group-hover:bg-white/10"><img src={editRoomCover} className="w-full h-full object-cover" alt="Room Cover" /><div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><i className="fas fa-camera text-white"></i></div></button><input type="file" ref={coverInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} /></div><div className="space-y-2"><div className="flex justify-between items-center mr-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اسم الغرفة</label><span className="text-[9px] font-bold text-white/40">{editRoomTitle.length}/16</span></div><input type="text" value={editRoomTitle} maxLength={16} onChange={(e) => setEditRoomTitle(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500/40 transition-all shadow-inner" placeholder="اسم الغرفة..." /></div><div className="space-y-2"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">وصف الغرفة</label><textarea value={editRoomDescription} onChange={(e) => setEditRoomDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-sm text-white outline-none h-32 focus:border-purple-500/40 transition-all shadow-inner" placeholder="اكتب وصفاً أو ترحيباً خاصاً لزوار غرفتك..." /></div><div className="space-y-3"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">عدد الميكروفونات</label><div className="grid grid-cols-3 gap-3">{[5, 10, 15].map((count) => (<button key={count} onClick={() => setEditMicCount(count)} className={`py-3 rounded-2xl font-black text-xs transition-all border ${editMicCount === count ? 'bg-purple-600 text-white border-purple-500 shadow-lg scale-95' : 'bg-white/5 text-white/40 border-white/10'}`}>{count} ميك</button>))}</div></div><div className="space-y-4"><label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">خلفية الغرفة</label><button onClick={() => setShowBgSelector(true)} className="w-full flex items-center justify-between p-5 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all"><div className="flex items-center gap-4"><div className="w-10 h-14 rounded-lg overflow-hidden border border-white/20 bg-black/40">{isVideoUrl(editRoomBg) ? <video src={editRoomBg} muted className="w-full h-full object-cover" /> : <img src={editRoomBg || editRoomCover} className="w-full h-full object-cover" />}</div><span className="text-sm font-black text-white">اختر خلفية للغرفة</span></div><i className="fas fa-chevron-left text-purple-400"></i></button></div></>) : (<div className="space-y-6 animate-in slide-in-from-left"><div className="flex items-center gap-3"><button onClick={() => setShowBgSelector(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white"><i className="fas fa-arrow-right text-xs"></i></button><span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">اختر الخلفية المفضلة</span></div><div className="grid grid-cols-3 gap-3">{availableBgs.map((bg) => (<div key={bg.id} onClick={() => { setEditRoomBg(bg.imageUrl); setShowBgSelector(false); }} className={`relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer border-2 transition-all ${editRoomBg === bg.imageUrl ? 'border-purple-500 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-60'}`}>{isVideoUrl(bg.imageUrl) ? <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <img src={bg.imageUrl} className="w-full h-full object-cover" alt="Background" />}{bg.remainingDays !== undefined && (<div className="absolute top-2 right-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-lg shadow-xl z-20 flex items-center gap-0.5"><span className="text-purple-300">{bg.remainingDays}</span><span className="opacity-80">يوم</span></div>)}{editRoomBg === bg.imageUrl && <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center"><i className="fas fa-check-circle text-white text-xl"></i></div>}</div>))}</div></div>)}</div></div>
+        <div className="fixed inset-0 z-[600] bg-[#1a0b2e] flex flex-col animate-in slide-in-from-bottom duration-300" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+          <header className="p-4 flex items-center justify-between border-b border-white/5 bg-[#0d051a]">
+            <button onClick={() => setShowRoomSettings(false)} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all">
+              <i className="fas fa-times"></i>
+            </button>
+            <h2 className="text-sm font-black text-white">{t("إعدادات الغرفة", "Room Settings")}</h2>
+            <button onClick={handleUpdateRoomSettings} disabled={isUpdatingRoom} className="px-4 py-2 rounded-xl bg-purple-600/10 text-purple-400 text-sm font-black active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50">
+              {isUpdatingRoom && <i className="fas fa-circle-notch animate-spin text-[10px]"></i>}
+              <span>{t("حفظ", "Save")}</span>
+            </button>
+          </header>
+          
+          <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
+            {!showBgSelector && !showBlacklist ? (
+              <>
+                <div className="flex flex-col items-center gap-4">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("صورة الغرفة", "Room Cover")}</label>
+                  <button onClick={() => coverInputRef.current?.click()} className="relative w-32 h-32 rounded-[2.5rem] bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden transition-all group-hover:bg-white/10">
+                    <img src={editRoomCover} className="w-full h-full object-cover" alt="Room Cover" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                      <i className="fas fa-camera text-white"></i>
+                    </div>
+                  </button>
+                  <input type="file" ref={coverInputRef} accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center mx-2">
+                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("اسم الغرفة", "Room Name")}</label>
+                    <span className="text-[9px] font-bold text-white/40">{editRoomTitle.length}/16</span>
+                  </div>
+                  <input type="text" value={editRoomTitle} maxLength={16} onChange={(e) => setEditRoomTitle(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500/40 transition-all shadow-inner text-start" placeholder={t("اسم الغرفة...", "Room Name...")} />
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center mx-2">
+                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("وصف الغرفة", "Room Description")}</label>
+                    <span className="text-[9px] font-bold text-white/40">{editRoomDescription.length}/250</span>
+                  </div>
+                  <textarea value={editRoomDescription} maxLength={250} onChange={(e) => setEditRoomDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-sm text-white outline-none h-32 focus:border-purple-500/40 transition-all shadow-inner text-start" placeholder={t("اكتب وصفاً أو ترحيباً خاصاً لزوار غرفتك...", "Write a description or a special greeting for your room visitors...")} />
+                </div>
+                
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mx-2">{t("عدد الميكروفونات", "Number of Microphones")}</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[5, 10, 15].map((count) => (
+                      <button key={count} onClick={() => setEditMicCount(count)} className={`py-3 rounded-2xl font-black text-xs transition-all border ${editMicCount === count ? 'bg-purple-600 text-white border-purple-500 shadow-lg scale-95' : 'bg-white/5 text-white/40 border-white/10'}`}>
+                        {count} {t("ميك", "Mics")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mx-2">{t("القائمة السوداء", "Blacklist")}</label>
+                    <button onClick={() => setShowBlacklist(true)} className="w-full flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+                          <i className="fas fa-ban text-base"></i>
+                        </div>
+                        <span className="text-sm font-black text-white">{t("القائمة السوداء", "Blacklist")}</span>
+                      </div>
+                      <i className={`fas ${language === 'en' ? 'fa-chevron-right' : 'fa-chevron-left'} text-purple-400`}></i>
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mx-2">{t("خلفية الغرفة", "Room Background")}</label>
+                    <button onClick={() => setShowBgSelector(true)} className="w-full flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-14 rounded-lg overflow-hidden border border-white/20 bg-black/40">
+                          {isVideoUrl(editRoomBg) ? <video src={editRoomBg} muted className="w-full h-full object-cover" /> : <img src={editRoomBg || editRoomCover} className="w-full h-full object-cover" />}
+                        </div>
+                        <span className="text-sm font-black text-white">{t("اختر خلفية للغرفة", "Select Room Background")}</span>
+                      </div>
+                      <i className={`fas ${language === 'en' ? 'fa-chevron-right' : 'fa-chevron-left'} text-purple-400`}></i>
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : showBgSelector ? (
+              <div className="space-y-6 animate-in slide-in-from-left">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setShowBgSelector(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white">
+                    <i className={`fas ${language === 'en' ? 'fa-arrow-left' : 'fa-arrow-right'} text-xs`}></i>
+                  </button>
+                  <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("اختر الخلفية المفضلة", "Select Preferred Background")}</span>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  {availableBgs.map((bg) => (
+                    <div key={bg.id} onClick={() => { setEditRoomBg(bg.imageUrl); setShowBgSelector(false); }} className={`relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer border-2 transition-all ${editRoomBg === bg.imageUrl ? 'border-purple-500 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-60'}`}>
+                      {isVideoUrl(bg.imageUrl) ? <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <img src={bg.imageUrl} className="w-full h-full object-cover" alt="Background" />}
+                      {bg.remainingDays !== undefined && (
+                        <div className="absolute top-2 right-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-lg shadow-xl z-20 flex items-center gap-0.5">
+                          <span className="text-purple-300">{bg.remainingDays}</span>
+                          <span className="opacity-80">{t("يوم", "Days")}</span>
+                        </div>
+                      )}
+                      {editRoomBg === bg.imageUrl && (
+                        <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center">
+                          <i className="fas fa-check-circle text-white text-xl"></i>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6 animate-in slide-in-from-left" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setShowBlacklist(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all">
+                    <i className={`fas ${language === 'en' ? 'fa-arrow-left' : 'fa-arrow-right'} text-xs`}></i>
+                  </button>
+                  <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("القائمة السوداء للغرفة", "Room Blacklist")}</span>
+                </div>
+
+                {isLoadingBlacklist ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3">
+                    <i className="fas fa-circle-notch animate-spin text-purple-400 text-xl"></i>
+                    <span className="text-xs text-white/40 font-bold">{t("جاري تحميل الأعضاء...", "Loading members...")}</span>
+                  </div>
+                ) : blacklistUsers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center bg-white/5 border border-white/5 rounded-[2rem] p-6">
+                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-white/20 mb-1">
+                      <i className="fas fa-user-plus text-xl"></i>
+                    </div>
+                    <h3 className="text-white font-black text-sm">{t("القائمة فارغة", "List is Empty")}</h3>
+                    <p className="text-white/40 text-[10px] leading-relaxed font-bold max-w-[200px]">
+                      {t("لا يوجد مستخدمون مطرودون من هذه الغرفة حالياً.", "There are no kicked users from this room currently.")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {blacklistUsers.map((bUser) => (
+                      <div key={bUser.uid} className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl animate-in fade-in">
+                        <div className="flex items-center gap-3 text-start">
+                          <img 
+                            src={bUser.avatar || bUser.photoURL || "https://api.dicebear.com/7.x/adventurer/svg?seed=" + bUser.uid} 
+                            className="w-10 h-10 rounded-full object-cover border border-white/10"
+                            alt={bUser.displayName}
+                          />
+                          <div>
+                            <div className="text-xs font-black text-white">{bUser.displayName || t("مستخدم", "User")}</div>
+                            {bUser.customId && (
+                              <div className="text-[9px] font-bold text-white/45">ID: {bUser.customId}</div>
+                            )}
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleUnbanUser(bUser.uid)}
+                          className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[10px] font-black tracking-wide active:scale-95 transition-all"
+                        >
+                          {t("إلغاء الطرد", "Unban")}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {showReportModal && (
-        <div className="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir="rtl">
+        <div className="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir={language === 'ar' ? 'rtl' : 'ltr'}>
           <div className="w-full max-w-[320px] bg-[#2d0f4d]/85 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <header className="p-5 flex justify-between items-center">
-              <h3 className="text-white font-black text-sm">الابلاغ عن الغرفة</h3>
+              <h3 className="text-white font-black text-sm">{t("الابلاغ عن الغرفة", "Report Room")}</h3>
               <button onClick={() => setShowReportModal(false)} className="text-white/40 hover:text-white transition-colors">
                 <i className="fas fa-times text-xs"></i>
               </button>
@@ -1141,28 +1810,36 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             
             <div className="p-6 space-y-6">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">سبب البلاغ</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {['اباحي', 'اسائة', 'شتائم', 'ترويج'].map(reason => (
-                    <button 
-                      key={reason}
-                      onClick={() => setReportReason(reason)}
-                      className={`py-2.5 rounded-xl text-[10px] font-black border transition-all backdrop-blur-md ${reportReason === reason ? 'bg-purple-600/40 border-purple-500/50 text-white shadow-lg' : 'bg-white/5 border-white/5 text-white/40'}`}
-                    >
-                      {reason}
-                    </button>
-                  ))}
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">{t("سبب البلاغ", "Report Reason")}</label>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                  {['اباحي', 'اسائة', 'شتائم', 'ترويج'].map(reason => {
+                    const translationMap: Record<string, string> = {
+                      'اباحي': t('اباحي', 'Pornographic'),
+                      'اسائة': t('اسائة', 'Abuse'),
+                      'شتائم': t('شتائم', 'Slander'),
+                      'ترويج': t('ترويج', 'Promotion')
+                    };
+                    return (
+                      <button 
+                        key={reason}
+                        onClick={() => setReportReason(reason)}
+                        className={`py-2.5 rounded-xl text-[10px] font-black border transition-all backdrop-blur-md ${reportReason === reason ? 'bg-purple-600/40 border-purple-500/50 text-white shadow-lg' : 'bg-white/5 border-white/5 text-white/40'}`}
+                      >
+                        {translationMap[reason] || reason}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">يرجى شرح ما حدث بالتفاصيل</label>
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">{t("يرجى شرح ما حدث بالتفاصيل", "Please explain in detail what happened")}</label>
                 <div className="relative">
                   <textarea 
                     value={reportDetails}
                     onChange={(e) => setReportDetails(e.target.value.substring(0, 250))}
-                    placeholder="اكتب هنا..."
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none h-32 focus:border-purple-500/40 transition-all resize-none shadow-inner"
+                    placeholder={t("اكتب هنا...", "Write here...")}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none h-32 focus:border-purple-500/40 transition-all resize-none shadow-inner text-start"
                   />
                   <div className="absolute bottom-3 left-3 text-[8px] font-black text-white/20">
                     {reportDetails.length}/250
@@ -1176,7 +1853,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 className="w-full bg-purple-600/30 backdrop-blur-md border border-purple-500/30 py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all flex items-center justify-center gap-2"
               >
                 {isSubmittingReport ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-paper-plane"></i>}
-                <span>تقديم البلاغ</span>
+                <span>{t("تقديم البلاغ", "Submit Report")}</span>
               </button>
             </div>
           </div>
@@ -1184,23 +1861,23 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       )}
 
       {showReportSuccess && (
-        <div className="fixed inset-0 z-[805] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir="rtl">
+        <div className="fixed inset-0 z-[805] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir={language === 'ar' ? 'rtl' : 'ltr'}>
           <div className="w-full max-w-[320px] bg-[#2d0f4d]/85 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <div className="p-8 flex flex-col items-center text-center space-y-6">
               <div className="w-16 h-16 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
                 <i className="fas fa-check text-2xl text-purple-400"></i>
               </div>
               <div className="space-y-2">
-                <h3 className="text-white font-black text-lg">تم تقديم البلاغ</h3>
+                <h3 className="text-white font-black text-lg">{t("تم تقديم البلاغ", "Report Submitted")}</h3>
                 <p className="text-white/60 text-xs leading-relaxed font-bold">
-                  سيتم المراجعه شكرا لك على الحفاظ على بيئة Yalla Games
+                  {t("سيتم المراجعه شكرا لك على الحفاظ على بيئة Yalla Party", "It will be reviewed. Thank you for keeping Yalla Party a safe community!")}
                 </p>
               </div>
               <button 
                 onClick={() => setShowReportSuccess(false)}
                 className="w-full bg-purple-600/30 backdrop-blur-md border border-purple-500/30 py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 transition-all"
               >
-                حسناً
+                {t("حسناً", "Okay")}
               </button>
             </div>
           </div>
@@ -1208,10 +1885,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       )}
 
       {showLockModal && (
-        <div className="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir="rtl">
+        <div className="fixed inset-0 z-[800] flex items-center justify-center bg-black/40 p-6 animate-in fade-in" dir={language === 'ar' ? 'rtl' : 'ltr'}>
           <div className="w-full max-w-[320px] bg-[#2d0f4d]/85 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-200">
             <header className="p-5 flex justify-between items-center border-b border-white/5">
-              <h3 className="text-white font-black text-sm">إعدادات قفل الغرفة</h3>
+              <h3 className="text-white font-black text-sm">{t("إعدادات قفل الغرفة", "Room Lock Settings")}</h3>
               <button onClick={() => setShowLockModal(false)} className="text-white/40 hover:text-white transition-colors">
                 <i className="fas fa-times text-xs"></i>
               </button>
@@ -1219,7 +1896,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             
             <div className="p-6 space-y-6">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">كلمة مرور الغرفة (6 أرقام)</label>
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest pl-2">{t("كلمة مرور الغرفة (6 أرقام)", "Room Password (6 Digits)")}</label>
                 <div className="relative">
                   <input 
                     type="text"
@@ -1234,7 +1911,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-center text-sm font-black text-white outline-none focus:border-purple-500/40 transition-all shadow-inner tracking-[0.5em]"
                   />
                 </div>
-                <p className="text-[9px] text-white/40 text-center font-bold italic">اترك الحقل فارغاً إذا كنت تريد فتح الغرفة للجميع</p>
+                <p className="text-[9px] text-white/40 text-center font-bold italic">{t("اترك الحقل فارغاً إذا كنت تريد فتح الغرفة للجميع", "Leave empty to open the room to everyone")}</p>
               </div>
 
               <button 
@@ -1243,37 +1920,186 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 className="w-full bg-purple-600/20 border border-purple-500/40 backdrop-blur-md py-4 rounded-2xl font-black text-[11px] text-white shadow-xl active:scale-95 disabled:opacity-30 transition-all flex items-center justify-center gap-2"
               >
                 {isUpdatingRoom ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-lock text-[10px]"></i>}
-                <span>{roomPasswordInput.trim() ? 'قفل الغرفة الآن' : 'فتح الغرفة للجميع'}</span>
+                <span>{roomPasswordInput.trim() ? t('قفل الغرفة الآن', 'Lock Room Now') : t('فتح الغرفة للجميع', 'Open Room to All')}</span>
               </button>
             </div>
           </div>
         </div>
       )}
-      
+
       {showExitDialog && (
-        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/80 animate-in fade-in backdrop-blur-sm" onClick={() => setShowExitDialog(false)}><div className="flex flex-col items-center gap-10"><div className="flex flex-col items-center gap-3"><button onClick={() => { setShowExitDialog(false); onMinimize(); }} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90"><i className="fas fa-compress-alt text-3xl"></i></button><span className="text-white font-black text-[12px]">احتفاظ</span></div><div className="flex flex-col items-center gap-3"><button onClick={handleUserExit} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90"><i className="fas fa-sign-out-alt text-3xl"></i></button><span className="text-white font-black text-[12px]">خروج</span></div></div></div>
+        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/80 animate-in fade-in backdrop-blur-sm" onClick={() => setShowExitDialog(false)}>
+          <div className="flex flex-col items-center gap-10">
+            <div className="flex flex-col items-center gap-3">
+              <button onClick={() => { setShowExitDialog(false); onMinimize(); }} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90">
+                <i className="fas fa-compress-alt text-3xl"></i>
+              </button>
+              <span className="text-white font-black text-[12px]">{t("احتفاظ", "Keep")}</span>
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <button onClick={handleUserExit} className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90">
+                <i className="fas fa-sign-out-alt text-3xl"></i>
+              </button>
+              <span className="text-white font-black text-[12px]">{t("خروج", "Exit")}</span>
+            </div>
+          </div>
+        </div>
       )}
-      
+
       {showParticipants && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-6 animate-in fade-in" onClick={() => setShowParticipants(false)}><div className="w-full max-w-[300px] bg-[#1a0b2e]/85 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}><div className="p-5 border-b border-white/5 flex justify-between items-center"><h3 className="text-white font-black text-sm">المتواجدون ({allPresentUsers.length})</h3><button onClick={() => setShowParticipants(false)} className="text-white/40"><i className="fas fa-times text-xs"></i></button></div><div className="max-h-[380px] overflow-y-auto p-3 space-y-2 scrollbar-hide">{allPresentUsers.map((u, idx) => (<div key={u.uid || idx} className="flex items-center gap-3 p-2 rounded-2xl bg-white/5 border border-white/5"><div className="w-11 h-11 relative flex-shrink-0">
-          {u.animatedAvatar ? (
-            isVideoUrl(u.animatedAvatar) ? (
-              <video src={u.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full rounded-full object-cover border border-white/10" />
-            ) : (
-              <img src={u.animatedAvatar} className="w-full h-full rounded-full object-cover border border-white/10" />
-            )
-          ) : (
-            <img src={u.photoURL || "https://picsum.photos/100"} className="w-full h-full rounded-full object-cover border border-white/10" />
-          )}
-          {u.currentFrame && <img src={u.currentFrame} className="absolute inset-0 w-full h-full object-contain scale-110 z-10" />}</div><div className="flex-1 min-w-0"><span className="text-white font-bold text-[11px] truncate block">{u.displayName}</span><span className="text-purple-400 text-[8px] font-black">ID: {u.customId || u.uid?.substring(0,8)}</span></div></div>))}</div></div></div>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-6 animate-in fade-in" onClick={() => setShowParticipants(false)}>
+          <div className="w-full max-w-[300px] bg-[#1a0b2e]/85 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl" dir={language === 'ar' ? 'rtl' : 'ltr'} onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-white/5 flex justify-between items-center">
+              <h3 className="text-white font-black text-sm">{t("المتواجدون", "Online")} ({allPresentUsers.length})</h3>
+              <button onClick={() => setShowParticipants(false)} className="text-white/40">
+                <i className="fas fa-times text-xs"></i>
+              </button>
+            </div>
+            <div className="max-h-[380px] overflow-y-auto p-3 space-y-2 scrollbar-hide">
+              {allPresentUsers.map((u, idx) => (
+                <div key={u.uid || idx} className="flex items-center gap-3 p-2 rounded-2xl bg-white/5 border border-white/5">
+                  <div className="w-11 h-11 relative flex-shrink-0">
+                    {u.animatedAvatar ? (
+                      isVideoUrl(u.animatedAvatar) ? (
+                        <video src={u.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full rounded-full object-cover border border-white/10" />
+                      ) : (
+                        <img src={u.animatedAvatar} className="w-full h-full rounded-full object-cover border border-white/10" />
+                      )
+                    ) : (
+                      <img src={u.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full rounded-full object-cover border border-white/10" />
+                    )}
+                    {u.currentFrame && <img src={u.currentFrame} className="absolute inset-0 w-full h-full object-contain scale-110 z-10" />}
+                  </div>
+                  <div className="flex-1 min-w-0 text-start">
+                    <span className="text-white font-bold text-[11px] truncate block">{u.displayName}</span>
+                    <span className="text-purple-400 text-[8px] font-black">ID: {u.customId || u.uid?.substring(0,8)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
-      
+
       {showMicActions && selectedMicIndex !== null && (
-        <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 animate-in fade-in" onClick={() => setShowMicActions(false)}><div className="w-full max-md bg-black/40 rounded-t-[1.5rem] p-6 pb-10 space-y-4 animate-slide-up border-t border-white/10" onClick={e => e.stopPropagation()}><div className="flex flex-col items-center mb-4"><div className="w-12 h-1.5 bg-white/20 rounded-full mb-6"></div><h3 className="text-white font-black text-lg text-center">تحكم المايك {selectedMicIndex + 1}</h3></div><div className="grid grid-cols-1 gap-3">{micStates[selectedMicIndex]?.user?.uid === user?.uid ? (<><button onClick={() => leaveMic(selectedMicIndex)} className="w-full py-4 bg-red-500/20 text-red-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-red-500/20 active:scale-95 transition-all"><i className="fas fa-sign-out-alt"></i> مغادرة المايك</button><button onClick={() => { setShowMicActions(false); setProfileUserUid(user?.uid || ''); setShowUserData(true); }} className="w-full py-4 bg-blue-600/20 text-blue-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-blue-500/20 active:scale-95 transition-all"><i className="fas fa-id-card"></i> عرض البيانات</button></>) : (<button onClick={() => takeMic(selectedMicIndex)} className="w-full py-4 bg-purple-600/20 text-purple-400 border border-purple-500/20 rounded-2xl font-black flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all">أخذ المايك</button>)}{isRoomOwner && micStates[selectedMicIndex]?.user?.uid !== user?.uid && (<button onClick={() => toggleLockMic(selectedMicIndex)} className={`w-full py-4 rounded-2xl font-black flex items-center justify-center gap-3 border transition-all active:scale-95 ${micStates[selectedMicIndex]?.status === 'locked' ? 'bg-white/10 text-white border-white/20' : 'bg-white/5 text-white/80 border-white/10'}`}><i className={`fas ${micStates[selectedMicIndex]?.status === 'locked' ? 'fa-lock-open' : 'fa-lock'}`}></i>{micStates[selectedMicIndex]?.status === 'locked' ? 'فتح المايك' : 'قفل المايك'}</button>)}<button onClick={() => setShowMicActions(false)} className="w-full py-4 bg-white/5 text-white/40 rounded-2xl font-black active:scale-95 transition-all">إلغاء</button></div></div></div>
+        <div className="fixed inset-0 z-[250] flex items-end justify-center bg-black/40 animate-in fade-in" onClick={() => setShowMicActions(false)}>
+          <div className="w-full max-md bg-black/40 rounded-t-[1.5rem] p-6 pb-10 space-y-4 animate-slide-up border-t border-white/10" dir={language === 'ar' ? 'rtl' : 'ltr'} onClick={e => e.stopPropagation()}>
+            <div className="flex flex-col items-center mb-4">
+              <div className="w-12 h-1.5 bg-white/20 rounded-full mb-6"></div>
+              <h3 className="text-white font-black text-lg text-center">{t("تحكم المايك", "Mic Control")} {selectedMicIndex + 1}</h3>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {micStates[selectedMicIndex]?.user?.uid === user?.uid ? (
+                <>
+                  <button onClick={() => leaveMic(selectedMicIndex)} className="w-full py-4 bg-red-500/20 text-red-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-red-500/20 active:scale-95 transition-all">
+                    <i className="fas fa-sign-out-alt"></i> {t("مغادرة المايك", "Leave Mic")}
+                  </button>
+                  <button onClick={() => { setShowMicActions(false); setProfileUserUid(user?.uid || ''); setShowUserData(true); }} className="w-full py-4 bg-blue-600/20 text-blue-400 rounded-2xl font-black flex items-center justify-center gap-3 border border-blue-500/20 active:scale-95 transition-all">
+                    <i className="fas fa-id-card"></i> {t("عرض البيانات", "View Profile")}
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => takeMic(selectedMicIndex)} className="w-full py-4 bg-purple-600/20 text-purple-400 border border-purple-500/20 rounded-2xl font-black flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all">
+                  {t("أخذ المايك", "Take Mic")}
+                </button>
+              )}
+              {isRoomOwner && micStates[selectedMicIndex]?.user?.uid !== user?.uid && (
+                <button onClick={() => toggleLockMic(selectedMicIndex)} className={`w-full py-4 rounded-2xl font-black flex items-center justify-center gap-3 border transition-all active:scale-95 ${micStates[selectedMicIndex]?.status === 'locked' ? 'bg-white/10 text-white border-white/20' : 'bg-white/5 text-white/80 border-white/10'}`}>
+                  <i className={`fas ${micStates[selectedMicIndex]?.status === 'locked' ? 'fa-lock-open' : 'fa-lock'}`}></i>
+                  {micStates[selectedMicIndex]?.status === 'locked' ? t('فتح المايك', 'Unlock Mic') : t('قفل المايك', 'Lock Mic')}
+                </button>
+              )}
+              <button onClick={() => setShowMicActions(false)} className="w-full py-4 bg-white/5 text-white/40 rounded-2xl font-black active:scale-95 transition-all">
+                {t("إلغاء", "Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showUserData && (
-        <><div className="fixed inset-0 z-[350] bg-black/10" onClick={() => { setShowUserData(false); setProfileUserUid(null); setProfileUserData(null); }}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[400] bg-black/60 backdrop-blur-2px border-t border-white/10 rounded-t-[1.5rem] animate-slide-up overflow-visible h-[68%] shadow-2xl"><div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-white/10 rounded-full"></div>
+        <><div className="fixed inset-0 z-[350] bg-black/10" onClick={() => { setShowUserData(false); setProfileUserUid(null); setProfileUserData(null); setShowAdminMenu(false); }}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[400] bg-black/60 backdrop-blur-2px border-t border-white/10 rounded-t-[1.5rem] animate-slide-up overflow-visible h-[68%] shadow-2xl">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-white/10 rounded-full"></div>
+          {profileUserData && (
+            <div className="absolute top-4 right-6 z-[420] flex items-center gap-2">
+              {/* @ Button */}
+              {profileUserData?.uid !== user?.uid && (
+                <button 
+                  onClick={() => {
+                    const nameToMention = profileUserData?.displayName || '';
+                    if (nameToMention) {
+                      setInputText(prev => prev ? `${prev} @${nameToMention} ` : `@${nameToMention} `);
+                    }
+                    setShowUserData(false);
+                    setProfileUserUid(null);
+                    setProfileUserData(null);
+                    setShowAdminMenu(false);
+                    setTimeout(() => {
+                      chatInputRef.current?.focus();
+                    }, 100);
+                  }}
+                  className="bg-purple-600/30 text-purple-200 border border-purple-500/20 hover:bg-purple-600/85 hover:text-white transition-all w-7 h-7 rounded-full flex items-center justify-center font-black text-xs select-none shadow-lg active:scale-90 duration-200 animate-in zoom-in"
+                  title={t("منشن", "Mention")}
+                >
+                  @
+                </button>
+              )}
+
+              {/* Admin Menu Dropdown Button */}
+              {isRoomOwner && profileUserData?.uid !== user?.uid && (
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowAdminMenu(!showAdminMenu)}
+                    className="bg-purple-600/30 text-purple-200 border border-purple-500/20 w-7 h-7 rounded-full flex items-center justify-center font-black text-xs select-none shadow-lg animate-in zoom-in"
+                    title={t("إدارة العضو", "Manage Member")}
+                  >
+                    <i className={`fas fa-chevron-down text-[10px] transition-transform duration-200 ${showAdminMenu ? 'rotate-180' : ''}`}></i>
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showAdminMenu && (
+                    <div className="absolute top-full right-0 mt-2 w-32 bg-purple-600/60 border border-purple-500/20 rounded-2xl overflow-hidden shadow-2xl z-50 animate-in zoom-in duration-200" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                      {/* Kick from Mic */}
+                      <button 
+                        onClick={() => handleAdminAction('kick_mic')} 
+                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
+                      >
+                        <i className="fas fa-arrow-alt-circle-down w-3.5"></i>
+                        <span>{t("طرد من المايك", "Kick from Mic")}</span>
+                      </button>
+                      
+                      {/* Mute Mic */}
+                      <button 
+                        onClick={() => handleAdminAction('mute_mic')} 
+                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
+                      >
+                        <i className="fas fa-microphone-slash w-3.5"></i>
+                        <span>{t("كتم المايك", "Mute Mic")}</span>
+                      </button>
+
+                      {/* Mute Chat/Mouth in room */}
+                      <button 
+                        onClick={() => handleAdminAction('mute_room')} 
+                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
+                      >
+                        <i className="fas fa-comment-slash w-3.5"></i>
+                        <span>{t("إصمات من الغرفة", "Silence in Room")}</span>
+                      </button>
+
+                      {/* Kick from Room */}
+                      <button 
+                        onClick={() => handleAdminAction('kick_room')} 
+                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 flex items-center gap-1.5 transition-colors`}
+                      >
+                        <i className="fas fa-door-open w-3.5"></i>
+                        <span>{t("طرد من الغرفة", "Kick from Room")}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         {(!profileUserData || profileUserData.uid !== profileUserUid) ? (
           <div className="h-full flex flex-col items-center justify-center p-8 space-y-4">
             <div className="relative w-16 h-16 flex items-center justify-center">
@@ -1283,7 +2109,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 <i className="fas fa-user-circle text-purple-400 text-lg"></i>
               </div>
             </div>
-            <p className="text-white/40 text-xs font-black tracking-widest text-center animate-pulse">جاري تحميل الملف الشخصي...</p>
+            <p className="text-white/40 text-xs font-black tracking-widest text-center animate-pulse">{t("جاري تحميل الملف الشخصي...", "Loading profile...")}</p>
           </div>
         ) : (
           <>
@@ -1296,7 +2122,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     <img src={profileUserData.animatedAvatar} className="w-24 h-24 rounded-full object-cover bg-transparent" alt="Profile" />
                   )
                 ) : (
-                  <img src={profileUserData?.photoURL || "https://picsum.photos/200"} className="w-24 h-24 rounded-full object-cover" alt="Profile" />
+                  <img src={profileUserData?.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-24 h-24 rounded-full object-cover" alt="Profile" />
                 )}
                 {profileUserData?.currentFrame && (<img src={profileUserData.currentFrame} className="absolute inset-0 w-full h-full object-contain z-10 scale-125" alt="frame" />)}
               </div>
@@ -1312,7 +2138,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                             style={{ 
                               paddingLeft: `${pIdX}px`, 
                               paddingTop: `${pIdY}px`,
-                              fontSize: `${profileUserData?.idFontSize || 10}px`
+                              fontSize: `${pIdFS}px`
                             }}>
                         {profileCustomId}
                       </span>
@@ -1329,7 +2155,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                       <i className="fas fa-venus text-pink-400 text-[10px]"></i>
                     ) : null}
                     {profileUserData?.regionFlag && (
-                      <span className="text-sm leading-none">{profileUserData.regionFlag}</span>
+                      <FlagIcon code={profileUserData?.regionCode} flagEmoji={profileUserData.regionFlag} className="w-5 h-[14px]" />
                     )}
                   </div>
                 </div>
@@ -1365,20 +2191,68 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </div>
 
               <div className="w-full space-y-6">
-                <div className="flex items-center justify-center gap-10 py-4 border-y border-white/10">
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-xl font-black text-white">0</span>
-                    <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">أصدقاء</span>
+                {profileUserData?.uid === user?.uid ? (
+                  <div className="flex items-center justify-center gap-10 py-4 border-y border-white/10 w-full animate-in fade-in duration-300">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-xl font-black text-white">{profileFriendsCount}</span>
+                      <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">{t("أصدقاء", "Friends")}</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-xl font-black text-white">{profileFollowersCount}</span>
+                      <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">{t("متابعين", "Followers")}</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-xl font-black text-white">{profileUserData?.following?.length || 0}</span>
+                      <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">{t("متابعة", "Following")}</span>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-xl font-black text-white">0</span>
-                    <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعين</span>
+                ) : (
+                  <div className="flex items-center justify-center gap-4 py-4 border-y border-white/10 w-full animate-in fade-in duration-300">
+                    {/* Follow / Following Button */}
+                    <button 
+                      onClick={handleFollowUser}
+                      className="flex-1 flex flex-col items-center justify-center gap-1.5 py-3.5 px-3 bg-white/5 text-white border border-white/5 rounded-2xl shadow-md"
+                    >
+                      <i className={`fas ${currentUserData?.following?.includes(profileUserData.uid) ? 'fa-user-check' : 'fa-user-plus'} text-purple-400 text-xs`}></i>
+                      <span className="text-[10px] font-black tracking-wider leading-none">
+                        {currentUserData?.following?.includes(profileUserData.uid) ? t("أتابع", "Following") : t("طلب متابعة", "Follow Request")}
+                      </span>
+                    </button>
+
+                    {/* Message Button */}
+                    <button 
+                      onClick={() => {
+                        if (onOpenChat && profileUserData?.uid) {
+                          onOpenChat(profileUserData.uid);
+                          setShowUserData(false);
+                          setProfileUserUid(null);
+                          setProfileUserData(null);
+                        } else {
+                          alert(t("فشل فتح المحادثة", "Failed to open chat"));
+                        }
+                      }}
+                      className="flex-1 flex flex-col items-center justify-center gap-1.5 py-3.5 px-3 bg-white/5 text-white border border-white/5 rounded-2xl shadow-md"
+                    >
+                      <i className="fas fa-comment-dots text-purple-400 text-xs"></i>
+                      <span className="text-[10px] font-black tracking-wider leading-none">{t("رسالة", "Message")}</span>
+                    </button>
+
+                    {/* Gift Button */}
+                    <button 
+                      onClick={() => {
+                        setSelectedUserIds(new Set([profileUserData.uid]));
+                        setShowUserData(false);
+                        setProfileUserUid(null);
+                        setProfileUserData(null);
+                        setShowGifts(true);
+                      }}
+                      className="flex-1 flex flex-col items-center justify-center gap-1.5 py-3.5 px-3 bg-white/5 text-white border border-white/5 rounded-2xl shadow-md"
+                    >
+                      <i className="fas fa-gift text-purple-400 text-xs"></i>
+                      <span className="text-[10px] font-black tracking-wider leading-none">{t("هدية", "Gift")}</span>
+                    </button>
                   </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-xl font-black text-white">0</span>
-                    <span className="text-[11px] text-white/40 font-bold uppercase tracking-widest">متابعة</span>
-                  </div>
-                </div>
+                )}
 
                 {/* CP Rectangle Section */}
                 {cpConfig?.rectangleUrl && (
@@ -1388,10 +2262,18 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                       {/* Me (Right in RTL) */}
                       <div className="flex flex-col items-center gap-1.5">
                         <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform">
-                          <img src={profileUserData?.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
+                          {profileUserData?.animatedAvatar ? (
+                            isVideoUrl(profileUserData.animatedAvatar) ? (
+                              <video src={profileUserData.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                            ) : (
+                              <img src={profileUserData.animatedAvatar} className="w-full h-full object-cover" />
+                            )
+                          ) : (
+                            <img src={profileUserData?.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover" />
+                          )}
                         </div>
                         <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
-                          {profileUserData?.displayName || "العضو"}
+                          {profileUserData?.displayName || t("العضو", "Member")}
                         </span>
                       </div>
                       
@@ -1399,13 +2281,21 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                       <div className="flex flex-col items-center gap-1.5">
                         <div className="w-[49px] h-[49px] rounded-full border-2 border-white/20 overflow-hidden shadow-lg transform bg-white/5 backdrop-blur-sm flex items-center justify-center">
                           {popupPartnerData ? (
-                            <img src={popupPartnerData.photoURL || "https://picsum.photos/100"} className="w-full h-full object-cover" />
+                            popupPartnerData.animatedAvatar ? (
+                              isVideoUrl(popupPartnerData.animatedAvatar) ? (
+                                <video src={popupPartnerData.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                              ) : (
+                                <img src={popupPartnerData.animatedAvatar} className="w-full h-full object-cover" />
+                              )
+                            ) : (
+                              <img src={popupPartnerData.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover" />
+                            )
                           ) : (
                             <i className="fas fa-user text-white/20 text-xs"></i>
                           )}
                         </div>
                         <span className="text-[9px] font-black text-white/60 truncate max-w-[65px] text-center drop-shadow-md">
-                          {popupPartnerData ? (popupPartnerData.displayName || "شريك") : "لا يوجد"}
+                          {popupPartnerData ? (popupPartnerData.displayName || t("شريك", "Partner")) : t("لا يوجد", "None")}
                         </span>
                       </div>
                     </div>
@@ -1415,7 +2305,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
 
             <div className="bg-black/20 p-6 rounded-[2.5rem] border border-white/5 space-y-4 shadow-inner">
-          <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] text-center">الأوسمة والجوائز</p>
+          <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] text-center">{t("الأوسمة والجوائز", "Badges & Medals")}</p>
           <div className="flex overflow-x-auto gap-4 pb-2 scrollbar-hide px-2">
             {userDataPopupBadges.length > 0 ? (
               userDataPopupBadges.map(badge => (
@@ -1425,7 +2315,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               ))
             ) : (
               <div className="w-full text-center py-4">
-                 <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">لا توجد شارات حالياً</p>
+                 <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">{t("لا توجد شارات حالياً", "No badges currently available")}</p>
               </div>
             )}
           </div>
@@ -1444,40 +2334,58 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           <div className="fixed bottom-0 left-0 right-0 max-md bg-black/70 border-t border-white/10 animate-slide-up h-[400px] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl mx-auto z-[710]">
             <div className="px-5 pt-4 flex items-center justify-between relative">
               <div className="flex items-center gap-2 flex-wrap overflow-visible">
-                {usersOnMics.length > 0 ? (
-                  usersOnMics.slice(0, 5).map((u, i) => (
-                    <button 
-                      key={u.uid || i} 
-                      onClick={() => toggleUserSelection(u.uid)} 
-                      className={`w-9 h-9 rounded-full relative flex items-center justify-center bg-purple-900 shadow-md transition-all active:scale-90 ${selectedUserIds.has(u.uid) ? 'ring-2 ring-purple-500' : ''}`}
-                    >
-                      {selectedUserIds.has(u.uid) && (
-                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 rounded-full animate-in zoom-in duration-200">
-                           <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center border border-white/20 shadow-lg">
-                              <i className="fas fa-check text-[8px] text-white"></i>
-                           </div>
-                        </div>
-                      )}
-                      {u.animatedAvatar ? (
-                        isVideoUrl(u.animatedAvatar) ? (
-                          <video src={u.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full rounded-full object-cover z-10" />
+                {(() => {
+                  const itemsToShow: any[] = [...usersOnMics];
+                  selectedUserIds.forEach(id => {
+                    if (!itemsToShow.some(u => u.uid === id)) {
+                      const addU = allPresentUsers.find(u => u.uid === id);
+                      if (addU) {
+                        itemsToShow.push({
+                          uid: addU.uid,
+                          displayName: addU.displayName,
+                          photoURL: addU.photoURL,
+                          animatedAvatar: addU.animatedAvatar
+                        });
+                      }
+                    }
+                  });
+                  const sliced = itemsToShow.slice(0, 6);
+                  if (sliced.length > 0) {
+                    return sliced.map((u, i) => (
+                      <button 
+                        key={u.uid || i} 
+                        onClick={() => toggleUserSelection(u.uid)} 
+                        className={`w-9 h-9 rounded-full relative flex items-center justify-center bg-purple-900 shadow-md transition-all active:scale-90 ${selectedUserIds.has(u.uid) ? 'ring-2 ring-purple-500' : ''}`}
+                      >
+                        {selectedUserIds.has(u.uid) && (
+                          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 rounded-full animate-in zoom-in duration-200">
+                             <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center border border-white/20 shadow-lg">
+                                <i className="fas fa-check text-[8px] text-white"></i>
+                             </div>
+                          </div>
+                        )}
+                        {u.animatedAvatar ? (
+                          isVideoUrl(u.animatedAvatar) ? (
+                            <video src={u.animatedAvatar} autoPlay loop muted playsInline className="w-full h-full rounded-full object-cover z-10" />
+                          ) : (
+                            <img src={u.animatedAvatar} className="w-full h-full rounded-full object-cover z-10" />
+                          )
                         ) : (
-                          <img src={u.animatedAvatar} className="w-full h-full rounded-full object-cover z-10" />
-                        )
-                      ) : (
-                        <img src={u.photoURL || "https://picsum.photos/50"} className="w-full h-full rounded-full object-cover z-10" />
-                      )}
-                    </button>
-                  ))
-                ) : <div className="text-[10px] text-white/40 font-black pr-2">لا يوجد أحد على المايك</div>}
+                          <img src={u.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full rounded-full object-cover z-10" />
+                        )}
+                      </button>
+                    ));
+                  }
+                  return <div className="text-[10px] text-white/40 font-black pr-2">{t("لا يوجد أحد على المايك", "No one is on mic")}</div>;
+                })()}
               </div>
               <div className="relative">
                 <button onClick={() => setShowSelectionMenu(!showSelectionMenu)} className="w-9 h-9 rounded-full bg-[#1a0b2e]/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/60 active:scale-95"><i className={`fas fa-chevron-down text-[12px] ${showSelectionMenu ? 'rotate-180' : ''}`}></i></button>
                 {showSelectionMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-32 bg-[#0d051a]/90 border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-50 animate-in zoom-in duration-200">
-                    <button onClick={() => handleSelectionMode('manual')} className="w-full py-3 px-4 text-right text-[10px] font-black text-white border-b border-white/5 flex items-center justify-between"><span>تحديد</span>{selectionMode === 'manual' && <i className="fas fa-check text-purple-400 text-[8px]"></i>}</button>
-                    <button onClick={() => handleSelectionMode('all-room')} className="w-full py-3 px-4 text-right text-[10px] font-black text-white border-b border-white/5 flex items-center justify-between"><div className="flex items-center gap-2"><i className="fas fa-home text-[10px] opacity-60"></i><span>كل الغرفة</span></div>{selectionMode === 'all-room' && <i className="fas fa-check text-purple-400 text-[8px]"></i>}</button>
-                    <button onClick={() => handleSelectionMode('all-mic')} className="w-full py-3 px-4 text-right text-[10px] font-black text-white flex items-center justify-between"><div className="flex items-center gap-2"><i className="fas fa-microphone text-[10px] opacity-60"></i><span>كل المايك</span></div>{selectionMode === 'all-mic' && <i className="fas fa-check text-purple-400 text-[8px]"></i>}</button>
+                  <div className="absolute top-full left-0 mt-2 w-32 bg-[#0d051a]/90 border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-50 animate-in zoom-in duration-200" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                    <button onClick={() => handleSelectionMode('manual')} className={`w-full py-3 px-4 ${language === 'ar' ? 'text-right' : 'text-left'} text-[10px] font-black text-white border-b border-white/5 flex items-center justify-between`}><span>{t("تحديد", "Select")}</span>{selectionMode === 'manual' && <i className="fas fa-check text-purple-400 text-[8px]"></i>}</button>
+                    <button onClick={() => handleSelectionMode('all-room')} className={`w-full py-3 px-4 ${language === 'ar' ? 'text-right' : 'text-left'} text-[10px] font-black text-white border-b border-white/5 flex items-center justify-between`}><div className="flex items-center gap-2"><i className="fas fa-home text-[10px] opacity-60"></i><span>{t("كل الغرفة", "All Room")}</span></div>{selectionMode === 'all-room' && <i className="fas fa-check text-purple-400 text-[8px]"></i>}</button>
+                    <button onClick={() => handleSelectionMode('all-mic')} className={`w-full py-3 px-4 ${language === 'ar' ? 'text-right' : 'text-left'} text-[10px] font-black text-white flex items-center justify-between`}><div className="flex items-center gap-2"><i className="fas fa-microphone text-[10px] opacity-60"></i><span>{t("كل المايك", "All Mics")}</span></div>{selectionMode === 'all-mic' && <i className="fas fa-check text-purple-400 text-[8px]"></i>}</button>
                   </div>
                 )}
               </div>
@@ -1486,7 +2394,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               <div className="flex items-center justify-between w-full px-1 border-b border-white/10">
                 {['normal', 'cp', 'famous', 'country', 'vip', 'birthday'].map((tab) => (
                    <button key={tab} onClick={() => setGiftTab(tab as GiftTab)} className={`relative flex-1 flex flex-col items-center text-[10px] font-black pb-1.5 ${giftTab === tab ? 'text-purple-400' : 'text-white/40'}`}>
-                    {tab === 'normal' ? 'عادية' : tab === 'cp' ? 'CP' : tab === 'famous' ? 'مشاهير' : tab === 'country' ? 'دولة' : tab === 'vip' ? 'VIP' : 'ميلاد'}
+                    {tab === 'normal' ? t('عادية', 'Normal') : tab === 'cp' ? t('CP', 'CP') : tab === 'famous' ? t('مشاهير', 'Famous') : tab === 'country' ? t('دولة', 'Country') : tab === 'vip' ? t('VIP', 'VIP') : t('ميلاد', 'Birthday')}
                     {giftTab === tab && <div className="absolute bottom-0 w-6 h-0.5 bg-purple-400 rounded-full"></div>}
                    </button>
                 ))}
@@ -1533,14 +2441,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 ) : (
                   <div className="col-span-4 flex flex-col items-center justify-center py-16 opacity-30 animate-in fade-in zoom-in duration-500">
                     <i className="fas fa-box-open text-5xl mb-3 text-white/20"></i>
-                    <p className="text-[11px] font-black text-white/60 uppercase tracking-widest">لا يوجد شيء هنا</p>
+                    <p className="text-[11px] font-black text-white/60 uppercase tracking-widest">{t("لا يوجد شيء هنا", "Nothing here")}</p>
                   </div>
                 )}
               </div>
             </div>
             <div className="px-6 h-20 bg-black/40 border-t border-white/10 flex items-center justify-between py-2.5 overflow-visible">
               <button onClick={() => { setShowGifts(false); if(onOpenWallet) onOpenWallet(); }} className="flex items-center gap-2 bg-white/10 rounded-full h-9 px-4 border border-white/10 transition-all active:scale-95">
-                <div className="flex flex-row-reverse items-center gap-2"><span className="text-[13px] text-white font-black">{(currentUserData?.coins || 0).toLocaleString('ar-EG')}</span><i className="fas fa-coins text-yellow-500 text-[10px]"></i></div>
+                <div className="flex flex-row-reverse items-center gap-2"><span className="text-[13px] text-white font-black">{(currentUserData?.coins || 0).toLocaleString('en-US')}</span><i className="fas fa-coins text-yellow-500 text-[10px]"></i></div>
               </button>
               <div className="flex items-center h-9 w-[131px] relative overflow-visible">
                  <div className="flex items-center h-full w-full rounded-full border border-[#2d1252]/60 overflow-hidden shadow-lg">
@@ -1554,7 +2462,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowQuantityMenu(false)}></div>
                            <div className="relative w-full max-w-[280px] bg-[#0d051a]/90 border border-white/10 rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in duration-300">
                              <div className="p-4 border-b border-white/5 bg-white/5">
-                               <h3 className="text-white text-center text-[13px] font-black uppercase tracking-wider">اختر الكمية</h3>
+                               <h3 className="text-white text-center text-[13px] font-black uppercase tracking-wider">{t("اختر الكمية", "Select Quantity")}</h3>
                              </div>
                              <div className="p-3 grid grid-cols-2 gap-2">
                               {quantities.map((q) => (
@@ -1572,14 +2480,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                                  onClick={() => setShowQuantityMenu(false)}
                                  className="w-full py-3.5 rounded-xl text-[11px] font-black text-white/50 bg-white/5 hover:text-white transition-all"
                                >
-                                 إلغاء
+                                  {t("إلغاء", "Cancel")}
                                </button>
                              </div>
                            </div>
                          </div>
                        )}
                     </div>
-                    <button onClick={handleSendGift} className="basis-1/2 h-full bg-[#2d1252]/85 text-white text-[9.5px] font-black border-r border-[#2d1252]/60 transition-all">إرسال</button>
+                    <button onClick={handleSendGift} className="basis-1/2 h-full bg-[#2d1252]/85 text-white text-[9.5px] font-black border-r border-[#2d1252]/60 transition-all">{t("إرسال", "Send")}</button>
                  </div>
               </div>
             </div>
