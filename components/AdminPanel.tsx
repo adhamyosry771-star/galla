@@ -31,8 +31,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [defaultProfileImage, setDefaultProfileImage] = useState<string | null>(null);
   const [defaultCoverImage, setDefaultCoverImage] = useState<string | null>(null);
 
-  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign' | 'carnival'>('users');
   
+  // Carnival Opening Event states
+  const [carnivalBannerUrlSetting, setCarnivalBannerUrlSetting] = useState('');
+  const [carnivalBgUrl, setCarnivalBgUrl] = useState('');
+  const [isCarnivalSaving, setIsCarnivalSaving] = useState(false);
+  const [carnivalSettings, setCarnivalSettings] = useState<any>(null);
+
   // Agency Design States
   const [agencyBackgroundUrl, setAgencyBackgroundUrl] = useState('');
   const [isAgencyDesignSaving, setIsAgencyDesignSaving] = useState(false);
@@ -272,9 +278,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
       }
     });
 
+    const unsubCarnival = onSnapshot(doc(db, "settings", "carnival"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setCarnivalBannerUrlSetting(data.bannerUrl || '');
+        setCarnivalBgUrl(data.backgroundUrl || '');
+        setCarnivalSettings(data);
+      }
+    });
+
     return () => {
       unsubUsers(); unsubNews(); unsubBanners(); unsubBgs(); unsubRooms(); unsubDesign(); unsubOfficialMsgs(); unsubAppearance(); unsubStoreFrames(); unsubStoreEntries(); unsubStoreBgs(); unsubEmojis(); unsubGifts(); unsubSupport();
-      unsubFruitsSettings(); unsubFruitsActiveBets(); unsubFruitsPlayers(); unsubReports(); unsubDefaultImages(); unsubAgencyDesign();
+      unsubFruitsSettings(); unsubFruitsActiveBets(); unsubFruitsPlayers(); unsubReports(); unsubDefaultImages(); unsubAgencyDesign(); unsubCarnival();
     };
   }, [isOpen]);
 
@@ -881,6 +896,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
+  const handleSaveCarnivalSettings = async () => {
+    setIsCarnivalSaving(true);
+    try {
+      await setDoc(doc(db, "settings", "carnival"), {
+        bannerUrl: carnivalBannerUrlSetting.trim(),
+        backgroundUrl: carnivalBgUrl.trim()
+      }, { merge: true });
+      alert(t("تم حفظ إعدادات حدث الافتتاح بنجاح", "Opening Event settings saved successfully"));
+    } catch (e) {
+      console.error(e);
+      alert(t("حدث خطأ أثناء الحفظ", "Error saving settings"));
+    } finally {
+      setIsCarnivalSaving(false);
+    }
+  };
+
   const handlePublishEmoji = async () => {
     if (!emojiUrl.trim()) return alert("يرجى إدخال رابط الـ Emoji أولاً");
     setIsPublishing(true);
@@ -961,6 +992,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               {id: 'gifts', label: t('الهدايا', 'Gifts')},
               {id: 'mainImages', label: t('الصور الرئيسية', 'Main Images')},
               {id: 'agencyDesign', label: t('تصميم الوكالات', 'Agency Design')},
+              {id: 'carnival', label: t('حدث الافتتاح', 'Opening Event')},
               {id: 'reports', label: t('استلام البلاغات', 'Received Reports')},
               {id: 'cp', label: t('CP', 'CP')},
               {id: 'design', label: t('التصميم', 'Design Settings')},
@@ -1495,6 +1527,212 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
             </div>
           </div>
         )}
+
+        {adminTab === 'carnival' && (
+          <div className="space-y-6 animate-in fade-in pb-20">
+            <div className="bg-[#1d0a33]/85 p-6 rounded-[2.5rem] border border-purple-500/20 space-y-4 shadow-2xl">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <i className="fas fa-gift text-purple-400"></i>
+                إعدادات حدث الافتتاح (الكرنفال)
+              </h3>
+              <p className="text-[10px] text-purple-300/60 font-bold uppercase tracking-widest">تغيير بنر حدث الافتتاح وخلفية صفحة الكرنفال وتخصيصها</p>
+
+              <div className="space-y-4">
+                {/* Banner URL setting */}
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-white/30 uppercase tracking-widest mr-2">رابط بنر حدث الافتتاح في الصفحة الرئيسية (Banner URL)</label>
+                  <input 
+                    type="text" 
+                    value={carnivalBannerUrlSetting} 
+                    onChange={e => setCarnivalBannerUrlSetting(e.target.value)} 
+                    placeholder="ضع رابط صورة البنر هنا..." 
+                    className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-purple-500/40 font-bold" 
+                  />
+                  <p className="text-[8px] text-white/20 font-bold px-1">هذه الصورة ستظهر في شريط البنرات المتحرك بالصفحة الرئيسية كعنصر حدث الافتتاح.</p>
+                </div>
+
+                {carnivalBannerUrlSetting && (
+                  <div className="w-full aspect-[21/9] bg-black/40 rounded-3xl border border-white/10 overflow-hidden relative">
+                    <img src={carnivalBannerUrlSetting} className="w-full h-full object-cover" alt="Banner Preview" />
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">معاينة صورة البنر</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Page Background URL setting */}
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-white/30 uppercase tracking-widest mr-2">رابط خلفية صفحة حدث الافتتاح (Background Image URL)</label>
+                  <input 
+                    type="text" 
+                    value={carnivalBgUrl} 
+                    onChange={e => setCarnivalBgUrl(e.target.value)} 
+                    placeholder="ضع رابط صورة الخلفية هنا..." 
+                    className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-purple-500/40 font-bold" 
+                  />
+                  <p className="text-[8px] text-white/20 font-bold px-1">سيتم تطبيق هذه الصورة كخلفية لصفحة مهرجان الافتتاح بالكامل بدلاً من اللون الافتراضي.</p>
+                </div>
+
+                {carnivalBgUrl && (
+                  <div className="w-full aspect-[16/9] bg-black/40 rounded-3xl border border-white/10 overflow-hidden relative">
+                    <img src={carnivalBgUrl} className="w-full h-full object-cover" alt="Background Preview" />
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">معاينة صورة الخلفية</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button 
+                    onClick={handleSaveCarnivalSettings}
+                    disabled={isCarnivalSaving}
+                    className="bg-purple-600 hover:bg-purple-500 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isCarnivalSaving ? <i className="fas fa-spinner animate-spin"></i> : <><i className="fas fa-save"></i> <span>حفظ التعديلات</span></>}
+                  </button>
+
+                  <button 
+                    onClick={async () => {
+                      if (confirm("هل تريد العودة للإعدادات الافتراضية للكرنفال؟")) {
+                        setIsCarnivalSaving(true);
+                        try {
+                          await setDoc(doc(db, "settings", "carnival"), {
+                            bannerUrl: "",
+                            backgroundUrl: ""
+                          }, { merge: true });
+                          setCarnivalBannerUrlSetting("");
+                          setCarnivalBgUrl("");
+                          alert("تمت استعادة الإعدادات الافتراضية بنجاح");
+                        } catch (e) {
+                          alert("حدث خطأ أثناء الحفظ");
+                        } finally {
+                          setIsCarnivalSaving(false);
+                        }
+                      }
+                    }}
+                    disabled={isCarnivalSaving}
+                    className="bg-white/5 border border-white/10 py-4 rounded-2xl font-black text-xs text-white/60 hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+                  >
+                    العودة للافتراضي
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#1d0a33]/85 p-6 rounded-[2.5rem] border border-purple-500/20 space-y-4 shadow-2xl mt-4">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <i className="fas fa-sliders-h text-purple-400"></i>
+                حالة وجدول الحدث (الكرنفال)
+              </h3>
+              <p className="text-[10px] text-purple-300/60 font-bold uppercase tracking-widest">مراقبة حالة الكرنفال، تفعيل أو إيقاف الحدث، وإعادة تشغيل التنازلي لـ 60 يوماً</p>
+              
+              <div className="bg-black/40 rounded-2xl p-4 border border-white/5 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-300">حالة الحدث الحالية:</span>
+                  {carnivalSettings?.isStopped ? (
+                    <span className="px-3 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-full text-[10px] font-black">
+                      🔴 متوقف مؤقتاً
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-full text-[10px] font-black">
+                      🟢 نشط ويعمل
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-300 font-bold">تاريخ انتهاء الحدث:</span>
+                  <span className="font-mono text-purple-300 font-black">
+                    {(() => {
+                      if (!carnivalSettings?.endTime) return "2026-08-07T12:00:00Z";
+                      const et = carnivalSettings.endTime;
+                      let d = new Date();
+                      if (typeof et.toDate === 'function') d = et.toDate();
+                      else if (et instanceof Date) d = et;
+                      else if (typeof et === 'number') d = new Date(et);
+                      else if (typeof et === 'string') d = new Date(et);
+                      else if (et.seconds) d = new Date(et.seconds * 1000);
+                      return d.toLocaleString('ar-EG');
+                    })()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={async () => {
+                    if (confirm("هل أنت متأكد من إعادة تشغيل الكرنفال؟ سيبدأ عد تنازلي جديد لمدة 60 يوماً من الآن.")) {
+                      setIsCarnivalSaving(true);
+                      try {
+                        const newEndTime = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+                        await setDoc(doc(db, "settings", "carnival"), {
+                          endTime: newEndTime
+                        }, { merge: true });
+                        alert("تمت إعادة تشغيل الحدث بنجاح لمدة 60 يوماً.");
+                      } catch (err) {
+                        alert("حدث خطأ أثناء ريستارت الحدث");
+                      } finally {
+                        setIsCarnivalSaving(false);
+                      }
+                    }
+                  }}
+                  disabled={isCarnivalSaving}
+                  className="bg-indigo-600/20 border border-indigo-500/40 hover:bg-indigo-600/30 py-2.5 px-2 rounded-xl font-black text-[10px] text-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <i className="fas fa-sync-alt text-[9px]"></i>
+                  <span>إعادة تشغيل (60 يوم)</span>
+                </button>
+
+                {carnivalSettings?.isStopped ? (
+                  <button
+                    onClick={async () => {
+                      setIsCarnivalSaving(true);
+                      try {
+                        await setDoc(doc(db, "settings", "carnival"), {
+                          isStopped: false
+                        }, { merge: true });
+                        alert("تم تفعيل الكرنفال بنجاح.");
+                      } catch (err) {
+                        alert("حدث خطأ");
+                      } finally {
+                        setIsCarnivalSaving(false);
+                      }
+                    }}
+                    disabled={isCarnivalSaving}
+                    className="bg-emerald-600/20 border border-emerald-500/40 hover:bg-emerald-600/30 py-2.5 px-2 rounded-xl font-black text-[10px] text-emerald-200 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <i className="fas fa-play text-[9px]"></i>
+                    <span>تشغيل الحدث</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (confirm("هل أنت متأكد من إيقاف الحدث بالكامل؟ سيتم منع كل من يدخل إليه مع إظهار رسالة التنبيه.")) {
+                        setIsCarnivalSaving(true);
+                        try {
+                          await setDoc(doc(db, "settings", "carnival"), {
+                            isStopped: true
+                          }, { merge: true });
+                          alert("تم إيقاف الكرنفال بنجاح.");
+                        } catch (err) {
+                          alert("حدث خطأ");
+                        } finally {
+                          setIsCarnivalSaving(false);
+                        }
+                      }
+                    }}
+                    disabled={isCarnivalSaving}
+                    className="bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 py-2.5 px-2 rounded-xl font-black text-[10px] text-rose-200 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <i className="fas fa-stop text-[9px]"></i>
+                    <span>إيقاف الحدث</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {adminTab === 'reports' && (
           <div className="space-y-6 animate-in fade-in pb-20">
             <header className="flex flex-col gap-2 mb-2 px-1">

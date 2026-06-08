@@ -13,6 +13,9 @@ import { CreateRoomModal } from './components/CreateRoomModal';
 import { NotificationsPage } from './components/NotificationsPage';
 import { BanModal } from './components/BanModal';
 import { RoomBanModal } from './components/RoomBanModal';
+import { CarnivalEventPage } from './components/CarnivalEventPage';
+// @ts-ignore
+import carnivalBannerUrl from './src/assets/images/carnival_banner_1780918603249.png';
 import { auth, db } from './firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -46,6 +49,7 @@ const App: React.FC = () => {
   const [joiningPassword, setJoiningPassword] = useState('');
   const [activeTab, setActiveTab] = useState<'home' | 'news' | 'messages' | 'me'>('home');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showCarnivalPage, setShowCarnivalPage] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [showHasRoomError, setShowHasRoomError] = useState(false);
   const [shouldOpenWalletOnProfile, setShouldOpenWalletOnProfile] = useState(false);
@@ -64,6 +68,7 @@ const App: React.FC = () => {
   const [banners, setBanners] = useState<any[]>([]);
   const [designSettings, setDesignSettings] = useState<any>(null);
   const [defaultImages, setDefaultImages] = useState<any>(null);
+  const [carnivalSettings, setCarnivalSettings] = useState<any>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
   // تتبع العناصر التي تمت معالجة انتهاء صلاحيتها لمنع التكرار
@@ -81,6 +86,9 @@ const App: React.FC = () => {
     });
     const unsubDefaultImages = onSnapshot(doc(db, "settings", "default_images"), (snap) => {
       if (snap.exists()) setDefaultImages(snap.data());
+    });
+    const unsubCarnival = onSnapshot(doc(db, "settings", "carnival"), (snap) => {
+      if (snap.exists()) setCarnivalSettings(snap.data());
     });
 
     // منع النسخ والقص وتحديد النصوص بشكل كامل لجميع عناصر التطبيق
@@ -121,6 +129,7 @@ const App: React.FC = () => {
     return () => {
       unsubDesign();
       unsubDefaultImages();
+      unsubCarnival();
       document.removeEventListener('copy', handlePreventCopy);
       document.removeEventListener('cut', handlePreventCopy);
       document.removeEventListener('selectstart', handlePreventSelect);
@@ -402,7 +411,14 @@ const App: React.FC = () => {
   useEffect(() => {
     const bannersQuery = query(collection(db, "banners"), orderBy("createdAt", "desc"), limit(5));
     const unsubscribeBanners = onSnapshot(bannersQuery, (snapshot) => {
-      setBanners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const dbBanners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const carnivalBannerItem = {
+        id: 'carnival_event',
+        title: language === 'ar' ? 'مكافأة كرنفال الافتتاح 🎪 احصل على 10 مليون عملة مجاناً!' : 'Opening Carnival Reward 🎪 Get 10,000,000 Free Coins!',
+        imageUrl: carnivalSettings?.bannerUrl || carnivalBannerUrl,
+        isEvent: true
+      };
+      setBanners([carnivalBannerItem, ...dbBanners]);
     });
 
     const roomsQuery = query(collection(db, "rooms"), orderBy("createdAt", "desc"), limit(20));
@@ -415,7 +431,7 @@ const App: React.FC = () => {
       unsubscribeBanners();
       unsubscribeRooms();
     };
-  }, []);
+  }, [language, carnivalSettings]);
 
   useEffect(() => {
     if (banners.length > 1) {
@@ -427,6 +443,15 @@ const App: React.FC = () => {
   }, [banners]);
 
   // Back key event interceptors for App-level state
+  useEffect(() => {
+    if (showCarnivalPage) {
+      return registerBackAction(() => {
+        setShowCarnivalPage(false);
+        return true;
+      });
+    }
+  }, [showCarnivalPage]);
+
   useEffect(() => {
     if (showNotifications) {
       return registerBackAction(() => {
@@ -596,10 +621,10 @@ const App: React.FC = () => {
   const finalUserPhoto = userData?.photoURL || defaultImages?.profileImage || user?.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>";
 
   return (
-    <div className="min-h-screen pb-16 max-w-md mx-auto bg-[#1a0b2e] shadow-2xl relative overflow-hidden flex flex-col border-x border-white/5" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-      {activeTab === 'home' && !showNotifications && (
+    <div className={`min-h-screen max-w-md mx-auto bg-[#1a0b2e] shadow-2xl relative overflow-hidden flex flex-col border-x border-white/5 ${(!showNotifications && !showCarnivalPage) ? 'pb-16' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      {activeTab === 'home' && !showNotifications && !showCarnivalPage && (
         <header className="px-5 py-3 flex justify-between items-center sticky top-0 z-10 bg-[#1a0b2e]/90 backdrop-blur-md">
-          <h1 className="text-lg font-black tracking-tighter bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Yalla Party</h1>
+          <h1 className="text-lg font-black tracking-tighter bg-gradient-to-r from-purple-400 via-pink-500 via-fuchsia-500 to-purple-400 bg-clip-text text-transparent animate-gradient-x">Yalla Party</h1>
           <div className="flex gap-2">
             <button 
               className="w-8 h-8 relative bg-white/5 rounded-xl flex items-center justify-center border border-white/10 text-white active:scale-90 transition-all"
@@ -643,6 +668,8 @@ const App: React.FC = () => {
 
       {showNotifications ? (
         <NotificationsPage onBack={() => setShowNotifications(false)} />
+      ) : showCarnivalPage ? (
+        <CarnivalEventPage onBack={() => setShowCarnivalPage(false)} userData={userData} carnivalSettings={carnivalSettings} />
       ) : (
         <>
           {activeTab === 'home' && (
@@ -650,9 +677,21 @@ const App: React.FC = () => {
               {/* تم تقليل حواف البنر من rounded-[2.5rem] إلى rounded-2xl */}
               <div className="w-full h-32 rounded-2xl overflow-hidden relative shadow-2xl border border-white/5 bg-white/5">
                 {banners.length > 0 ? banners.map((banner, index) => (
-                  <div key={banner.id} className={`absolute inset-0 transition-opacity duration-1000 ${index === currentBannerIndex ? 'opacity-100' : 'opacity-0'}`}>
+                  <div 
+                    key={banner.id} 
+                    onClick={() => {
+                      if (banner.isEvent) {
+                        setShowCarnivalPage(true);
+                      }
+                    }}
+                    className={`absolute inset-0 transition-opacity duration-1000 ${index === currentBannerIndex ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'} ${banner.isEvent ? 'cursor-pointer' : ''}`}
+                  >
                     <img src={banner.imageUrl} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#1a0b2e]/90 via-transparent to-transparent p-5 flex flex-col justify-end"><h4 className="font-black text-sm text-white">{banner.title}</h4></div>
+                    {!banner.isEvent && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#1a0b2e]/90 via-transparent to-transparent p-5 flex flex-col justify-end">
+                        <h4 className="font-black text-sm text-white text-shadow-sm">{banner.title}</h4>
+                      </div>
+                    )}
                   </div>
                 )) : <div className="h-full flex items-center justify-center opacity-20"><i className="fas fa-images"></i></div>}
               </div>
@@ -673,41 +712,43 @@ const App: React.FC = () => {
         </>
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto h-16 bg-[#0d051a]/98 backdrop-blur-xl border-t border-white/5 flex justify-around items-center px-2 z-50 rounded-t-3xl">
-        <button onClick={() => { setActiveTab('home'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'home' && !showNotifications ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-home text-sm"></i><span className="text-[8px] font-black uppercase">{t("الرئيسية", "Home")}</span></button>
-        <button onClick={() => { setActiveTab('news'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'news' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-newspaper text-sm"></i><span className="text-[8px] font-black uppercase">{t("أخبار", "News")}</span></button>
-        <div className="relative -top-3 flex flex-col items-center gap-1">
-          <button 
-            onClick={() => {
-              const userHasRoom = rooms.some(r => r.owner?.uid === user?.uid);
-              if (userHasRoom) {
-                setShowHasRoomError(true);
-              } else {
-                setIsCreateModalOpen(true);
-              }
-            }} 
-            className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-pink-500 shadow-lg flex items-center justify-center text-lg active:scale-90 transition-transform text-white"
-          >
-            <i className="fas fa-plus"></i>
-          </button>
-          <span className="text-[8px] font-black uppercase text-purple-300/60">{t("إنشاء", "Create")}</span>
-        </div>
-        <button 
-          onClick={() => { setActiveTab('messages'); setShowNotifications(false); }} 
-          className={`flex flex-col items-center gap-0.5 ${activeTab === 'messages' ? 'text-purple-400' : 'text-purple-300/30'}`}
-        >
-          <div className="relative">
-            <i className="fas fa-comment-dots text-sm"></i>
-            {unreadPrivateCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-[#0d051a]">
-                {unreadPrivateCount}
-              </span>
-            )}
+      {!showNotifications && !showCarnivalPage && (
+        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto h-16 bg-[#0d051a]/98 backdrop-blur-xl border-t border-white/5 flex justify-around items-center px-2 z-50 rounded-t-3xl">
+          <button onClick={() => { setActiveTab('home'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'home' && !showNotifications ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-home text-sm"></i><span className="text-[8px] font-black uppercase">{t("الرئيسية", "Home")}</span></button>
+          <button onClick={() => { setActiveTab('news'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'news' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-newspaper text-sm"></i><span className="text-[8px] font-black uppercase">{t("أخبار", "News")}</span></button>
+          <div className="relative -top-3 flex flex-col items-center gap-1">
+            <button 
+              onClick={() => {
+                const userHasRoom = rooms.some(r => r.owner?.uid === user?.uid);
+                if (userHasRoom) {
+                  setShowHasRoomError(true);
+                } else {
+                  setIsCreateModalOpen(true);
+                }
+              }} 
+              className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-pink-500 shadow-lg flex items-center justify-center text-lg active:scale-90 transition-transform text-white"
+            >
+              <i className="fas fa-plus"></i>
+            </button>
+            <span className="text-[8px] font-black uppercase text-purple-300/60">{t("إنشاء", "Create")}</span>
           </div>
-          <span className="text-[8px] font-black uppercase">{t("رسائل", "Messages")}</span>
-        </button>
-        <button onClick={() => { setActiveTab('me'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'me' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-user text-sm"></i><span className="text-[8px] font-black uppercase">{t("أنا", "Me")}</span></button>
-      </nav>
+          <button 
+            onClick={() => { setActiveTab('messages'); setShowNotifications(false); }} 
+            className={`flex flex-col items-center gap-0.5 ${activeTab === 'messages' ? 'text-purple-400' : 'text-purple-300/30'}`}
+          >
+            <div className="relative">
+              <i className="fas fa-comment-dots text-sm"></i>
+              {unreadPrivateCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-[#0d051a]">
+                  {unreadPrivateCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[8px] font-black uppercase">{t("رسائل", "Messages")}</span>
+          </button>
+          <button onClick={() => { setActiveTab('me'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'me' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-user text-sm"></i><span className="text-[8px] font-black uppercase">{t("أنا", "Me")}</span></button>
+        </nav>
+      )}
 
       {isMinimized && activeRoom && (
         <div 
@@ -850,6 +891,8 @@ const App: React.FC = () => {
         </div>
       )}
 
+
+
       <RoomBanModal 
         isOpen={showRoomBanModal} 
         onClose={() => setShowRoomBanModal(false)} 
@@ -863,6 +906,14 @@ const App: React.FC = () => {
         }
         .animate-slow-rotate {
           animation: slowRotate 8s linear infinite;
+        }
+        @keyframes gradientX {
+          0% { background-position: 200% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .animate-gradient-x {
+          background-size: 200% auto;
+          animation: gradientX 4s linear infinite;
         }
       `}</style>
     </div>

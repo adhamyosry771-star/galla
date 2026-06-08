@@ -30,7 +30,8 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
   const [winAmount, setWinAmount] = useState<number | null>(null);
 
   // User Betting configurations
-  const [betInput, setBetInput] = useState(1000);
+  const [betInput, setBetInput] = useState(0);
+  const [activeQuickAmount, setActiveQuickAmount] = useState<number | null>(null);
   const [isAutoCashEnabled, setIsAutoCashEnabled] = useState(false);
   const [autoCashMultiplier, setAutoCashMultiplier] = useState(2);
   const [autoCashInput, setAutoCashInput] = useState("2");
@@ -775,7 +776,14 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
                       disabled={placedBetAmount !== null}
                       value={autoCashInput}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        let rawVal = e.target.value;
+                        const arabicDigits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+                        const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+                        for (let i = 0; i < 10; i++) {
+                          rawVal = rawVal.replace(new RegExp(arabicDigits[i], 'g'), String(i))
+                                         .replace(new RegExp(persianDigits[i], 'g'), String(i));
+                        }
+                        const val = rawVal.replace(/[^0-9.]/g, '');
                         // Ensure only a single dot
                         const parts = val.split('.');
                         const cleaned = parts[0] + (parts.length > 1 ? '.' + parts.slice(1).join('') : '');
@@ -798,6 +806,8 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
                         setAutoCashMultiplier(parsed);
                       }}
                       className="w-12 bg-transparent border-none outline-none text-right font-mono text-xs text-purple-400 font-extrabold pr-0.5 disabled:cursor-not-allowed"
+                      dir="ltr"
+                      lang="en"
                     />
                     <span className="text-[9px] font-black text-white/30">x</span>
                   </div>
@@ -815,51 +825,69 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
             {/* Quick pre-configured bet value selectors */}
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
-                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">{t("حدد مبلغ الرهان للطيران", "SELECT BET AMOUNT")}</span>
+                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">{t("מبلغ الرهان", "BET AMOUNT")}</span>
                 {placedBetAmount !== null && (
                   <div className="flex items-center gap-1">
                     <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></span>
-                    <span className="text-[9px] font-black text-yellow-400 uppercase tracking-widest">{t("مقدار الرهان الحالي: ", "ACTIVE BET: ")}{placedBetAmount.toLocaleString('en-US')}</span>
+                    <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest">{t("مقدار الرهان الحالي: ", "ACTIVE BET: ")}{placedBetAmount.toLocaleString('en-US')}</span>
                   </div>
                 )}
               </div>
 
               <div className="grid grid-cols-4 gap-2">
-                {QUICK_AMOUNTS.map(amount => (
-                  <button
-                    key={amount}
-                    onClick={() => {
-                      if (placedBetAmount !== null) return; // ignore during active flights
-                      setBetInput(amount);
-                    }}
-                    disabled={placedBetAmount !== null}
-                    className={`py-2.5 rounded-xl border text-[11px] font-black font-mono transition-all duration-200
-                      ${betInput === amount ? 'bg-purple-600 text-white border-purple-500 shadow-md scale-95' : 'bg-white/5 border-white/5 text-white/60 hover:bg-white/10'}
-                      disabled:opacity-30
-                    `}
-                  >
-                    {amount >= 1000000 ? `${amount/1000000}M` : `${amount/1000}k`}
-                  </button>
-                ))}
+                {QUICK_AMOUNTS.map(amount => {
+                  const isActive = activeQuickAmount === amount;
+                  return (
+                    <button
+                      key={amount}
+                      onClick={() => {
+                        if (placedBetAmount !== null) return; // ignore during active flights
+                        setBetInput(prev => prev + amount);
+                        setActiveQuickAmount(amount);
+                      }}
+                      disabled={placedBetAmount !== null}
+                      className={`py-2.5 rounded-xl border text-[11px] font-black font-mono transition-all duration-200 transform active:scale-95
+                        ${isActive 
+                          ? 'bg-purple-600 text-white border-purple-500 shadow-md scale-95' 
+                          : 'bg-white/5 border-white/5 text-purple-200 hover:bg-white/10'
+                        }
+                        disabled:opacity-30
+                      `}
+                    >
+                      {amount >= 1000000 ? `${amount/1000000}M` : `${amount/1000}k`}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Manual custom value input scrollbar range */}
             <div className="grid grid-cols-12 gap-2 items-center bg-black/40 border border-white/5 rounded-2xl px-3 py-2.5 transition-all">
-              <div className="col-span-3 text-[9px] font-black text-white/30 uppercase tracking-wider">{t("مبلغ مخصص", "CUSTOM")}</div>
+              <div className="col-span-6 text-[10px] font-black text-white/40 uppercase tracking-wider">
+                {t("الرهان المتراكم", "ACCUMULATED BET")}
+              </div>
               
               <input 
-                type="number"
-                min="100"
-                max="100000000"
-                step="1000"
-                value={betInput}
+                type="text"
+                inputMode="numeric"
+                value={betInput === 0 ? '' : betInput}
                 disabled={placedBetAmount !== null}
                 onChange={(e) => {
-                  const val = parseInt(e.target.value) || 0;
+                  let rawVal = e.target.value;
+                  const arabicDigits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+                  const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+                  for (let i = 0; i < 10; i++) {
+                    rawVal = rawVal.replace(new RegExp(arabicDigits[i], 'g'), String(i))
+                                   .replace(new RegExp(persianDigits[i], 'g'), String(i));
+                  }
+                  const cleaned = rawVal.replace(/[^0-9]/g, '');
+                  const val = parseInt(cleaned) || 0;
                   setBetInput(val);
+                  setActiveQuickAmount(null);
                 }}
-                className="col-span-9 bg-transparent border-none outline-none text-right font-mono text-sm font-black text-white/80 pr-1 disabled:opacity-40"
+                className="col-span-6 bg-transparent border-none outline-none text-right font-mono text-sm font-black text-white/80 pr-1 disabled:opacity-40"
+                dir="ltr"
+                lang="en"
               />
             </div>
 

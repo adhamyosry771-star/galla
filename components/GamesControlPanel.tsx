@@ -415,11 +415,25 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
                     <label className="text-[10px] font-black text-purple-300/80 uppercase tracking-widest block">{t("حد تفعيل خوارزمية الخسارة (Threshold)", "Loss Threshold")}</label>
                     <div className="flex gap-2">
                        <input 
-                         type="number" 
+                         type="text" 
+                         inputMode="numeric"
                          value={fruitsGlobalSettings.lossThreshold ?? 0} 
-                         onChange={e => setDoc(doc(db, "settings", "fruitsGame"), { lossThreshold: parseInt(e.target.value) || 0 }, { merge: true })}
+                         onChange={e => {
+                           let rawVal = e.target.value;
+                           const arabicDigits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+                           const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+                           for (let i = 0; i < 10; i++) {
+                             rawVal = rawVal.replace(new RegExp(arabicDigits[i], 'g'), String(i))
+                                            .replace(new RegExp(persianDigits[i], 'g'), String(i));
+                           }
+                           const cleaned = rawVal.replace(/[^0-9]/g, '');
+                           const val = parseInt(cleaned) || 0;
+                           setDoc(doc(db, "settings", "fruitsGame"), { lossThreshold: val }, { merge: true });
+                         }}
                          placeholder={t("مثلاً: 10000000", "e.g., 10000000")} 
                          className="flex-1 bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-purple-500 transition-all font-sans text-left"
+                         dir="ltr"
+                         lang="en"
                        />
                        <div className="bg-purple-600/30 px-3 flex items-center rounded-xl text-purple-300 text-[10px] font-black border border-purple-500/20">{t("كوينز", "Coins")}</div>
                     </div>
@@ -796,18 +810,29 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
                             </label>
                             <div className="flex gap-2">
                               <input 
-                                type="number"
-                                step="0.1"
-                                min="1.0"
+                                type="text"
+                                inputMode="decimal"
                                 placeholder={t("أدخل القيمة... مثلاً: 4.8", "Enter value... e.g.: 4.8")}
                                 value={customMultipliersInput[player.id] !== undefined ? customMultipliersInput[player.id] : (currentMaxMultiplier || '')}
                                 onChange={(e) => {
+                                  let rawVal = e.target.value;
+                                  const arabicDigits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+                                  const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+                                  for (let i = 0; i < 10; i++) {
+                                    rawVal = rawVal.replace(new RegExp(arabicDigits[i], 'g'), String(i))
+                                                   .replace(new RegExp(persianDigits[i], 'g'), String(i));
+                                  }
+                                  const val = rawVal.replace(/[^0-9.]/g, '');
+                                  const parts = val.split('.');
+                                  const cleaned = parts[0] + (parts.length > 1 ? '.' + parts.slice(1).join('') : '');
                                   setCustomMultipliersInput(prev => ({
                                     ...prev,
-                                    [player.id]: e.target.value
+                                    [player.id]: cleaned
                                   }));
                                 }}
                                 className="flex-1 bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-[11px] font-bold text-white focus:outline-none focus:border-indigo-500 text-left"
+                                dir="ltr"
+                                lang="en"
                               />
                               {(() => {
                                 const valStr = customMultipliersInput[player.id] !== undefined

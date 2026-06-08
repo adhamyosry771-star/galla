@@ -10,6 +10,7 @@ import { getWealthLevelInfo, getCharismaLevelInfo } from '../utils';
 import { FlagIcon } from './ProfilePage';
 import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, orderBy, addDoc, serverTimestamp, Timestamp, increment, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { registerBackAction } from '../backButtonManager';
+import AgoraRTC from 'agora-rtc-sdk-ng';
 
 interface VoiceRoomProps {
   room: Room & { roomBackground?: string; roomIdDisplay?: string; description?: string; micCount?: number };
@@ -109,6 +110,154 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const isEffectsEnabledRef = useRef(isEffectsEnabled);
   isEffectsEnabledRef.current = isEffectsEnabled;
   const animatedMsgIds = useRef<Set<string>>(new Set());
+
+  // Agora RTC Config & Audio Handling
+  const agoraClientRef = useRef<any>(null);
+  const localAudioTrackRef = useRef<any>(null);
+  const [isAgoraConnected, setIsAgoraConnected] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    let client: any = null;
+
+    const initAgora = async () => {
+      try {
+        console.log("Setting up Agora RTC client...");
+        client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        agoraClientRef.current = client;
+
+        client.on("user-published", async (remoteUser: any, mediaType: any) => {
+          try {
+            await client.subscribe(remoteUser, mediaType);
+            if (mediaType === "audio" && isMounted) {
+              remoteUser.audioTrack?.play();
+              console.log(`Agora remote audio started playing for: ${remoteUser.uid}`);
+            }
+          } catch (subscribeError) {
+            console.error("Agora subscription error:", subscribeError);
+          }
+        });
+
+        client.on("user-unpublished", async (remoteUser: any, mediaType: any) => {
+          if (mediaType === "audio") {
+            try {
+              remoteUser.audioTrack?.stop();
+              console.log(`Agora remote audio stopped playing for: ${remoteUser.uid}`);
+            } catch (unpubError) {
+              console.error("Error stopping remote audio track:", unpubError);
+            }
+          }
+        });
+
+        const appId = "1666ffd3aa2343d286ddd24978a8f588";
+        const channelName = currentRoom.id;
+        
+        console.log(`Agora joining channel: ${channelName} with App ID: ${appId}`);
+        await client.join(appId, channelName, null, user?.uid || null);
+        
+        if (isMounted) {
+          setIsAgoraConnected(true);
+          console.log("Agora client joined room channel successfully.");
+        }
+      } catch (err) {
+        console.error("Failed to fully initiate Agora Client:", err);
+      }
+    };
+
+    initAgora();
+
+    return () => {
+      isMounted = false;
+      const cleanupAgora = async () => {
+        if (localAudioTrackRef.current) {
+          try {
+            localAudioTrackRef.current.stop();
+            localAudioTrackRef.current.close();
+            console.log("Agora local audio track stopped & closed inside unmount.");
+          } catch (err) {
+            console.error("Error closing local audio track:", err);
+          }
+          localAudioTrackRef.current = null;
+        }
+        if (client) {
+          try {
+            await client.leave();
+            console.log("Agora client left the channel successfully inside unmount.");
+          } catch (err) {
+            console.error("Error leaving Agora client:", err);
+          }
+        }
+      };
+      cleanupAgora();
+      setIsAgoraConnected(false);
+    };
+  }, [currentRoom.id, user?.uid]);
+
+  // Synchronize mic publishing with whether userIsOnMic and mic is unmuted
+  useEffect(() => {
+    const client = agoraClientRef.current;
+    if (!isAgoraConnected || !client) return;
+
+    let isMounted = true;
+    const userIsOnMic = micStates.some(m => m?.user?.uid === user?.uid);
+    const shouldPublish = userIsOnMic && !isMicMuted;
+
+    const syncMicPublishing = async () => {
+      if (shouldPublish) {
+        if (!localAudioTrackRef.current) {
+          try {
+            console.log("User is on mic & unmuted. Creating microphone track...");
+            const track = await AgoraRTC.createMicrophoneAudioTrack({
+              AEC: true, // Echo Cancellation
+              ANS: true, // Noise Suppression
+              AGC: true, // Automatic Gain Control
+            });
+            if (!isMounted) {
+              track.close();
+              return;
+            }
+            localAudioTrackRef.current = track;
+            await client.publish(track);
+            console.log("Voice track successfully published to Agora channel.");
+          } catch (err: any) {
+            console.error("Error creating or publishing local mic track:", err);
+            if (err.name === "NotAllowedError" || err.code === "PERMISSION_DENIED" || err.message?.includes("Permission denied")) {
+              alert("تمت معالجة اتصال الصوت الحقيقي، ولكن لم يتم الحصول على إذن الميكروفون. يرجى تفعيل إذن الميكروفون في المتصفح للحديث.");
+            } else {
+              alert("خطأ أثناء تفعيل الميكروفون للاتصال الحقيقي: " + (err.message || err));
+            }
+          }
+        } else {
+          try {
+            await localAudioTrackRef.current.setEnabled(true);
+            console.log("Enabled local microphone track.");
+          } catch (err) {
+            console.error("Error re-enabling local mic track:", err);
+          }
+        }
+      } else {
+        if (localAudioTrackRef.current) {
+          try {
+            console.log("User muted or got off mic. Unpublishing and closing mic track...");
+            const track = localAudioTrackRef.current;
+            localAudioTrackRef.current = null;
+            await client.unpublish(track);
+            track.stop();
+            track.close();
+            console.log("Microphone track unpublished and fully closed.");
+          } catch (err) {
+            console.error("Error unpublishing microphone tracker:", err);
+          }
+        }
+      }
+    };
+
+    syncMicPublishing();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAgoraConnected, micStates, isMicMuted, user?.uid]);
 
   // Keep a live ref to micStates for synchronous visibility of current mics
   const micStatesRef = useRef(micStates);
