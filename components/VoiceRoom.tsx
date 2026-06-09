@@ -149,7 +149,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           }
         });
 
-        const appId = "1666ffd3aa2343d286ddd24978a8f588";
+        const appId = "3c427b50bc824baebaca30a5de42af68";
         const channelName = currentRoom.id;
         
         console.log(`Agora joining channel: ${channelName} with App ID: ${appId}`);
