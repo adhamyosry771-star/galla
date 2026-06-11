@@ -376,11 +376,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
           const updates: any = {};
           if (itemType === 'frame' && userData.currentFrame === itemUrl) updates.currentFrame = null;
           if (itemType === 'entry' && userData.currentEntry === itemUrl) updates.currentEntry = null;
-          if (itemType === 'background' && userData.currentRoomBackground === itemUrl) {
+          
+          if (itemType === 'background') {
             try {
               const bgsSnap = await getDocs(query(collection(db, "roomBackgrounds"), limit(1)));
-              updates.currentRoomBackground = !bgsSnap.empty ? bgsSnap.docs[0].data().imageUrl : null;
+              const defaultBgUrl = !bgsSnap.empty ? bgsSnap.docs[0].data().imageUrl : null;
+              
+              if (userData.currentRoomBackground === itemUrl) {
+                updates.currentRoomBackground = defaultBgUrl;
+              }
+
+              // Reset rooms owned by this user currently using this custom background
+              const roomsSnap = await getDocs(query(
+                collection(db, "rooms"),
+                where("owner.uid", "==", showGrantPopup)
+              ));
+              for (const roomDoc of roomsSnap.docs) {
+                const rData = roomDoc.data();
+                if (rData.roomBackground === itemUrl) {
+                  await updateDoc(roomDoc.ref, {
+                    roomBackground: defaultBgUrl
+                  });
+                }
+              }
             } catch (e) {
+              console.error("Error resetting room backgrounds:", e);
               updates.currentRoomBackground = null;
             }
           }
@@ -405,6 +425,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
           if (!bgsSnap.empty) defaultBgUrl = bgsSnap.docs[0].data().imageUrl;
         } catch (e) {
           console.error("Error fetching default background:", e);
+        }
+
+        // Clean up any rooms using this background globally
+        try {
+          const roomsResetSnap = await getDocs(query(
+            collection(db, "rooms"),
+            where("roomBackground", "==", itemUrl)
+          ));
+          for (const rDoc of roomsResetSnap.docs) {
+            await updateDoc(rDoc.ref, { roomBackground: defaultBgUrl });
+          }
+        } catch (e) {
+          console.error("Error cleaning up room backgrounds globally:", e);
         }
       }
 

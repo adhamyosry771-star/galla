@@ -19,6 +19,11 @@
     overscroll-behavior: none;
     overscroll-behavior-y: none;
   }
+
+  *, *::before, *::after, input, button, select, textarea {
+    font-variant-numeric: lining-nums !important;
+    font-feature-settings: "lnum" 1 !important;
+  }
 }
 
 .glass {

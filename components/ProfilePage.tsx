@@ -893,21 +893,16 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
     setIsUpdating(true);
     try {
-      const receiveCoins = Math.floor(amount * 0.8);
+      const receiveCoins = amount;
       await updateDoc(doc(db, "users", user.uid), {
         diamonds: increment(-amount),
         coins: increment(receiveCoins),
       });
 
-      // Add profit to fruits game global profit tracking as general admin profit
-      await updateDoc(doc(db, "settings", "fruitsGame"), {
-        totalProfit24h: increment(amount * 0.2),
-      }).catch(() => {});
-
       alert(
         t(
-          `تم تحويل ${amount.toLocaleString("en-US")} ماسة إلى ${receiveCoins.toLocaleString("en-US")} كوينز (خصم 20% رسوم الإدارة)`,
-          `Converted ${amount.toLocaleString("en-US")} diamonds to ${receiveCoins.toLocaleString("en-US")} coins (20% admin split deducted)`,
+          `تم تحويل ${amount.toLocaleString("en-US")} ماسة إلى ${receiveCoins.toLocaleString("en-US")} كوينز بنجاح`,
+          `Converted ${amount.toLocaleString("en-US")} diamonds to ${receiveCoins.toLocaleString("en-US")} coins successfully`,
         ),
       );
       setShowConvertModal(false);
@@ -1047,7 +1042,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </div>
           </div>
           <div className="flex flex-col min-w-0 flex-1 justify-center translate-y-3">
-            <h2 className="text-2xl font-black text-white drop-shadow-2xl leading-tight mb-0.5 truncate">
+            <h2 className="text-[20.5px] font-bold text-white drop-shadow-2xl leading-normal -mt-1 pt-1 mb-0.5 truncate">
               {userDisplayName}
             </h2>
             <div className="flex items-center gap-2">
@@ -1389,6 +1384,41 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </div>
           </button>
 
+          {/* Magic Button (Placeholder Design) */}
+          <button
+            onClick={() => {
+              console.log("Magic button clicked");
+            }}
+            className="w-full flex justify-between items-center p-4 bg-gradient-to-r from-amber-500/5 via-violet-600/5 to-indigo-600/5 border border-amber-500/10 rounded-2xl active:scale-[0.98] transition-all group hover:from-amber-500/12 hover:via-violet-600/12 hover:to-indigo-600/12 shadow-lg"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500/5 flex items-center justify-center text-amber-400/80 border border-amber-500/10 relative">
+                <div className="relative w-6 h-6">
+                  {/* Three stars cluster */}
+                  <i className="fas fa-star text-sm absolute bottom-0 left-0 text-amber-400/90"></i>
+                  <i className="fas fa-star text-[10px] absolute top-0 right-0 text-amber-300/80"></i>
+                  <i className="fas fa-star text-[7px] absolute top-1.5 left-1 text-amber-200/60"></i>
+                </div>
+              </div>
+              <div className="flex flex-col items-start">
+                <span className="font-bold text-sm text-white tracking-wide">
+                  Magic
+                </span>
+                <span className="text-[10px] text-amber-300/40 font-black">
+                  {t("ميزة السحر قريباً", "Magical features coming soon")}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="bg-amber-500/10 text-amber-400/60 text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-tighter/50">
+                {t("قريباً", "Soon")}
+              </span>
+              <i
+                className={`fas ${language === "ar" ? "fa-chevron-left" : "fa-chevron-right"} text-xs text-white/10`}
+              ></i>
+            </div>
+          </button>
+
           <button
             onClick={() => {
               setIsSettingsOpen(true);
@@ -1587,7 +1617,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   </div>
                 </div>
                 <div className="flex flex-col z-10">
-                  <span className="text-[12px] font-black text-[#2a2210] tracking-widest uppercase truncate">
+                  <span className="text-[11.5px] font-[855] text-[#2a2210] tracking-widest uppercase truncate">
                     {userDisplayName}
                   </span>
                   <span className="text-[9px] font-bold text-[#3d3118] opacity-60">
@@ -1618,7 +1648,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 </div>
                 <div className="flex justify-between items-end z-10 w-full">
                   <div className="flex flex-col items-start text-start">
-                    <span className="text-[12px] font-black text-white tracking-widest uppercase truncate drop-shadow-md">
+                    <span className="text-[11.5px] font-[855] text-white tracking-widest uppercase truncate drop-shadow-md">
                       {userDisplayName}
                     </span>
                     <span className="text-[9px] font-bold text-white/80">
@@ -1659,7 +1689,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     {t("فك الماس", "Unwrap Diamonds")}
                   </h4>
                   <p className="text-[10px] text-cyan-200/60 font-bold uppercase tracking-widest">
-                    {t("رسوم التطبيق 20%", "App fee 20%")}
+                    {t("تحويل مباشر بدون رسوم 100%", "Direct conversion, 100% free")}
                   </p>
                 </div>
 
@@ -1679,19 +1709,45 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     <div className="relative w-full h-14 bg-cyan-950/40 rounded-2xl flex items-center justify-center transition-all duration-300">
                       <input
                         type="number"
+                        min="0"
+                        max={userDiamonds}
                         value={convertAmount}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value);
+                          const rawVal = e.target.value;
+                          // Convert any Arabic/Hindi numerals to standard English numbers
+                          const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+                          const converted = rawVal.replace(/[٠-٩]/g, (d) => arabicDigits.indexOf(d).toString());
+                          const cleaned = converted.replace(/[^0-9]/g, "");
+                          
+                          if (cleaned === "") {
+                            setConvertAmount("");
+                            return;
+                          }
+                          
+                          const val = parseInt(cleaned, 10);
                           if (!isNaN(val)) {
-                            if (val < 0) {
-                              setConvertAmount("0");
-                            } else if (val > userDiamonds) {
+                            if (val > userDiamonds) {
                               setConvertAmount(userDiamonds.toString());
+                            } else if (val < 0) {
+                              setConvertAmount("0");
                             } else {
                               setConvertAmount(val.toString());
                             }
                           } else {
                             setConvertAmount("");
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          // Prevent typing extra digits if the value is already at max
+                          const isDigit = /^[0-9٠-٩]$/.test(e.key);
+                          if (isDigit) {
+                            const currentVal = parseInt(convertAmount || "0", 10);
+                            const nextValueStr = (convertAmount || "") + e.key;
+                            const nextVal = parseInt(nextValueStr.replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString()), 10);
+                            if (nextVal > userDiamonds) {
+                              e.preventDefault();
+                              setConvertAmount(userDiamonds.toString());
+                            }
                           }
                         }}
                         onFocus={(e) => e.target.select()}
@@ -1714,9 +1770,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                           </span>
                           <div className="flex items-center gap-2">
                             <span className="text-xl font-black text-yellow-400">
-                              {Math.floor(
-                                parseInt(convertAmount) * 0.8,
-                              ).toLocaleString("en-US")}
+                              {parseInt(convertAmount).toLocaleString("en-US")}
                             </span>
                             <i className="fas fa-coins text-yellow-500"></i>
                           </div>
@@ -2581,13 +2635,16 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           </header>
           <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-hide">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">
-                {t("الاسم المستعار", "Nickname")}
-              </label>
+              <div className="flex justify-between items-center mr-2 ml-2">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">
+                  {t("الاسم المستعار", "Nickname")}
+                </label>
+                <span className="text-[9px] font-bold text-white/40">{newName.length}/25</span>
+              </div>
               <input
                 type="text"
                 value={newName}
-                maxLength={15}
+                maxLength={25}
                 onChange={(e) => setNewName(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-5 text-sm text-white outline-none"
               />

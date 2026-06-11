@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../LanguageContext';
 import { Room, Gift, ChatMessage } from '../types';
 import { GIFTS as STATIC_GIFTS } from '../constants';
@@ -26,6 +27,21 @@ interface VoiceRoomProps {
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isMinimized?: boolean;
+}
+
+import { saveTrackToDB, deleteTrackFromDB, loadTracksFromDBForRoom, loadTracksFromDBForUser, getAudioDuration } from './audioDatabase';
+
+const DEFAULT_TRACKS: any[] = [];
+
+function hashStringTo32BitInt(str: string): number {
+  let hash = 0;
+  if (!str) return 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash) || 999;
 }
 
 interface UserOnMic {
@@ -76,8 +92,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 }) => {
   const { language, t } = useLanguage();
   const user = auth.currentUser;
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
   const [currentRoom, setCurrentRoom] = useState(initialRoom);
   const isRoomOwner = user?.uid === currentRoom.owner?.uid || user?.email === "admin@yalla.com";
+  const isRoomModerator = currentRoom.moderators && user?.uid && currentRoom.moderators.includes(user.uid);
+  const canManageRoom = isRoomOwner || isRoomModerator;
   const [inputText, setInputText] = useState('');
   const [showGifts, setShowGifts] = useState(false);
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
@@ -91,6 +113,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [isRoomMuted, setIsRoomMuted] = useState(false); 
   const [showJoinMessage, setShowJoinMessage] = useState(false);
   const [showJoinVideo, setShowJoinVideo] = useState(false);
+  const [joinNotifications, setJoinNotifications] = useState<{ id: string, name: string }[]>([]);
+  
+  // Bar Wealth & Room Info Modals States
+  const [showRoomInfoModal, setShowRoomInfoModal] = useState(false);
+  const [showBarWealthModal, setShowBarWealthModal] = useState(false);
+  const [barWealthLogs, setBarWealthLogs] = useState<any[]>([]);
+  const [targetUserIdInput, setTargetUserIdInput] = useState('');
+  const [distributionAmountInput, setDistributionAmountInput] = useState('');
+  const [isDistributing, setIsDistributing] = useState(false);
   
   // وقت الدخول لفلترة الرسائل القديمة
   const [joinTime] = useState(Timestamp.now());
@@ -114,7 +145,18 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   // Agora RTC Config & Audio Handling
   const agoraClientRef = useRef<any>(null);
   const localAudioTrackRef = useRef<any>(null);
+  const localMusicAudioTrackRef = useRef<any>(null);
   const [isAgoraConnected, setIsAgoraConnected] = useState(false);
+  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [activeSpeakers, setActiveSpeakers] = useState<Record<string, boolean>>({});
+  const allPresentUsersRef = useRef<any[]>([]);
+
+  // Keep a live ref to isRoomMuted for synchronous access in event listeners
+  const isRoomMutedRef = useRef(isRoomMuted);
+  useEffect(() => {
+    isRoomMutedRef.current = isRoomMuted;
+  }, [isRoomMuted]);
 
   useEffect(() => {
     let isMounted = true;
@@ -130,8 +172,12 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           try {
             await client.subscribe(remoteUser, mediaType);
             if (mediaType === "audio" && isMounted) {
-              remoteUser.audioTrack?.play();
-              console.log(`Agora remote audio started playing for: ${remoteUser.uid}`);
+              if (isRoomMutedRef.current) {
+                console.log(`Agora remote audio subscribed but NOT played because room is locally muted: ${remoteUser.uid}`);
+              } else {
+                remoteUser.audioTrack?.play();
+                console.log(`Agora remote audio started playing for: ${remoteUser.uid}`);
+              }
             }
           } catch (subscribeError) {
             console.error("Agora subscription error:", subscribeError);
@@ -149,11 +195,51 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           }
         });
 
+        // Enable volume indicator to track who is currently speaking
+        client.enableAudioVolumeIndicator(200);
+        client.on("volume-indicator", (volumes: any[]) => {
+          if (!isMounted) return;
+          const speakers: Record<string, boolean> = {};
+          const currentLocalUser = userRef.current;
+          const currentLocalUserUid = currentLocalUser?.uid;
+          const allPresent = allPresentUsersRef.current || [];
+
+          volumes.forEach((v: any) => {
+            if (v.level > 3) {
+              const numericUid = Number(v.uid);
+              const isLocalUser = numericUid === 0 || (currentLocalUserUid && numericUid === hashStringTo32BitInt(currentLocalUserUid));
+              if (isLocalUser) {
+                if (currentLocalUserUid) {
+                  speakers[currentLocalUserUid] = true;
+                }
+              } else {
+                // Find matching user from active mic states or all present users
+                // by hashing their Firebase UIDs deterministically and checking if they match
+                const match = allPresent.find((u: any) => u?.uid && hashStringTo32BitInt(u.uid) === numericUid);
+                if (match) {
+                  speakers[match.uid] = true;
+                } else {
+                  // Fallback to checking active mics live ref in case allPresentUsers is updating
+                  const currentMicsList = micStatesRef.current || [];
+                  const matchedMicUser = currentMicsList.find((m: any) => m?.user?.uid && hashStringTo32BitInt(m.user.uid) === numericUid);
+                  if (matchedMicUser) {
+                    speakers[matchedMicUser.user.uid] = true;
+                  } else {
+                    speakers[numericUid.toString()] = true;
+                  }
+                }
+              }
+            }
+          });
+          setActiveSpeakers(speakers);
+        });
+
         const appId = "3c427b50bc824baebaca30a5de42af68";
         const channelName = currentRoom.id;
         
         console.log(`Agora joining channel: ${channelName} with App ID: ${appId}`);
-        await client.join(appId, channelName, null, user?.uid || null);
+        const integerUid = user?.uid ? hashStringTo32BitInt(user.uid) : null;
+        await client.join(appId, channelName, null, integerUid);
         
         if (isMounted) {
           setIsAgoraConnected(true);
@@ -179,6 +265,16 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           }
           localAudioTrackRef.current = null;
         }
+        if (localMusicAudioTrackRef.current) {
+          try {
+            localMusicAudioTrackRef.current.stop();
+            localMusicAudioTrackRef.current.close();
+            console.log("Agora local music audio track stopped & closed inside unmount.");
+          } catch (err) {
+            console.error("Error closing local music audio track:", err);
+          }
+          localMusicAudioTrackRef.current = null;
+        }
         if (client) {
           try {
             await client.leave();
@@ -193,6 +289,39 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     };
   }, [currentRoom.id, user?.uid]);
 
+  // Synchronize local room muting state with all active Agora remote audio streams
+  useEffect(() => {
+    const client = agoraClientRef.current;
+    if (!client) return;
+
+    try {
+      const remoteUsers = client.remoteUsers || [];
+      remoteUsers.forEach((remoteUser: any) => {
+        if (remoteUser.audioTrack) {
+          if (isRoomMuted) {
+            try {
+              remoteUser.audioTrack.stop();
+              console.log(`Locally muted remote user audio track: ${remoteUser.uid}`);
+            } catch (muteErr) {
+              console.error("Error stopping remote voice track locally:", muteErr);
+            }
+          } else {
+            try {
+              remoteUser.audioTrack.play().catch((playErr: any) => {
+                console.warn("Autoplay block or error playing unmuted track:", playErr);
+              });
+              console.log(`Locally unmuted remote user audio track: ${remoteUser.uid}`);
+            } catch (unmuteErr) {
+              console.error("Error starting remote voice track locally:", unmuteErr);
+            }
+          }
+        }
+      });
+    } catch (err) {
+      console.error("Failed to sync room mute status with remote audio tracks:", err);
+    }
+  }, [isRoomMuted]);
+
   // Synchronize mic publishing with whether userIsOnMic and mic is unmuted
   useEffect(() => {
     const client = agoraClientRef.current;
@@ -200,7 +329,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
     let isMounted = true;
     const userIsOnMic = micStates.some(m => m?.user?.uid === user?.uid);
-    const shouldPublish = userIsOnMic && !isMicMuted;
+    const shouldPublish = userIsOnMic && !isMicMuted && !isRoomMuted;
 
     const syncMicPublishing = async () => {
       if (shouldPublish) {
@@ -257,7 +386,72 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isAgoraConnected, micStates, isMicMuted, user?.uid]);
+  }, [isAgoraConnected, micStates, isMicMuted, user?.uid, isRoomMuted]);
+
+  // Synchronize custom local music streaming over Agora so other listeners can hear the audio directly
+  useEffect(() => {
+    const client = agoraClientRef.current;
+    if (!isAgoraConnected || !client) return;
+
+    let isMounted = true;
+    const userIsOnMic = micStates.some(m => m?.user?.uid === user?.uid);
+    // Only stream if user is on mic and music is playing locally
+    const shouldStreamMusic = userIsOnMic && isMusicPlaying && !isRoomMuted;
+
+    const syncMusicStreaming = async () => {
+      if (shouldStreamMusic) {
+        if (!localMusicAudioTrackRef.current && audioRef.current) {
+          try {
+            console.log("Local user is on mic & playing music. Creating custom Agora music stream...");
+            const audio = audioRef.current;
+            const captureStream = (audio as any).captureStream || (audio as any).mozCaptureStream;
+            if (captureStream) {
+              const stream = captureStream.call(audio);
+              const audioTracks = stream.getAudioTracks();
+              if (audioTracks && audioTracks.length > 0) {
+                const musicTrack = AgoraRTC.createCustomAudioTrack({
+                  mediaStreamTrack: audioTracks[0],
+                });
+                if (!isMounted) {
+                  musicTrack.close();
+                  return;
+                }
+                localMusicAudioTrackRef.current = musicTrack;
+                await client.publish(musicTrack);
+                console.log("Successfully published local music stream to Agora channel.");
+              } else {
+                console.warn("No audio tracks found in the captured media stream.");
+              }
+            } else {
+              console.warn("Browser does not support captureStream on HTMLAudioElement.");
+            }
+          } catch (err) {
+            console.error("Failed to create or publish custom Agora music track:", err);
+          }
+        }
+      } else {
+        if (localMusicAudioTrackRef.current) {
+          try {
+            console.log("Unpublishing and closing custom Agora music stream...");
+            const track = localMusicAudioTrackRef.current;
+            localMusicAudioTrackRef.current = null;
+            await client.unpublish(track);
+            track.stop();
+            track.close();
+            console.log("Custom Agora music stream unpublished and closed.");
+          } catch (err) {
+            console.error("Error cleaning up custom Agora music stream:", err);
+          }
+        }
+      }
+    };
+
+    syncMusicStreaming();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAgoraConnected, isMusicPlaying, micStates, user?.uid, isRoomMuted]);
 
   // Keep a live ref to micStates for synchronous visibility of current mics
   const micStatesRef = useRef(micStates);
@@ -398,9 +592,116 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       alert(t("فشلت العملية، يرجى المحاولة لاحقاً", "Operation failed, please try again later"));
     }
   };
+
+  const [showModeratorsList, setShowModeratorsList] = useState(false);
+  const [moderatorUsers, setModeratorUsers] = useState<any[]>([]);
+  const [isLoadingModerators, setIsLoadingModerators] = useState(false);
+  const [modSearchQuery, setModSearchQuery] = useState("");
+  const [searchedUserForMod, setSearchedUserForMod] = useState<any | null>(null);
+  const [isSearchingUser, setIsSearchingUser] = useState(false);
+
+  const fetchModerators = async () => {
+    if (!currentRoom.moderators || currentRoom.moderators.length === 0) {
+      setModeratorUsers([]);
+      return;
+    }
+    setIsLoadingModerators(true);
+    try {
+      const { collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+      const chunks: string[][] = [];
+      const tempMods = [...currentRoom.moderators];
+      while (tempMods.length > 0) {
+        chunks.push(tempMods.splice(0, 10));
+      }
+      
+      let fetched: any[] = [];
+      for (const chunk of chunks) {
+        const q = query(collection(db, "users"), where("uid", "in", chunk));
+        const snap = await getDocs(q);
+        snap.forEach(docSnap => {
+          fetched.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      }
+      setModeratorUsers(fetched);
+    } catch (err) {
+      console.error("Error fetching room moderators:", err);
+    } finally {
+      setIsLoadingModerators(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showModeratorsList) {
+      fetchModerators();
+    }
+  }, [showModeratorsList, currentRoom.moderators]);
+
+  const handleSearchUserForMod = async () => {
+    if (!modSearchQuery.trim()) {
+      alert(t("يرجى إدخال معرف المستخدم المُراد البحث عنه", "Please enter the user ID to search for"));
+      return;
+    }
+    setIsSearchingUser(true);
+    setSearchedUserForMod(null);
+    try {
+      const { collection, query, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+      const q1 = query(collection(db, "users"), where("customId", "==", modSearchQuery.trim()));
+      const snap1 = await getDocs(q1);
+      
+      if (!snap1.empty) {
+        const docSnap = snap1.docs[0];
+        setSearchedUserForMod({ id: docSnap.id, ...docSnap.data() });
+      } else {
+        const q2 = query(collection(db, "users"), where("uid", "==", modSearchQuery.trim()));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          const docSnap = snap2.docs[0];
+          setSearchedUserForMod({ id: docSnap.id, ...docSnap.data() });
+        } else {
+          alert(t("لم يتم العثور على أي مستخدم بهذا الرمز التعريفي", "No user found with this ID"));
+        }
+      }
+    } catch (err) {
+      console.error("Error searching user for moderator:", err);
+      alert(t("حدث خطأ أثناء البحث، يرجى المحاولة لاحقاً", "An error occurred while searching, please try again later"));
+    } finally {
+      setIsSearchingUser(false);
+    }
+  };
+
+  const handleAddModerator = async (targetUid: string) => {
+    try {
+      const { arrayUnion } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+      await updateDoc(doc(db, "rooms", currentRoom.id), {
+        moderators: arrayUnion(targetUid)
+      });
+      alert(t("تم إضافة المشرف بنجاح", "Moderator added successfully"));
+      setSearchedUserForMod(null);
+      setModSearchQuery("");
+      fetchModerators();
+    } catch (err) {
+      console.error("Error adding room moderator:", err);
+      alert(t("فشل عملية إضافة المشرف", "Failed to add moderator"));
+    }
+  };
+
+  const handleRemoveModerator = async (targetUid: string) => {
+    try {
+      const { arrayRemove } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+      await updateDoc(doc(db, "rooms", currentRoom.id), {
+        moderators: arrayRemove(targetUid)
+      });
+      alert(t("تم إزالة صلاحيات الإشراف عن العضو بنجاح", "Moderator privileges removed successfully"));
+      setModeratorUsers(prev => prev.filter(u => u.uid !== targetUid));
+    } catch (err) {
+      console.error("Error removing room moderator:", err);
+      alert(t("فشل عملية إزالة المشرف", "Failed to remove moderator"));
+    }
+  };
   const [showReportModal, setShowReportModal] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [roomPasswordInput, setRoomPasswordInput] = useState(currentRoom.password || '');
+  const [showCannotActionAdmin, setShowCannotActionAdmin] = useState(false);
   const [showReportSuccess, setShowReportSuccess] = useState(false);
   const [reportReason, setReportReason] = useState('اسائة');
   const [reportDetails, setReportDetails] = useState('');
@@ -411,11 +712,220 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [popupPartnerData, setPopupPartnerData] = useState<any>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
+  // Music Player States & Sync Orchestrator
+  const [showMusicModal, setShowMusicModal] = useState(false);
+  const [isMusicScanning, setIsMusicScanning] = useState(false);
+  
+  // Custom local audio file upload tracking list
+  const [musicList, setMusicList] = useState<any[]>([]);
+
+  // Load tracks from IndexedDB to always have fresh, valid Object URLs, filtered by the logged-in user
+  useEffect(() => {
+    let active = true;
+    const fetchLocalTracks = async () => {
+      const userId = user?.uid || 'anonymous';
+      const localTracks = await loadTracksFromDBForUser(userId);
+      if (active) {
+        setMusicList([...DEFAULT_TRACKS, ...localTracks]);
+      }
+    };
+    fetchLocalTracks();
+    return () => {
+      active = false;
+    };
+  }, [currentRoom.id, user?.uid]);
+
+  const handleDeleteTrack = async (trackId: string) => {
+    await deleteTrackFromDB(trackId);
+    const userId = user?.uid || 'anonymous';
+    const localTracks = await loadTracksFromDBForUser(userId);
+    setMusicList([...DEFAULT_TRACKS, ...localTracks]);
+
+    const trackToDelete = musicList.find(t => t.id === trackId);
+    if (trackToDelete && (currentSongSrc === trackToDelete.src || trackToDelete.name === currentSongTitle)) {
+      updateRoomMusicState({ playing: false, src: '', title: '' });
+    }
+  };
+  
+  const [musicVolume, setMusicVolume] = useState(0.5);
+  const [currentSongTitle, setCurrentSongTitle] = useState('');
+  const [currentSongSrc, setCurrentSongSrc] = useState('');
+  const [musicSeekPosition, setMusicSeekPosition] = useState(0);
+  const [musicDuration, setMusicDuration] = useState(1);
+  const isDraggingMusicSeek = useRef(false);
+
+  // Initialize browser audio node
+  useEffect(() => {
+    const audio = new Audio();
+    audio.preload = "auto";
+    audioRef.current = audio;
+
+    const onTimeUpdate = () => {
+      if (!isDraggingMusicSeek.current) {
+        setMusicSeekPosition(audio.currentTime);
+      }
+    };
+
+    const onDurationChange = () => {
+      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+        setMusicDuration(audio.duration);
+      }
+    };
+
+    const onEnded = () => {
+      setIsMusicPlaying(false);
+      
+      const onMicIndex = micStatesRef.current.findIndex((m: any) => m?.user?.uid === user?.uid);
+      const isRoomOwnerOrMod = isRoomOwner || moderatorUsers.some(u => u.uid === user?.uid) || onMicIndex !== -1;
+      
+      if (isRoomOwnerOrMod) {
+        const currentSrc = audio.src;
+        const index = musicList.findIndex(t => t.src === currentSrc || (t.isLocal && audio.src.includes(t.id)));
+        if (index !== -1 && index + 1 < musicList.length) {
+          const nextTrack = musicList[index + 1];
+          updateRoomMusicState({ src: nextTrack.src, title: nextTrack.name, playing: true, seekPosition: 0 });
+        } else {
+          updateRoomMusicState({ playing: false, seekPosition: 0 });
+        }
+      }
+    };
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('durationchange', onDurationChange);
+    audio.addEventListener('ended', onEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('durationchange', onDurationChange);
+      audio.removeEventListener('ended', onEnded);
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, [musicList, isRoomOwner, moderatorUsers, user?.uid]);
+
+  // Handle local player volume updates
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isRoomMuted ? 0 : musicVolume;
+    }
+  }, [musicVolume, isRoomMuted]);
+
+  // Subscribe and synchronize with Firestore room level musicState
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const ms = currentRoom?.musicState;
+    const userIsOnMic = micStates.some(m => m?.user?.uid === user?.uid);
+
+    if (!ms) {
+      if (audio.src) {
+        audio.pause();
+      }
+      setIsMusicPlaying(false);
+      setCurrentSongTitle('');
+      setCurrentSongSrc('');
+      return;
+    }
+
+    const { src, title, playing, seekPosition, updatedAt, senderUid } = ms;
+
+    setCurrentSongTitle(title || '');
+    setCurrentSongSrc(src || '');
+
+    let matchedSrc = src;
+    if (src.startsWith('blob:') && senderUid !== user?.uid) {
+      const localMatch = musicList.find(t => t.name === title && t.isLocal);
+      if (localMatch) {
+        matchedSrc = localMatch.src;
+      } else {
+        matchedSrc = DEFAULT_TRACKS[0]?.src || "";
+      }
+    }
+
+    if (audio.src !== matchedSrc) {
+      audio.src = matchedSrc;
+      audio.load();
+    }
+
+    // Let music play locally in sync for all members in the room regardless of mic state,
+    // so speakers and listeners alike can hear the room music, while avoiding
+    // automatic play/pause triggers when joining or leaving a mic.
+    const senderIsOnMic = senderUid ? micStates.some(m => m?.user?.uid === senderUid) : false;
+    const shouldPlayLocally = playing && senderIsOnMic;
+    setIsMusicPlaying(shouldPlayLocally);
+
+    // If Firestore thinks it's playing but the sender is not on the mic,
+    // let's auto-rectify the Firestore state to playing: false so new joiners don't get confused
+    if (playing && !senderIsOnMic && (userIsOnMic || isRoomOwner)) {
+      const rectTimer = setTimeout(() => {
+        updateRoomMusicState({ playing: false });
+      }, 1500);
+      return () => clearTimeout(rectTimer);
+    }
+
+    if (shouldPlayLocally) {
+      const now = Date.now();
+      const latencySeconds = updatedAt ? (now - updatedAt) / 1000 : 0;
+      let targetTime = (seekPosition || 0);
+
+      if (latencySeconds > 0 && latencySeconds < 3600) {
+        targetTime += latencySeconds;
+      }
+
+      if (audio.duration && targetTime > audio.duration) {
+        targetTime = targetTime % audio.duration;
+      }
+
+      if (Math.abs(audio.currentTime - targetTime) > 3.0) {
+        audio.currentTime = Math.max(0, targetTime);
+      }
+
+      // Safeguard: Ensure volume is strictly zero if the room itself is muted by user
+      audio.volume = isRoomMuted ? 0 : musicVolume;
+
+      audio.play().catch(err => {
+        console.warn("Autoplay block or delay waiting for user click:", err);
+      });
+    } else {
+      audio.pause();
+      if (seekPosition !== undefined && Math.abs(audio.currentTime - seekPosition) > 1.5) {
+        audio.currentTime = seekPosition;
+      }
+    }
+  }, [currentRoom?.musicState, musicList, user?.uid, micStates, isRoomMuted]);
+
+  const updateRoomMusicState = async (updates: { src?: string, title?: string, playing?: boolean, seekPosition?: number }) => {
+    try {
+      const roomRef = doc(db, "rooms", currentRoom.id);
+      const currentMs = currentRoom?.musicState || {};
+      
+      const newMs = {
+        src: updates.src !== undefined ? updates.src : (currentMs.src || ""),
+        title: updates.title !== undefined ? updates.title : (currentMs.title || t("جاري تشغيل الموسيقى...", "Music playing...")),
+        playing: updates.playing !== undefined ? updates.playing : (currentMs.playing || false),
+        seekPosition: updates.seekPosition !== undefined ? updates.seekPosition : (audioRef.current ? audioRef.current.currentTime : 0),
+        senderUid: user?.uid || "",
+        updatedAt: Date.now()
+      };
+
+      await updateDoc(roomRef, {
+        musicState: newMs
+      });
+    } catch (err) {
+      console.error("Error updating room music state:", err);
+    }
+  };
+
   // Intercept browser back button so it doesn't leave or quit the whole app
   useEffect(() => {
     if (isMinimized) return; // Skip if maximized is not active/minimized is true
 
     return registerBackAction(() => {
+      if (showMusicModal) {
+        setShowMusicModal(false);
+        return true;
+      }
       if (showQuantityMenu) {
         setShowQuantityMenu(false);
         return true;
@@ -527,7 +1037,31 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         id: doc.id,
         ...doc.data()
       })) as ChatMessage[];
-      setMessages(liveMsgs);
+      
+      const filteredMsgs = liveMsgs.filter(m => m.type !== 'join');
+      setMessages(filteredMsgs);
+
+      // Realtime detection of adding new enter/join messages
+      snap.docChanges().forEach(change => {
+        if (change.type === "added") {
+          const docData = change.doc.data();
+          if (docData.type === 'join') {
+            const id = change.doc.id;
+            const name = docData.userName;
+            
+            // Add to live screen notifications
+            setJoinNotifications(prev => {
+              if (prev.some(item => item.id === id)) return prev;
+              return [...prev, { id, name }];
+            });
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+              setJoinNotifications(prev => prev.filter(item => item.id !== id));
+            }, 3000);
+          }
+        }
+      });
 
       // Trigger gift animations for other users/all users
       if (isEffectsEnabledRef.current) {
@@ -785,6 +1319,110 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   }, [user]);
 
   useEffect(() => {
+    if (!showBarWealthModal || !currentRoom.id) return;
+    
+    const logsRef = collection(db, "rooms", currentRoom.id, "barWealthLogs");
+    const qLogs = query(logsRef, orderBy("createdAt", "desc"));
+    const unsubLogs = onSnapshot(qLogs, (snap) => {
+      const logs = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setBarWealthLogs(logs);
+    }, (err) => {
+      console.error("Error fetching bar wealth logs:", err);
+    });
+    
+    return unsubLogs;
+  }, [showBarWealthModal, currentRoom.id]);
+
+  // Real-time custom background validation and auto-revert to public/default background
+  useEffect(() => {
+    if (!currentRoom.id || !currentRoom.roomBackground) return;
+    
+    const bgUrl = currentRoom.roomBackground;
+    
+    const checkBgValidity = async () => {
+      try {
+        // 1. Get public/default backgrounds
+        const publicSnapshot = await getDocs(collection(db, "roomBackgrounds"));
+        const publicBgs = publicSnapshot.docs.map(doc => doc.data().imageUrl);
+        
+        // If it is a public background or matches the room cover image, it is automatically valid.
+        if (publicBgs.includes(bgUrl) || bgUrl === currentRoom.coverImage) {
+          return;
+        }
+        
+        // 2. It's a custom background. Verify if the owner still has it in their active inventory
+        const ownerUid = currentRoom.owner?.uid || currentRoom.owner?.id;
+        if (!ownerUid) return;
+        
+        const now = new Date();
+        const inventorySnapshot = await getDocs(query(
+          collection(db, "users", ownerUid, "inventory"),
+          where("type", "==", "background")
+        ));
+        
+        let hasValidItem = false;
+        for (const itemDoc of inventorySnapshot.docs) {
+          const item = itemDoc.data();
+          if (item.imageUrl === bgUrl || item.videoUrl === bgUrl) {
+            if (item.expiresAt) {
+              if (item.expiresAt.toDate() > now) {
+                hasValidItem = true;
+                break;
+              }
+            } else {
+              hasValidItem = true;
+              break;
+            }
+          }
+        }
+        
+        // If no matching valid item found, revert style to first public background or coverImage if empty
+        if (!hasValidItem) {
+          console.log("[Background Validation] Custom background expired/deleted. Reverting to default...");
+          const defaultBgUrl = publicBgs.length > 0 ? publicBgs[0] : currentRoom.coverImage;
+          await updateDoc(doc(db, "rooms", currentRoom.id), {
+            roomBackground: defaultBgUrl
+          });
+        }
+      } catch (err) {
+        console.error("Error validating background active state:", err);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      checkBgValidity();
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [currentRoom.id, currentRoom.roomBackground, currentRoom.coverImage, currentRoom.owner?.uid, currentRoom.owner?.id]);
+
+  const hasSentJoinMessage = useRef(false);
+
+  useEffect(() => {
+    if (user && currentUserData && !hasSentJoinMessage.current) {
+      hasSentJoinMessage.current = true;
+      const sendJoinMsg = async () => {
+        try {
+          await addDoc(collection(db, "rooms", currentRoom.id, "chat"), {
+            userId: user.uid,
+            userName: currentUserData.displayName || user.displayName || t('مستخدم جديد', 'New User'),
+            text: 'join',
+            type: 'join',
+            userAvatar: currentUserData?.photoURL || user?.photoURL || '',
+            createdAt: serverTimestamp()
+          });
+        } catch (err) {
+          console.error("Error sending join message:", err);
+        }
+      };
+      sendJoinMsg();
+    }
+  }, [user, currentUserData, currentRoom.id, t]);
+
+  useEffect(() => {
     if (user) {
       const isMutedInRoom = currentRoom.mutedUsers && currentRoom.mutedUsers.includes(user.uid);
       const myMicIndex = micStates.findIndex(m => m?.user?.uid === user.uid);
@@ -961,11 +1599,97 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         userName: currentUserData?.displayName || t('مستخدم', 'User'),
         text: inputText,
         type: 'text',
+        userAvatar: currentUserData?.photoURL || user?.photoURL || '',
         createdAt: serverTimestamp()
       });
       setInputText('');
     } catch (err) {
       console.error("Error sending message:", err);
+    }
+  };
+
+  const handleDistributeBarWealth = async () => {
+    if (isDistributing) return;
+    if (!targetUserIdInput.trim()) {
+      return alert(t("الرجاء إدخال أيدي المستخدم أولاً", "Please enter user ID first"));
+    }
+    const chargeAmount = parseInt(distributionAmountInput);
+    if (isNaN(chargeAmount) || chargeAmount <= 0) {
+      return alert(t("الرجاء إدخال عدد صحيح وصحيح للمبلغ", "Please enter a valid positive integer amount"));
+    }
+    const currentWealth = currentRoom.barWealth || 0;
+    if (currentWealth < chargeAmount) {
+      return alert(t("ثروة البار لا تكفي لتنفيذ هذا الإجراء", "The bar wealth has insufficient gold coins"));
+    }
+
+    setIsDistributing(true);
+    try {
+      // Find user by customId or standard uid
+      const qUser = query(collection(db, "users"), where("customId", "==", targetUserIdInput.trim()));
+      const qSnap = await getDocs(qUser);
+      
+      let targetUserDoc: any = null;
+      if (qSnap.docs.length > 0) {
+        const snap = qSnap.docs[0];
+        targetUserDoc = { uid: snap.id, ...snap.data() };
+      } else {
+        // try direct uid lookup
+        const directSnap = await getDoc(doc(db, "users", targetUserIdInput.trim()));
+        if (directSnap.exists()) {
+          targetUserDoc = { uid: directSnap.id, ...directSnap.data() };
+        }
+      }
+
+      if (!targetUserDoc) {
+        setIsDistributing(false);
+        return alert(t("المستخدم غير موجود، يرجى التحقق من الأيدي", "User not found, please check the ID"));
+      }
+
+      // Check permissions: only room owner or admin can distribute
+      if (!isRoomOwner) {
+        setIsDistributing(false);
+        return alert(t("عذراً، هذا الإجراء متاح فقط لمؤسس الغرفة", "Sorry, this action is only available for the room owner"));
+      }
+
+      // Execute transaction updates
+      // 1. Decrement room's barWealth
+      await updateDoc(doc(db, "rooms", currentRoom.id), {
+        barWealth: increment(-chargeAmount)
+      });
+
+      // 2. Increment target user's coins
+      await updateDoc(doc(db, "users", targetUserDoc.uid), {
+        coins: increment(chargeAmount)
+      });
+
+      // 3. Add to room's barWealthLogs
+      await addDoc(collection(db, "rooms", currentRoom.id, "barWealthLogs"), {
+        targetUid: targetUserDoc.uid,
+        targetName: targetUserDoc.displayName || t("مستخدم", "User"),
+        targetCustomId: targetUserDoc.customId || targetUserDoc.uid.substring(0, 8),
+        targetPhoto: targetUserDoc.photoURL || '',
+        amount: chargeAmount,
+        createdAt: serverTimestamp()
+      });
+
+      // 4. Send system notification to the recipient
+      await addDoc(collection(db, "users", targetUserDoc.uid, "systemNotifications"), {
+        title: t("شحن من ثروة البار", "Bar Wealth Coins Gifted"),
+        text: language === 'ar' 
+          ? `تهانينا! لقد تم شحن ${chargeAmount} ذهب لك من ثروة بار الغرفة "${currentRoom.title}".`
+          : `Congratulations! You received ${chargeAmount} coins from the bar wealth of room "${currentRoom.title}".`,
+        createdAt: serverTimestamp(),
+        read: false
+      });
+
+      alert(t("تهانينا! لقد تم شحن الكوينزات بنجاح إلى المستخدم.", "Congratulations! Coins have been successfully gifted to the user."));
+      setTargetUserIdInput('');
+      setDistributionAmountInput('');
+    } catch (err) {
+      console.error("Error distributing bar wealth:", err);
+      alert(t("حدث خطأ أثناء التوزيع، يرجى المحاولة لاحقاً", "An error occurred during distribution, please try again later"));
+    } finally {
+      setIsDistributing(false);
     }
   };
 
@@ -998,8 +1722,20 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         wealthLevel: newWealthLevel
       });
 
+      // 1.5. تحديث ثروة البار للغرفة (20% من قيمة الهدية الكلية)
+      const barWealthIncrement = Math.floor(totalCost * 0.2);
+      if (barWealthIncrement > 0) {
+        try {
+          await updateDoc(doc(db, "rooms", currentRoom.id), {
+            barWealth: increment(barWealthIncrement)
+          });
+        } catch (err) {
+          console.error("Error updating room bar wealth:", err);
+        }
+      }
+
       // 2. تحديث بيانات المستقبلين (جاذبية + ماس)
-      const diamondValue = Math.floor(giftValue * 0.7);
+      const diamondValue = Math.floor(giftValue * 0.3);
       for (const recipientId of Array.from(selectedUserIds)) {
         const recipientRef = doc(db, "users", recipientId);
         const recipientSnap = await getDoc(recipientRef);
@@ -1052,6 +1788,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         type: 'gift',
         giftName: gift.name,
         giftAnimation: gift.animation || null,
+        userAvatar: currentUserData?.photoURL || user?.photoURL || '',
         createdAt: serverTimestamp()
       };
       
@@ -1312,6 +2049,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const handleAdminAction = async (action: 'kick_mic' | 'mute_mic' | 'mute_room' | 'kick_room') => {
     if (!profileUserData) return;
     const targetUid = profileUserData.uid;
+    if (profileUserData?.email === "admin@yalla.com" && user?.email !== "admin@yalla.com") {
+      setShowCannotActionAdmin(true);
+      setShowAdminMenu(false);
+      return;
+    }
+    if (targetUid === currentRoom.owner?.uid && !isRoomOwner) {
+      alert(t("لا يمكن للمشرفين اتخاذ إجراءات ضد مالك الغرفة", "Moderators cannot take actions against the room owner"));
+      return;
+    }
     const userMicIndex = micStates.findIndex(m => m?.user?.uid === targetUid);
 
     try {
@@ -1430,6 +2176,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   if (currentUserData || user) allPresentUsers.push(currentUserData || { uid: user?.uid, displayName: user?.displayName, photoURL: user?.photoURL, customId: user?.uid.substring(0,8), animatedAvatar: currentUserData?.animatedAvatar || null });
   micStates.forEach(mic => { if (mic?.user && !allPresentUsers.find(p => p.uid === mic.user.uid)) allPresentUsers.push(mic.user); });
 
+  useEffect(() => {
+    allPresentUsersRef.current = allPresentUsers;
+  }, [allPresentUsers]);
+
   const usersOnMics: UserOnMic[] = micStates.map(mic => mic?.user).filter((u): u is UserOnMic => u !== null && u !== undefined);
   const displayId = ownerData?.customId || currentRoom.roomIdDisplay || currentRoom.owner?.customId || currentRoom.id.substring(0,6);
   const userIsOnMic = micStates.some(m => m?.user?.uid === user?.uid);
@@ -1447,9 +2197,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const roomIdFS = ownerData?.roomIdFontSize ?? 11;
   const activeMicCount = currentRoom.micCount || 10;
   const displayedMics = micStates.slice(0, activeMicCount);
-  const micSizeClass = activeMicCount === 15 ? 'w-[51px] h-[51px] sm:w-[57px] sm:h-[57px]' : activeMicCount === 10 ? 'w-[53px] h-[53px] sm:w-[63px] sm:h-[63px]' : 'w-[60px] h-[60px] sm:w-[70px] sm:h-[70px]';
-  const micGapClass = activeMicCount === 15 ? 'gap-y-4 gap-x-1 py-3' : 'gap-y-6 gap-x-1 py-6';
-  const nameContainerWidth = activeMicCount === 15 ? 'w-[48px]' : 'w-[52px]';
+  const micSizeClass = activeMicCount === 15 ? 'w-[52.5px] h-[52.5px] sm:w-[59px] sm:h-[59px]' : activeMicCount === 10 ? 'w-[54.6px] h-[54.6px] sm:w-[65px] sm:h-[65px]' : 'w-[60px] h-[60px] sm:w-[70px] sm:h-[70px]';
+  const micGapClass = (activeMicCount === 15 || activeMicCount === 10) ? 'gap-y-2 gap-x-1 py-2' : 'gap-y-3.5 gap-x-1 py-3';
+  const nameContainerWidth = activeMicCount === 15 ? 'w-[49.5px]' : 'w-[54px]';
   const nameTextSize = activeMicCount === 15 ? 'text-[9px]' : 'text-[9.5px]';
   const roomTitle = currentRoom.title || 'الغرفة';
   const roomBg = currentRoom.roomBackground || currentRoom.coverImage;
@@ -1506,14 +2256,44 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           )}
         </div>
       )}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        {isVideoUrl(roomBg) ? <video src={roomBg} autoPlay loop muted playsInline className="w-full h-full object-cover opacity-80" /> : <img src={roomBg} className="w-full h-full object-cover opacity-80" alt="" />}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/90"></div>
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-slate-950">
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.div
+            key={roomBg}
+            initial={{ scale: 0.96, opacity: 0, filter: "blur(20px)" }}
+            animate={{ scale: 1, opacity: 0.8, filter: "blur(0px)" }}
+            exit={{ scale: 1.12, opacity: 0, filter: "blur(20px)" }}
+            transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute inset-0 w-full h-full"
+          >
+            {isVideoUrl(roomBg) ? (
+              <video 
+                src={roomBg} 
+                autoPlay 
+                loop 
+                muted 
+                playsInline 
+                className="w-full h-full object-cover" 
+              />
+            ) : (
+              <img 
+                src={roomBg} 
+                className="w-full h-full object-cover" 
+                alt="" 
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/95 z-[2]"></div>
       </div>
       <div className="relative z-10 flex flex-col h-full w-full max-w-md mx-auto font-['Cairo']">
         <div className="p-4 flex items-center justify-between overflow-visible">
           <div className="flex items-center">
-            <div className="flex items-center gap-2.5 bg-black/60 border-y border-l border-white/10 rounded-l-full rounded-r-none pr-1.5 pl-6 py-1 shadow-2xl relative -mr-4 min-w-[140px] max-w-[220px] transition-all duration-300">
+            <div 
+              onClick={() => setShowRoomInfoModal(true)}
+              className="flex items-center gap-2.5 bg-black/60 border-y border-l border-white/10 rounded-l-full rounded-r-none pr-1.5 pl-6 py-1 shadow-2xl relative -mr-4 min-w-[140px] max-w-[220px] cursor-pointer hover:bg-black/80 select-none"
+              style={{ cursor: 'pointer' }}
+            >
               <div className="w-11 h-11 rounded-lg overflow-hidden border border-white/10 shadow-lg flex-shrink-0">
                 <img src={currentRoom.coverImage} className="w-full h-full object-cover" alt="Room" />
               </div>
@@ -1570,7 +2350,19 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                         )}
                       </div>
                       {mic.user.currentFrame && <img src={mic.user.currentFrame} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-125" alt="frame" />}
-                      {mic.user.uid === user?.uid && !isMicMuted && <div className="absolute inset-0 z-0 pointer-events-none"><div className="w-full h-full rounded-full border-[3px] border-purple-400 animate-ping opacity-40"></div></div>}
+                      {/* Speaking indicator waves */}
+                      {(activeSpeakers[mic.user.uid] || (currentRoom?.musicState?.playing && currentRoom?.musicState?.senderUid === mic.user.uid)) && (
+                        <div className="absolute inset-0 pointer-events-none z-0">
+                          {/* Inner pulsing glow backdrop */}
+                          <div className="absolute inset-0 rounded-full bg-purple-500/10 animate-pulse pointer-events-none"></div>
+                          {/* Concentric glowing voice waves expanding outwards */}
+                          <div className="absolute -inset-1 rounded-full border border-purple-400/80 animate-ping opacity-75 pointer-events-none" style={{ animationDuration: '1.2s' }}></div>
+                          <div className="absolute -inset-2.5 rounded-full border border-pink-500/60 animate-ping opacity-50 pointer-events-none" style={{ animationDuration: '1.8s', animationDelay: '0.2s' }}></div>
+                          <div className="absolute -inset-4 rounded-full border border-teal-400/40 animate-ping opacity-30 pointer-events-none" style={{ animationDuration: '2.4s', animationDelay: '0.4s' }}></div>
+                        </div>
+                      )}
+                      
+                      {/* Local mic permission active fallback when silent - no background or pulse rings, completely transparent/clean */}
                       {mic.activeEmoji && <div className="absolute inset-[-10%] z-50 flex items-center justify-center pointer-events-none animate-in zoom-in duration-300"><img src={mic.activeEmoji} className="w-full h-full object-contain" alt="reaction" /></div>}
                     </div>
                   ) : (
@@ -1617,6 +2409,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             );
           })}
         </div>
+
+
+
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-hide relative">
           <div className="flex flex-col gap-2 w-full animate-in fade-in duration-500">
             <div className="bg-black/40 rounded-lg p-2 px-3 relative overflow-hidden flex items-center justify-start min-h-[32px] max-w-[85%]"><p className="text-[9px] font-black text-white/80 leading-tight tracking-wide text-start">{t("مرحبا بك في يلا بارتي برجاء الالتزام بقواعد التطبيق والدردشه بشكل لائق يليق بالمجتمع في حال المخالفه سيتم حظر الحساب", "Welcome to Yalla Party! Please adhere to the application rules and chat in an appropriate manner. In case of violation, your account will be banned.")}</p></div>
@@ -1624,6 +2419,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           </div>
           {messages.map(msg => {
             const isMe = msg.userId === user?.uid || msg.userId === 'me' || (currentUserData?.displayName && msg.userName === currentUserData.displayName) || (user?.displayName && msg.userName === user.displayName);
+
             return (
               <div key={msg.id} className="flex flex-col items-start gap-1 animate-in slide-in-from-right duration-300">
                 <span className="font-black text-[10px] text-purple-300/80 mr-2">{isMe ? t('أنا', 'Me') : msg.userName}</span>
@@ -1642,7 +2438,17 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </div>
             );
           })}
-          {showJoinMessage && <div className="flex flex-col items-start animate-in fade-in slide-in-from-bottom duration-500"><div className="bg-purple-600/30 backdrop-blur-md border border-purple-500/20 px-4 py-1.5 rounded-full shadow-lg"><p className="text-[10px] font-black text-white">{t("مرحباً بـ ", "Welcome ")}<span className="text-yellow-400">{currentUserData?.displayName || user?.displayName || t('مستخدم جديد', 'New User')}</span>{t(" لقد دخل الغرفة", " has entered the room")}</p></div></div>}
+          {joinNotifications.map(notification => (
+            <div key={notification.id} className="flex flex-col items-start animate-in fade-in slide-in-from-bottom duration-500">
+              <div className="bg-purple-600/30 backdrop-blur-md border border-purple-500/20 px-4 py-1.5 rounded-full shadow-lg">
+                <p className="text-[10px] font-black text-white">
+                  {t("مرحباً بـ ", "Welcome ")}
+                  <span className="text-yellow-400">{notification.name}</span>
+                  {t(" لقد دخل الغرفة", " has entered the room")}
+                </p>
+              </div>
+            </div>
+          ))}
           <div ref={chatEndRef} />
         </div>
         <div className="px-3 pb-6 flex items-center gap-2 mt-auto relative">
@@ -1694,10 +2500,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
       {showExtraMenu && (
         <><div className="fixed inset-0 z-[105] bg-black/10 animate-in fade-in" onClick={() => setShowExtraMenu(false)}></div><div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[110] bg-black/60 backdrop-blur-2px border-t border-white/10 animate-slide-up h-[250px] flex flex-col overflow-hidden rounded-t-[1.5rem] shadow-2xl"><div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-4 flex-shrink-0"></div><div className="p-6 pt-2 grid grid-cols-4 gap-y-3 gap-x-4 flex-1 overflow-y-auto scrollbar-hide mt-2">
-          {isRoomOwner && (
+          {canManageRoom && (
             <button onClick={() => { setShowRoomSettings(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-cog text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الإعدادات", "Settings")}</span></button>
           )}
-          <button onClick={() => { setShowGamesMenu(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الألعاب", "Games")}</span></button><button className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الموسيقى", "Music")}</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>{t("المؤثرات", "Effects")}</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">{isRoomMuted ? t("إلغاء الكتم", "Unmute") : t("كتم الغرفة", "Mute Room")}</span></button><button className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("مشاركة", "Share")}</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("إبلاغ", "Report")}</span></button>
+          <button onClick={() => { setShowGamesMenu(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الألعاب", "Games")}</span></button><button onClick={() => { setShowMusicModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الموسيقى", "Music")}</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>{t("المؤثرات", "Effects")}</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">{isRoomMuted ? t("إلغاء الكتم", "Unmute") : t("كتم الغرفة", "Mute Room")}</span></button><button className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("مشاركة", "Share")}</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("إبلاغ", "Report")}</span></button>
 {isRoomOwner && (
   <button onClick={() => { setShowLockModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2 active:scale-90 transition-transform">
     <div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center ${currentRoom.isLocked ? 'text-white' : 'text-white/80'}`}>
@@ -1794,7 +2600,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           </header>
           
           <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
-            {!showBgSelector && !showBlacklist ? (
+            {!showBgSelector && !showBlacklist && !showModeratorsList ? (
               <>
                 <div className="flex flex-col items-center gap-4">
                   <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("صورة الغرفة", "Room Cover")}</label>
@@ -1835,18 +2641,35 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mx-2">{t("القائمة السوداء", "Blacklist")}</label>
-                    <button onClick={() => setShowBlacklist(true)} className="w-full flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
-                          <i className="fas fa-ban text-base"></i>
+                  {isRoomOwner && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mx-2">{t("مشرفي الغرفة", "Room Moderators")}</label>
+                      <button onClick={() => setShowModeratorsList(true)} className="w-full flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                            <i className="fas fa-user-shield text-base"></i>
+                          </div>
+                          <span className="text-sm font-black text-white">{t("مشرفي الغرفة", "Room Moderators")}</span>
                         </div>
-                        <span className="text-sm font-black text-white">{t("القائمة السوداء", "Blacklist")}</span>
-                      </div>
-                      <i className={`fas ${language === 'en' ? 'fa-chevron-right' : 'fa-chevron-left'} text-purple-400`}></i>
-                    </button>
-                  </div>
+                        <i className={`fas ${language === 'en' ? 'fa-chevron-right' : 'fa-chevron-left'} text-purple-400`}></i>
+                      </button>
+                    </div>
+                  )}
+
+                  {isRoomOwner && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mx-2">{t("القائمة السوداء", "Blacklist")}</label>
+                      <button onClick={() => setShowBlacklist(true)} className="w-full flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-[1.5rem] group active:scale-95 transition-all">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+                            <i className="fas fa-ban text-base"></i>
+                          </div>
+                          <span className="text-sm font-black text-white">{t("القائمة السوداء", "Blacklist")}</span>
+                        </div>
+                        <i className={`fas ${language === 'en' ? 'fa-chevron-right' : 'fa-chevron-left'} text-purple-400`}></i>
+                      </button>
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mx-2">{t("خلفية الغرفة", "Room Background")}</label>
@@ -1873,7 +2696,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 
                 <div className="grid grid-cols-3 gap-3">
                   {availableBgs.map((bg) => (
-                    <div key={bg.id} onClick={() => { setEditRoomBg(bg.imageUrl); setShowBgSelector(false); }} className={`relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer border-2 transition-all ${editRoomBg === bg.imageUrl ? 'border-purple-500 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-60'}`}>
+                    <div key={bg.id} onClick={async () => {
+                      setEditRoomBg(bg.imageUrl);
+                      setShowBgSelector(false);
+                      try {
+                        await updateDoc(doc(db, "rooms", currentRoom.id), { roomBackground: bg.imageUrl });
+                      } catch (err) {
+                        console.error("Error setting background instantly:", err);
+                      }
+                    }} className={`relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer border-2 transition-all ${editRoomBg === bg.imageUrl ? 'border-purple-500 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'border-transparent opacity-60'}`}>
                       {isVideoUrl(bg.imageUrl) ? <video src={bg.imageUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <img src={bg.imageUrl} className="w-full h-full object-cover" alt="Background" />}
                       {bg.remainingDays !== undefined && (
                         <div className="absolute top-2 right-2 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black px-2 py-0.5 rounded-lg shadow-xl z-20 flex items-center gap-0.5">
@@ -1890,7 +2721,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                   ))}
                 </div>
               </div>
-            ) : (
+            ) : showBlacklist ? (
               <div className="space-y-6 animate-in slide-in-from-left" dir={language === 'ar' ? 'rtl' : 'ltr'}>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setShowBlacklist(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all">
@@ -1941,6 +2772,105 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     ))}
                   </div>
                 )}
+              </div>
+            ) : (
+              <div className="space-y-6 animate-in slide-in-from-left" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setShowModeratorsList(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white active:scale-90 transition-all">
+                    <i className={`fas ${language === 'en' ? 'fa-arrow-left' : 'fa-arrow-right'} text-xs`}></i>
+                  </button>
+                  <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("مشرفي الغرفة", "Room Moderators")}</span>
+                </div>
+
+                {/* Search field */}
+                <div className="space-y-2 bg-[#251040]/30 border border-purple-500/10 p-4 rounded-3xl">
+                  <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest pl-2">{t("إضافة مشرف جديد عبر الرمز ID", "Add New Moderator via User ID")}</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={modSearchQuery} 
+                      onChange={(e) => setModSearchQuery(e.target.value)} 
+                      placeholder={t("اكتب ID الخاص بالمستخدم...", "Type User ID...")} 
+                      className="flex-1 bg-black/40 border border-white/10 rounded-2xl py-3 px-4 text-xs text-white outline-none focus:border-purple-500/40 transition-all text-start"
+                    />
+                    <button 
+                      onClick={handleSearchUserForMod} 
+                      disabled={isSearchingUser}
+                      className="px-5 py-3 rounded-2xl bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 font-black text-xs active:scale-95 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isSearchingUser ? <i className="fas fa-circle-notch animate-spin"></i> : <i className="fas fa-search"></i>}
+                      <span>{t("بحث", "Search")}</span>
+                    </button>
+                  </div>
+
+                  {searchedUserForMod && (
+                    <div className="p-4 bg-white/5 border border-purple-500/10 rounded-2xl animate-in zoom-in duration-200 mt-2 flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-start">
+                        <img 
+                          src={searchedUserForMod.avatar || searchedUserForMod.photoURL || "https://api.dicebear.com/7.x/adventurer/svg?seed=" + searchedUserForMod.uid} 
+                          className="w-10 h-10 rounded-full object-cover border border-white/10"
+                          alt={searchedUserForMod.displayName}
+                        />
+                        <div>
+                          <div className="text-xs font-black text-white">{searchedUserForMod.displayName || t("مستخدم", "User")}</div>
+                          {searchedUserForMod.customId && <div className="text-[9px] font-bold text-white/45">ID: {searchedUserForMod.customId}</div>}
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleAddModerator(searchedUserForMod.uid)}
+                        className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black active:scale-95 transition-all"
+                      >
+                        {t("إضافة مشرف", "Add Admin")}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest block mx-2">{t("المشرفون الحاليون", "Current Moderators")}</span>
+                  {isLoadingModerators ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-3">
+                      <i className="fas fa-circle-notch animate-spin text-purple-400 text-xl"></i>
+                      <span className="text-xs text-white/40 font-bold">{t("جاري تحميل الأعضاء...", "Loading members...")}</span>
+                    </div>
+                  ) : moderatorUsers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-3 text-center bg-white/5 border border-white/5 rounded-[2rem] p-6">
+                      <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-white/20 mb-1">
+                        <i className="fas fa-user-shield text-xl"></i>
+                      </div>
+                      <h3 className="text-white font-black text-sm">{t("لا يوجد مشرفين", "No Moderators")}</h3>
+                      <p className="text-white/40 text-[10px] leading-relaxed font-bold max-w-[200px]">
+                        {t("لم يتم تعيين أي مشرفين لهذه الغرفة حتى الآن.", "No moderators have been assigned to this room yet.")}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {moderatorUsers.map((mUser) => (
+                        <div key={mUser.uid} className="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl animate-in fade-in">
+                          <div className="flex items-center gap-3 text-start">
+                            <img 
+                              src={mUser.avatar || mUser.photoURL || "https://api.dicebear.com/7.x/adventurer/svg?seed=" + mUser.uid} 
+                              className="w-10 h-10 rounded-full object-cover border border-white/10"
+                              alt={mUser.displayName}
+                            />
+                            <div>
+                              <div className="text-xs font-black text-white">{mUser.displayName || t("مستخدم", "User")}</div>
+                              {mUser.customId && (
+                                <div className="text-[9px] font-bold text-white/45">ID: {mUser.customId}</div>
+                              )}
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => handleRemoveModerator(mUser.uid)}
+                            className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[10px] font-black tracking-wide active:scale-95 transition-all"
+                          >
+                            {t("إلغاء الإشراف", "Remove Admin")}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -2029,6 +2959,29 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 {t("حسناً", "Okay")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showCannotActionAdmin && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm" onClick={() => setShowCannotActionAdmin(false)}>
+          <div 
+            className="bg-[#1a0b2e]/90 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 w-full max-w-[300px] text-center shadow-2xl" 
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mx-auto mb-4">
+              <i className="fas fa-user-shield text-2xl"></i>
+            </div>
+            <h4 className="text-white font-black text-sm mb-2">{t("ممنوع", "Forbidden")}</h4>
+            <p className="text-white/60 text-[11px] leading-relaxed mb-6 font-bold">
+              {t("لا يمكنك طرد هذا المستخدم", "You cannot take actions against this user")}
+            </p>
+            <button 
+              onClick={() => setShowCannotActionAdmin(false)}
+              className="w-full py-3 bg-purple-600 text-white text-xs font-black rounded-xl active:scale-95"
+            >
+              {t("فهمت ذلك", "I understand")}
+            </button>
           </div>
         </div>
       )}
@@ -2195,7 +3148,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               )}
 
               {/* Admin Menu Dropdown Button */}
-              {isRoomOwner && profileUserData?.uid !== user?.uid && (
+              {canManageRoom && profileUserData?.uid !== user?.uid && (isRoomOwner || profileUserData?.uid !== currentRoom.owner?.uid) && (
                 <div className="relative">
                   <button 
                     onClick={() => setShowAdminMenu(!showAdminMenu)}
@@ -2204,47 +3157,56 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                   >
                     <i className={`fas fa-chevron-down text-[10px] transition-transform duration-200 ${showAdminMenu ? 'rotate-180' : ''}`}></i>
                   </button>
-
+ 
                   {/* Dropdown Menu */}
-                  {showAdminMenu && (
-                    <div className="absolute top-full right-0 mt-2 w-32 bg-purple-600/60 border border-purple-500/20 rounded-2xl overflow-hidden shadow-2xl z-50 animate-in zoom-in duration-200" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-                      {/* Kick from Mic */}
-                      <button 
-                        onClick={() => handleAdminAction('kick_mic')} 
-                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
-                      >
-                        <i className="fas fa-arrow-alt-circle-down w-3.5"></i>
-                        <span>{t("طرد من المايك", "Kick from Mic")}</span>
-                      </button>
-                      
-                      {/* Mute Mic */}
-                      <button 
-                        onClick={() => handleAdminAction('mute_mic')} 
-                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
-                      >
-                        <i className="fas fa-microphone-slash w-3.5"></i>
-                        <span>{t("كتم المايك", "Mute Mic")}</span>
-                      </button>
-
-                      {/* Mute Chat/Mouth in room */}
-                      <button 
-                        onClick={() => handleAdminAction('mute_room')} 
-                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
-                      >
-                        <i className="fas fa-comment-slash w-3.5"></i>
-                        <span>{t("إصمات من الغرفة", "Silence in Room")}</span>
-                      </button>
-
-                      {/* Kick from Room */}
-                      <button 
-                        onClick={() => handleAdminAction('kick_room')} 
-                        className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 flex items-center gap-1.5 transition-colors`}
-                      >
-                        <i className="fas fa-door-open w-3.5"></i>
-                        <span>{t("طرد من الغرفة", "Kick from Room")}</span>
-                      </button>
-                    </div>
-                  )}
+                  {showAdminMenu && (() => {
+                    const targetUid = profileUserData.uid;
+                    const userMicIndex = micStates.findIndex(m => m?.user?.uid === targetUid);
+                    const isTargetMicMuted = userMicIndex !== -1 && micStates[userMicIndex]?.isMuted;
+                    const isTargetRoomMuted = currentRoom.mutedUsers && currentRoom.mutedUsers.includes(targetUid);
+ 
+                    return (
+                      <div className="absolute top-full right-0 mt-2 w-32 bg-purple-600/60 border border-purple-500/20 rounded-2xl overflow-hidden shadow-2xl z-50 animate-in zoom-in duration-200" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+                        {/* Kick from Mic */}
+                        <button 
+                          onClick={() => handleAdminAction('kick_mic')} 
+                          className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
+                        >
+                          <i className="fas fa-arrow-alt-circle-down w-3.5"></i>
+                          <span>{t("طرد من المايك", "Kick from Mic")}</span>
+                        </button>
+                        
+                        {/* Mute Mic */}
+                        <button 
+                          onClick={() => handleAdminAction('mute_mic')} 
+                          className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
+                        >
+                          <i className={`fas ${isTargetMicMuted ? 'fa-microphone' : 'fa-microphone-slash'} w-3.5`}></i>
+                          <span>{isTargetMicMuted ? t("إلغاء كتم المايك", "Unmute Mic") : t("كتم المايك", "Mute Mic")}</span>
+                        </button>
+ 
+                        {/* Mute Chat/Mouth in room (ONLY allowed for owner) */}
+                        {isRoomOwner && (
+                          <button 
+                            onClick={() => handleAdminAction('mute_room')} 
+                            className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 border-b border-purple-500/10 flex items-center gap-1.5 transition-colors`}
+                          >
+                            <i className={`fas ${isTargetRoomMuted ? 'fa-comment' : 'fa-comment-slash'} w-3.5`}></i>
+                            <span>{isTargetRoomMuted ? t("إلغاء إصمات الغرفة", "Unsilence in Room") : t("إصمات من الغرفة", "Silence in Room")}</span>
+                          </button>
+                        )}
+ 
+                        {/* Kick from Room */}
+                        <button 
+                          onClick={() => handleAdminAction('kick_room')} 
+                          className={`w-full py-2.5 px-3 ${language === 'ar' ? 'text-right' : 'text-left'} text-[9px] font-black text-purple-100 hover:bg-purple-600/40 flex items-center gap-1.5 transition-colors`}
+                        >
+                          <i className="fas fa-door-open w-3.5"></i>
+                          <span>{t("طرد من الغرفة", "Kick from Room")}</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -2337,6 +3299,23 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     );
                   })()}
                 </div>
+
+                {/* User Role Badges */}
+                {profileUserData?.uid && (profileUserData.uid === currentRoom.owner?.uid || (currentRoom.moderators && currentRoom.moderators.includes(profileUserData.uid))) && (
+                  <div className="flex gap-2 mt-0.5">
+                    {profileUserData.uid === currentRoom.owner?.uid ? (
+                      <div className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/15 text-purple-300 border border-purple-500/25 rounded-full text-[10px] font-black shadow-sm backdrop-blur-md">
+                        <i className="fas fa-user-shield text-[9px] text-purple-400"></i>
+                        <span>{t("مالك", "Owner")}</span>
+                      </div>
+                    ) : (currentRoom.moderators && currentRoom.moderators.includes(profileUserData.uid)) ? (
+                      <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/25 rounded-full text-[10px] font-black shadow-sm backdrop-blur-md">
+                        <i className="fas fa-user-shield text-[9px] text-amber-400"></i>
+                        <span>{t("مشرف", "Moderator")}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
 
               <div className="w-full space-y-6">
@@ -2638,6 +3617,561 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     </div>
                     <button onClick={handleSendGift} className="basis-1/2 h-full bg-[#2d1252]/85 text-white text-[9.5px] font-black border-r border-[#2d1252]/60 transition-all">{t("إرسال", "Send")}</button>
                  </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* SENSATIONAL HIGH-TECH GLASSMORPHISM AUDIO PLAYER OVERLAY */}
+      {showMusicModal && (
+        <><div className="fixed inset-0 z-[800] bg-black/10 animate-in fade-in" onClick={() => setShowMusicModal(false)}></div>
+        <div className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[810] bg-[#100322]/90 border-t border-white/15 animate-slide-up h-[500px] flex flex-col overflow-hidden rounded-t-[1.8rem] shadow-2xl" dir="rtl">
+          <div className="w-12 h-1.5 bg-white/15 rounded-full mx-auto mt-4 mb-2 flex-shrink-0"></div>
+          
+          <div className="px-5 py-2 flex items-center justify-between border-b border-white/5 pb-4">
+            <h3 className="text-white text-[14px] font-black tracking-tight flex items-center gap-2">
+              <i className="fas fa-compact-disc text-purple-400 text-sm animate-spin [animation-duration:10s]"></i>
+              {t("مشغل الموسيقى", "Music Player")}
+            </h3>
+            <button 
+              onClick={() => setShowMusicModal(false)}
+              className="w-8 h-8 rounded-full bg-white/5 border border-white/5 text-white/60 flex items-center justify-center active:scale-90 transition-transform"
+            >
+              <i className="fas fa-times text-xs"></i>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide">
+            {isMusicScanning ? (
+              <div className="flex flex-col items-center justify-center py-16 space-y-6 animate-in zoom-in duration-300">
+                <div className="relative w-32 h-32 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border border-purple-500/10"></div>
+                  <div className="absolute inset-2 rounded-full border border-purple-500/10"></div>
+                  <div className="absolute inset-4 rounded-full bg-purple-600/10 border border-purple-500/10 flex items-center justify-center">
+                    <i className="fas fa-compact-disc text-purple-400 text-4xl animate-spin [animation-duration:3s]"></i>
+                  </div>
+                </div>
+                <div className="text-center space-y-2">
+                  <h4 className="text-white font-black text-sm">{t("جاري البحث عن ملفات الموسيقى...", "Scanning device files...")}</h4>
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-wider">{t("يرجى اختيار ملفات الصوت الخاصة بك من الاستوديو", "Please choose audio tracks from your device storage")}</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Live Controller Panel */}
+                <div className="bg-gradient-to-br from-purple-950/25 to-slate-950/25 border border-white/10 rounded-2xl p-4 space-y-4 shadow-xl">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className="text-[9px] text-purple-400 font-extrabold uppercase tracking-widest">{t("الملف الحالي", "CURRENT BROADCAST")}</p>
+                      <h4 className="text-white font-black text-sm truncate tracking-tight mt-1 flex items-center justify-end gap-1.5" dir="rtl">
+                        {userIsOnMic ? (
+                          <>
+                            <i className="fas fa-music text-purple-400 animate-pulse text-xs"></i>
+                            <span className="truncate">{currentSongTitle || t("لم يتم تحديد أغنيـة بعد", "Idle / No Active Song")}</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-lock text-white/30 text-[11px]"></i>
+                            <span className="text-white/45 font-medium text-xs">{t("مغلقة", "Closed")}</span>
+                          </>
+                        )}
+                      </h4>
+                    </div>
+                  </div>
+
+                  {/* Progress Slider */}
+                  <div className="space-y-1.5 pb-1">
+                    <div className="relative w-full h-1 bg-white/10 rounded-full overflow-hidden group">
+                      <input 
+                        type="range"
+                        min="0"
+                        max={musicDuration || 1}
+                        value={userIsOnMic ? musicSeekPosition : 0}
+                        onChange={(e) => {
+                          if (!userIsOnMic) return;
+                          const val = Number(e.target.value);
+                          setMusicSeekPosition(val);
+                          if (audioRef.current) {
+                            audioRef.current.currentTime = val;
+                          }
+                        }}
+                        onTouchStart={() => { if (userIsOnMic) isDraggingMusicSeek.current = true; }}
+                        onTouchEnd={() => {
+                          if (!userIsOnMic) {
+                            alert(t("يجب أن تكون متواجدًا على المايك لتشغيل أو تعديل الموسيقى", "You must be on a mic to play or adjust music"));
+                            return;
+                          }
+                          isDraggingMusicSeek.current = false;
+                          updateRoomMusicState({ seekPosition: musicSeekPosition });
+                        }}
+                        onMouseDown={() => { if (userIsOnMic) isDraggingMusicSeek.current = true; }}
+                        onMouseUp={() => {
+                          if (!userIsOnMic) {
+                            alert(t("يجب أن تكون متواجدًا على المايك لتشغيل أو تعديل الموسيقى", "You must be on a mic to play or adjust music"));
+                            return;
+                          }
+                          isDraggingMusicSeek.current = false;
+                          updateRoomMusicState({ seekPosition: musicSeekPosition });
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        disabled={!userIsOnMic}
+                      />
+                      <div 
+                        className="h-full bg-gradient-to-l from-purple-500 to-pink-500 rounded-full"
+                        style={{ width: `${userIsOnMic ? ((musicSeekPosition / (musicDuration || 1)) * 100) : 0}%` }}
+                      ></div>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-white/40 font-bold font-mono">
+                      <span>{userIsOnMic ? `${Math.floor(musicSeekPosition / 60)}:${(Math.floor(musicSeekPosition % 60)).toString().padStart(2, '0')}` : "0:00"}</span>
+                      <span>{userIsOnMic ? `${Math.floor(musicDuration / 60)}:${(Math.floor(musicDuration % 60)).toString().padStart(2, '0')}` : "0:00"}</span>
+                    </div>
+                  </div>
+
+                  {/* Controller Buttons */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => {
+                          if (!userIsOnMic) {
+                            alert(t("يجب أن تكون متواجدًا على المايك لتشغيل الموسيقى", "You must be on a mic to play music"));
+                            return;
+                          }
+                          const soundState = !isMusicPlaying;
+                          updateRoomMusicState({ playing: soundState, seekPosition: audioRef.current ? audioRef.current.currentTime : 0 });
+                        }}
+                        className="w-10 h-10 rounded-full bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 flex items-center justify-center active:scale-90 transition-transform"
+                      >
+                        <i className={`fas ${(userIsOnMic && isMusicPlaying) ? 'fa-pause' : 'fa-play'} text-sm`}></i>
+                      </button>
+                    </div>
+
+                    {/* Volume block */}
+                    <div className="flex items-center gap-2">
+                      <i className={`fas ${musicVolume === 0 ? 'fa-volume-mute' : musicVolume < 0.4 ? 'fa-volume-low' : 'fa-volume-high'} text-white/40 text-xs`}></i>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="1" 
+                        step="0.05" 
+                        value={musicVolume} 
+                        onChange={(e) => setMusicVolume(Number(e.target.value))}
+                        className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Playlist Section */}
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-white font-black text-[11px] tracking-tight uppercase">{t("ملفات الصوت والموسيقى", "Audio & Music Files")}</h4>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {
+                          const input = document.getElementById('device-music-scanner') as HTMLInputElement;
+                          if (input) input.click();
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/20 text-[10px] font-black flex items-center gap-1.5 transition-all"
+                      >
+                        <i className="fas fa-plus"></i>
+                        {t("إضافة موسيقى", "Add Music")}
+                      </button>
+                    </div>
+                    <input 
+                      type="file" 
+                      id="device-music-scanner" 
+                      multiple 
+                      accept="audio/*" 
+                      className="hidden w-0 h-0 opacity-0 absolute pointer-events-none" 
+                      onChange={async (e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) return;
+                        
+                        setIsMusicScanning(true);
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        
+                        for (let i = 0; i < files.length; i++) {
+                           const file = files[i];
+                           const trackId = 'id_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+                           const actualDuration = await getAudioDuration(file);
+                           // Save the actual file Blob directly into IndexedDB!
+                           await saveTrackToDB({
+                             id: trackId,
+                             name: file.name.replace(/\.[^/.]+$/, ""),
+                             blob: file,
+                             duration: actualDuration,
+                             roomId: currentRoom.id,
+                             userId: user?.uid || 'anonymous'
+                           });
+                        }
+                        
+                        // Reload modern live list from IndexedDB freshly
+                        const userId = user?.uid || 'anonymous';
+                        const localTracks = await loadTracksFromDBForUser(userId);
+                        setMusicList([...DEFAULT_TRACKS, ...localTracks]);
+                        setIsMusicScanning(false);
+                      }}
+                    />
+                  </div>
+
+                  {musicList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 opacity-35 bg-white/2 border border-white/5 rounded-2xl">
+                      <i className="fas fa-folder-open text-3xl text-white/50 mb-2"></i>
+                      <p className="text-[10px] uppercase font-black">{t("لا توجد موسيقى. اضغط إضافة موسيقى", "Empty Playlist. Click Add Music")}</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto scrollbar-hide pr-1">
+                      {musicList.map((track) => {
+                        const isActive = userIsOnMic && (currentSongSrc === track.src || (track.isLocal && currentSongTitle === track.name));
+                        return (
+                          <div key={track.id} className="relative overflow-hidden rounded-xl bg-transparent">
+                            {/* Absolute action overlay under the card on the far left */}
+                            <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 z-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTrack(track.id);
+                                }}
+                                className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-500 border border-red-500/20 flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg"
+                                title={t("حذف", "Delete")}
+                              >
+                                <i className="fas fa-trash-alt text-[10px]"></i>
+                              </button>
+                            </div>
+
+                            {/* Main list item, draggable to the right to reveal delete button */}
+                            <motion.div
+                              drag="x"
+                              dragDirectionLock
+                              dragConstraints={{ left: 0, right: 54 }}
+                              dragElastic={{ left: 0.05, right: 0.2 }}
+                              className="relative z-10 w-full rounded-xl bg-[#100322]"
+                            >
+                              <button 
+                                onClick={() => {
+                                  if (!userIsOnMic) {
+                                    alert(t("يجب أن تكون متواجدًا على المايك لتشغيل الموسيقى", "You must be on a mic to play music"));
+                                    return;
+                                  }
+                                  updateRoomMusicState({
+                                    src: track.src,
+                                    title: track.name,
+                                    playing: true,
+                                    seekPosition: 0
+                                  });
+                                }}
+                                className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all text-right ${isActive ? 'bg-purple-600/20 border-purple-500/30' : 'bg-white/5 border-white/5 active:scale-98'}`}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={`w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center ${isActive ? 'bg-purple-500/30 text-purple-300' : 'bg-white/5 text-white/40'}`}>
+                                    <i className={`fas ${isActive && isMusicPlaying ? 'fa-volume-up' : 'fa-music'} text-[10px]`}></i>
+                                  </div>
+                                  <div className="text-right min-w-0">
+                                    <h5 className={`text-xs font-black truncate ${isActive ? 'text-purple-300 font-extrabold' : 'text-white/80'}`}>
+                                      {track.name}
+                                    </h5>
+                                  </div>
+                                </div>
+                                <div className="text-[10px] text-white/30 font-bold font-mono">
+                                  {Math.floor(track.duration / 60)}:{(Math.floor(track.duration % 60)).toString().padStart(2, '0')}
+                                </div>
+                              </button>
+                            </motion.div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div></>
+      )}
+
+      {/* ==================== ROOM INFO MODAL (معلومات الغرفة) ==================== */}
+      {showRoomInfoModal && (
+        <>
+          <div className="fixed inset-0 z-[840] bg-black/50" onClick={() => setShowRoomInfoModal(false)}></div>
+          <div 
+            className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[841] bg-[#0d041e]/80 border-t border-white/10 rounded-t-[2.2rem] p-5 pb-7 shadow-2xl pointer-events-auto flex flex-col font-['Cairo'] text-right animate-in slide-in-from-bottom duration-300"
+            onClick={(e) => e.stopPropagation()}
+            dir={language === 'ar' ? 'rtl' : 'ltr'}
+          >
+            {/* Small drag indication handle */}
+            <div className="w-12 h-1 bg-white/15 rounded-full mx-auto mb-4 flex-shrink-0"></div>
+
+            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-3.5 flex-shrink-0">
+              <button 
+                onClick={() => setShowRoomInfoModal(false)}
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white flex items-center justify-center transition-all active:scale-90"
+              >
+                <i className="fas fa-times text-xs"></i>
+              </button>
+              <h3 className="text-white text-[14px] font-black">{t("معلومات الغرفة", "Room Information")}</h3>
+              <div className="w-8"></div>
+            </div>
+
+            {/* Premium Compact Horizontal Room Card */}
+            <div className="bg-purple-600/5 border border-purple-500/10 rounded-2xl p-3 flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl overflow-hidden border border-white/10 shadow-md flex-shrink-0">
+                  <img src={currentRoom.coverImage} className="w-full h-full object-cover" alt="Cover" />
+                </div>
+                <div className="text-right">
+                  <h4 className="text-white font-extrabold text-[13px] flex items-center gap-1 leading-tight">
+                    {currentRoom.title}
+                  </h4>
+                  <p className="text-[9px] text-white/40 font-bold uppercase tracking-wider mt-1 select-all" dir="ltr">
+                    ID: {displayId}
+                  </p>
+                </div>
+              </div>
+
+              {isRoomOwner && (
+                <button 
+                  onClick={() => {
+                    setShowRoomInfoModal(false);
+                    setShowRoomSettings(true);
+                  }}
+                  className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 flex items-center justify-center transition-all active:scale-90"
+                  title={t("تعديل الغرفة", "Edit Room")}
+                >
+                  <i className="fas fa-cog text-xs"></i>
+                </button>
+              )}
+            </div>
+
+            {/* Double column grid for statistics */}
+            <div className="grid grid-cols-2 gap-2.5 mb-2.5">
+              {/* Bar Wealth Level Card */}
+              {(() => {
+                const currentWealth = currentRoom.barWealth || 0;
+                const barLevel = Math.floor(currentWealth / 10000) + 1;
+                const progress = Math.min(100, Math.floor((currentWealth % 10000) / 100));
+
+                return (
+                  <div className="p-3 bg-white/3 rounded-xl border border-white/5 flex flex-col justify-between h-[64px]">
+                    <div className="flex justify-between items-center text-[10px] font-black text-white/40">
+                      <span>{t("مستوى ثروة البار", "Bar wealth level")}</span>
+                      <span className="text-purple-400">Lv.{barLevel}</span>
+                    </div>
+                    <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mt-1">
+                      <div className="bg-gradient-to-r from-purple-500 via-pink-400 to-yellow-500 h-full" style={{ width: `${progress}%` }}></div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Bar Wealth Value & Distribution Trigger */}
+              <div 
+                onClick={() => {
+                  if (isRoomOwner) {
+                    setShowRoomInfoModal(false);
+                    setShowBarWealthModal(true);
+                  } else {
+                    alert(t("ثروة البار: تجمع 20% من قيمة الهدايا المرسلة في الغرفة ويمكن لمؤسس الغرفة توزيعها على الأعضاء.", "Bar Wealth: 20% of gifts sent in this room are added here. The room owner can distribute these coins to any user."));
+                  }
+                }}
+                className={`p-3 bg-white/3 rounded-xl border border-white/5 flex flex-col justify-between h-[64px] transition-all ${isRoomOwner ? 'cursor-pointer hover:bg-white/10 active:scale-[0.99]' : 'cursor-default'}`}
+              >
+                <div className="flex items-center justify-between text-[10px] text-white/40 font-bold">
+                  <span className="flex items-center gap-1">
+                    <i className="fas fa-coins text-yellow-500 text-[9px]"></i>
+                    {t("ثروة البار", "Bar Wealth")}
+                  </span>
+                  {isRoomOwner && (
+                    <span className="text-[7px] bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 px-1.5 rounded-full font-black">
+                      {t("توزيع", "Distribute")}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-yellow-400 font-extrabold text-[12px]">{currentRoom.barWealth || 0}</span>
+                  {isRoomOwner && (
+                    <i className="fas fa-chevron-left text-[8px] text-white/20"></i>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Metadata (Country / Bio) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2.5 bg-white/3 rounded-xl border border-white/5">
+                <span className="text-white/40 font-black text-[10px]">{t("الدولة", "Country")}</span>
+                <div className="flex items-center gap-1.5">
+                  {ownerData?.regionFlag && (
+                    <FlagIcon code={ownerData?.regionCode} flagEmoji={ownerData.regionFlag} className="w-4 h-[11px]" />
+                  )}
+                  <span className="text-white/70 font-bold text-[11px]">{ownerData?.region || t("العالم العربي", "Arab World")}</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-white/3 rounded-xl border border-white/5 text-right flex flex-col gap-1 max-h-[85px] overflow-y-auto scrollbar-hide">
+                <span className="text-white/40 font-black text-[10px]">{t("وصف الغرفة", "Room Bio")}</span>
+                <p className="text-white/60 text-[10.5px] leading-relaxed break-words font-medium">
+                  {currentRoom.description || t("مرحباً بكم في غرفتنا الصوتية المتواضعة! نرجو احترام القواعد والاستمتاع بوقتكم.", "Welcome to our voice room, please respect rules and have a wonderful time!")}
+                </p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ==================== BAR WEALTH DISTRIBUTION BACKEND MODAL (لوحة ثروة البار) ==================== */}
+      {showBarWealthModal && (
+         <>
+          <div className="fixed inset-0 z-[850] bg-black/50" onClick={() => setShowBarWealthModal(false)}></div>
+          <div 
+            className="fixed bottom-0 left-0 right-0 max-md mx-auto z-[851] bg-[#0d041e]/80 border-t border-white/10 rounded-t-[2.2rem] p-5 pb-7 shadow-2xl pointer-events-auto flex flex-col font-['Cairo'] text-right h-[75%] max-h-[600px] overflow-hidden animate-in slide-in-from-bottom duration-300"
+            onClick={(e) => e.stopPropagation()}
+            dir={language === 'ar' ? 'rtl' : 'ltr'}
+          >
+            <div className="w-12 h-1 bg-white/15 rounded-full mx-auto mb-4 flex-shrink-0"></div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/5 flex-shrink-0">
+              <button 
+                onClick={() => setShowBarWealthModal(false)}
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white flex items-center justify-center transition-all active:scale-90"
+              >
+                <i className="fas fa-times text-xs"></i>
+              </button>
+              <h3 className="text-white text-[14px] font-black">{t("ثروة البار", "Bar Wealth")}</h3>
+              <div className="w-8"></div>
+            </div>
+
+            {/* Content area */}
+            <div className="flex-1 overflow-y-auto space-y-3.5 py-4 pr-1 scrollbar-hide">
+              {/* Premium Eye-friendly Wealth Balance Block */}
+              <div className="bg-purple-600/5 border border-purple-500/10 rounded-2xl p-4 flex items-center justify-between relative overflow-hidden">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
+                    <i className="fas fa-coins text-lg"></i>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[20px] font-black text-yellow-400 leading-none">{currentRoom.barWealth || 0}</span>
+                    <p className="text-[9px] text-white/40 font-bold tracking-tight mt-0.5">{t("الذهب المتوفر للتوزيع في الغرفة", "Gold available in room")}</p>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    const icon = document.getElementById("bar-wealth-ref-icon-compact");
+                    if (icon) {
+                      icon.classList.add("animate-spin");
+                      setTimeout(() => icon.classList.remove("animate-spin"), 800);
+                    }
+                  }}
+                  className="w-8 h-8 rounded-xl bg-white/5 text-white/40 hover:text-white flex items-center justify-center active:scale-90 transition-all border border-white/5"
+                >
+                  <i id="bar-wealth-ref-icon-compact" className="fas fa-sync-alt text-[10px]"></i>
+                </button>
+              </div>
+
+              {/* Input Form Group */}
+              <div className="bg-white/3 border border-white/5 rounded-2xl p-4 space-y-3">
+                <div className="space-y-1 flex flex-col items-start w-full">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                    {t("أدخل أيدي المستخدم (ID):", "User ID:")}
+                  </label>
+                  <input 
+                    type="text"
+                    className="w-full bg-[#13072b]/65 border border-white/10 rounded-xl py-2.5 px-4 text-white text-xs text-right font-black placeholder:text-white/20 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    placeholder={t("أدخل الـ ID المكون من 6 أرقام", "Enter 6-digit User ID")}
+                    value={targetUserIdInput}
+                    onChange={(e) => setTargetUserIdInput(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1 flex flex-col items-start w-full">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                    <i className="fas fa-coins text-[9px]"></i>
+                    {t("أدخل رقم التوزيع:", "Distribution Amount:")}
+                  </label>
+                  <input 
+                    type="number"
+                    className="w-full bg-[#13072b]/65 border border-white/10 rounded-xl py-2.5 px-4 text-white text-xs text-right font-black placeholder:text-white/20 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    placeholder={t("الرجاء إدخال عدد صحيح", "Enter integer amount")}
+                    value={distributionAmountInput}
+                    onChange={(e) => setDistributionAmountInput(e.target.value)}
+                  />
+                </div>
+
+                <div className="pt-1.5">
+                  <button 
+                    onClick={handleDistributeBarWealth}
+                    disabled={isDistributing}
+                    className="w-full bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-600 hover:brightness-110 active:scale-[0.98] disabled:opacity-50 text-white font-black text-xs py-3 px-6 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+                  >
+                    {isDistributing ? (
+                      <>
+                        <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                        <span>{t("جاري التوزيع...", "Processing...")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-paper-plane text-[10px]"></i>
+                        <span>{t("إرسال الذهب", "Send Coins")}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Logs Title */}
+              <div className="pt-1 pb-1 border-b border-white/5 flex items-center justify-between">
+                <span className="text-[9px] text-white/30 font-black uppercase tracking-wider">{t("سجلات النقل الأخيرة", "Recent transfers")}</span>
+                <p className="text-white font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                  <i className="fas fa-history text-[9px] text-purple-400"></i>
+                  {t("سجل التوزيع", "Distribution History")}
+                </p>
+              </div>
+
+              {/* Logs List Section */}
+              <div className="space-y-2 pb-4">
+                {barWealthLogs.length === 0 ? (
+                  <div className="py-10 text-center text-white/20 text-[11px] font-black uppercase tracking-widest">
+                    {t("لا توجد سجلات توزيع بعد", "No transfer history yet")}
+                  </div>
+                ) : (
+                  barWealthLogs.slice(0, 30).map((log) => {
+                    const logDateStr = (() => {
+                      if (!log.createdAt) return '';
+                      const date = log.createdAt.toDate ? log.createdAt.toDate() : new Date(log.createdAt);
+                      const pad = (n: number) => n.toString().padStart(2, '0');
+                      const h = pad(date.getHours());
+                      const m = pad(date.getMinutes());
+                      const s = pad(date.getSeconds());
+                      const d = pad(date.getDate());
+                      const mo = pad(date.getMonth() + 1);
+                      const y = date.getFullYear();
+                      return `${h}:${m}:${s} ${d}-${mo}-${y}`;
+                    })();
+
+                    return (
+                      <div key={log.id} className="flex items-center justify-between bg-white/3 border border-white/5 rounded-xl p-2.5 hover:bg-white/5 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="text-right min-w-0">
+                            <h5 className="text-white font-black text-[11px] truncate leading-tight">{log.targetName}</h5>
+                            <p className="text-[8px] text-white/40 font-bold tracking-tight mt-0.5" dir="ltr">ID: {log.targetCustomId}</p>
+                          </div>
+                        </div>
+
+                        <div className="text-left flex-shrink-0">
+                          <div className="flex items-center gap-1 text-red-500 font-extrabold text-[11px] justify-end">
+                            <span>-{log.amount}</span>
+                            <i className="fas fa-coins text-[9px]"></i>
+                          </div>
+                          <p className="text-[7.5px] text-white/30 font-bold uppercase tracking-wider mt-0.5 leading-none" dir="ltr">
+                            {logDateStr}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>

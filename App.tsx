@@ -325,15 +325,30 @@ const App: React.FC = () => {
               const updates: any = {};
               if (item.type === 'frame' && userData?.currentFrame === item.imageUrl) updates.currentFrame = null;
               if (item.type === 'entry' && userData?.currentEntry === item.videoUrl) updates.currentEntry = null;
-              if (item.type === 'background' && (userData?.currentRoomBackground === item.imageUrl || item.isEquipped)) {
+              if (item.type === 'background') {
                 try {
                   const publicBgsSnapshot = await getDocs(query(collection(db, "roomBackgrounds"), limit(1)));
-                  if (!publicBgsSnapshot.empty) {
-                    updates.currentRoomBackground = publicBgsSnapshot.docs[0].data().imageUrl;
-                  } else {
-                    updates.currentRoomBackground = null;
+                  const defaultBgUrl = !publicBgsSnapshot.empty ? publicBgsSnapshot.docs[0].data().imageUrl : null;
+                  
+                  if (userData?.currentRoomBackground === item.imageUrl || item.isEquipped) {
+                    updates.currentRoomBackground = defaultBgUrl;
+                  }
+
+                  // Also proactively find all rooms owned by the user and update if utilizing this background
+                  const roomsSnap = await getDocs(query(
+                    collection(db, "rooms"),
+                    where("owner.uid", "==", user.uid)
+                  ));
+                  for (const roomDoc of roomsSnap.docs) {
+                    const rData = roomDoc.data();
+                    if (rData.roomBackground === item.imageUrl) {
+                      await updateDoc(roomDoc.ref, {
+                        roomBackground: defaultBgUrl
+                      });
+                    }
                   }
                 } catch (e) {
+                  console.error("Error resetting room backgrounds in expiration check:", e);
                   updates.currentRoomBackground = null;
                 }
               }

@@ -768,7 +768,9 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
                               { label: 'أقصى 3.0x', value: 3.0, icon: '🔥' },
                               { label: 'أقصى 5.0x', value: 5.0, icon: '💎' },
                               { label: 'أقصى 10x', value: 10.0, icon: '👑' },
-                              { label: 'أقصى 30x', value: 30.0, icon: '🚀' }
+                              { label: 'أقصى 30x', value: 30.0, icon: '🚀' },
+                              { label: 'أقصى 50x', value: 50.0, icon: '🪐' },
+                              { label: 'أقصى 100x', value: 100.0, icon: '💯' }
                             ].map((opt, i) => {
                               const isActive = opt.value === null 
                                 ? (currentMaxMultiplier === undefined || currentMaxMultiplier === null || currentMaxMultiplier === 0)

@@ -84,6 +84,22 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
             const data = snap.data();
             setUserStats(data);
             userStatsRef.current = data;
+            
+            // Real-time dynamic flight constraint updates
+            if (gameStateRef.current === 'flying') {
+              const maxMultRaw = data.aviatorMaxMultiplier;
+              const maxMult = (maxMultRaw !== undefined && maxMultRaw !== null) ? parseFloat(String(maxMultRaw)) : null;
+              if (maxMult !== null && !isNaN(maxMult) && maxMult > 1.0) {
+                // To keep the flight exactly or close to the target without breaking small numbers:
+                // We pick a random value between 92% and 100% of maxMult (with safety bounds)
+                const minPossible = maxMult * 0.92;
+                const lowerBound = Math.max(1.05, minPossible);
+                let liveCrashValue = parseFloat((lowerBound + Math.random() * (maxMult - lowerBound)).toFixed(2));
+                
+                targetCrashPointRef.current = liveCrashValue;
+                console.log("[Aviator Debug] Live admin changes applied with dynamic variance to:", targetCrashPointRef.current);
+              }
+            }
           }
         });
       } else {
@@ -256,21 +272,21 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
       candidateRoll = parseFloat((4 + Math.random() * 15).toFixed(2));
     } else {
       const randVal = Math.random() * 100;
-      if (randVal < 3) {
-        // 3% absolute instant explosion at 1.00x - 1.02x
-        candidateRoll = parseFloat((1.00 + Math.random() * 0.02).toFixed(2));
-      } else if (randVal < 45) {
-        // 42% small multipliers: 1.05x to 1.80x
-        candidateRoll = parseFloat((1.05 + Math.random() * 0.75).toFixed(2));
+      if (randVal < 5) {
+        // 5% instant quick explosion: 1.00x to 1.05x
+        candidateRoll = parseFloat((1.00 + Math.random() * 0.05).toFixed(2));
+      } else if (randVal < 20) {
+        // 15% very low: 1.05x to 1.30x
+        candidateRoll = parseFloat((1.05 + Math.random() * 0.25).toFixed(2));
+      } else if (randVal < 55) {
+        // 35% medium small (e.g., around 1.30x to 2.20x)
+        candidateRoll = parseFloat((1.30 + Math.random() * 0.90).toFixed(2));
       } else if (randVal < 85) {
-        // 40% mid multipliers: 1.81x to 4.50x
-        candidateRoll = parseFloat((1.81 + Math.random() * 2.69).toFixed(2));
-      } else if (randVal < 97) {
-        // 12% high multipliers: 4.51x to 15.00x
-        candidateRoll = parseFloat((4.51 + Math.random() * 10.49).toFixed(2));
+        // 30% mid multipliers: 2.20x to 5.50x
+        candidateRoll = parseFloat((2.20 + Math.random() * 3.30).toFixed(2));
       } else {
-        // 3% crazy mega jackpots: up to 99x!
-        candidateRoll = parseFloat((15.01 + Math.random() * 84).toFixed(2));
+        // 15% high multipliers up to 15.00x (e.g., 5.50x to 15.00x)
+        candidateRoll = parseFloat((5.50 + Math.random() * 9.50).toFixed(2));
       }
     }
 
@@ -280,12 +296,11 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
 
     let finalRoll = candidateRoll;
     if (maxMult !== null && !isNaN(maxMult) && maxMult > 1.0) {
-      if (candidateRoll > maxMult) {
-        // Roll a random value between 1.01 and maxMult (to avoid going above is a key user requirement)
-        finalRoll = parseFloat((1.01 + Math.random() * (maxMult - 1.01)).toFixed(2));
-      }
-      // Strictly prevent exceedance
-      finalRoll = Math.min(finalRoll, maxMult);
+      // To keep the flight exactly or close to the target without breaking small numbers:
+      // We pick a random value between 92% and 100% of maxMult (with safety bounds)
+      const minPossible = maxMult * 0.92;
+      const lowerBound = Math.max(1.05, minPossible);
+      finalRoll = parseFloat((lowerBound + Math.random() * (maxMult - lowerBound)).toFixed(2));
     }
     
     console.log("[Aviator Debug] rollCrashPoint - candidate:", candidateRoll, "maxMult:", maxMult, "finalRoll:", finalRoll);
@@ -376,9 +391,8 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
     if (user) {
       (async () => {
         try {
-          // Increment total win balances for transparency
+          // Increment total win balances for transparency (coins balance is already updated via onUpdateBalance)
           await updateDoc(doc(db, "users", user.uid), {
-            coins: increment(winCoins),
             fruitsTotalWin: increment(winCoins),
             aviatorTotalWin: increment(winCoins)
           });
@@ -431,6 +445,10 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
       setPlacedBetAmount(null);
       placedBetAmountRef.current = null;
       
+      // Auto-clear bet inputs to zero at the start of each new round
+      setBetInput(0);
+      setActiveQuickAmount(null);
+
       setGameState('betting');
       gameStateRef.current = 'betting';
       
@@ -453,7 +471,6 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
     if (user) {
       try {
         await updateDoc(doc(db, "users", user.uid), {
-          coins: increment(-betInput),
           fruitsTotalBet: increment(betInput),
           aviatorTotalBet: increment(betInput)
         });
@@ -825,7 +842,7 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
             {/* Quick pre-configured bet value selectors */}
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
-                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">{t("מبلغ الرهان", "BET AMOUNT")}</span>
+                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">{t("مبلغ الرهان", "BET AMOUNT")}</span>
                 {placedBetAmount !== null && (
                   <div className="flex items-center gap-1">
                     <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></span>
@@ -862,33 +879,16 @@ export const AviatorGame: React.FC<AviatorGameProps> = ({ onClose, userBalance, 
             </div>
 
             {/* Manual custom value input scrollbar range */}
-            <div className="grid grid-cols-12 gap-2 items-center bg-black/40 border border-white/5 rounded-2xl px-3 py-2.5 transition-all">
+            <div className="grid grid-cols-12 gap-2 items-center bg-black/40 border border-white/5 rounded-2xl px-3 py-2.5 transition-all select-none">
               <div className="col-span-6 text-[10px] font-black text-white/40 uppercase tracking-wider">
                 {t("الرهان المتراكم", "ACCUMULATED BET")}
               </div>
               
-              <input 
-                type="text"
-                inputMode="numeric"
-                value={betInput === 0 ? '' : betInput}
-                disabled={placedBetAmount !== null}
-                onChange={(e) => {
-                  let rawVal = e.target.value;
-                  const arabicDigits = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
-                  const persianDigits = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
-                  for (let i = 0; i < 10; i++) {
-                    rawVal = rawVal.replace(new RegExp(arabicDigits[i], 'g'), String(i))
-                                   .replace(new RegExp(persianDigits[i], 'g'), String(i));
-                  }
-                  const cleaned = rawVal.replace(/[^0-9]/g, '');
-                  const val = parseInt(cleaned) || 0;
-                  setBetInput(val);
-                  setActiveQuickAmount(null);
-                }}
-                className="col-span-6 bg-transparent border-none outline-none text-right font-mono text-sm font-black text-white/80 pr-1 disabled:opacity-40"
-                dir="ltr"
-                lang="en"
-              />
+              <div className="col-span-6 text-right">
+                <span className="font-mono text-sm font-black text-white/80 pr-1 select-none pointer-events-none">
+                  {(betInput || 0).toLocaleString('en-US')}
+                </span>
+              </div>
             </div>
 
             {/* Central Giant Execution Core CTA control */}

@@ -216,11 +216,14 @@ export const SetupProfile: React.FC<SetupProfileProps> = ({ onComplete }) => {
 
         <form onSubmit={handleSave} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">{t("الاسم المستعار", "Nickname")}</label>
+            <div className="flex justify-between items-center mr-2 ml-2">
+              <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t("الاسم المستعار", "Nickname")}</label>
+              <span className="text-[9px] font-bold text-white/40">{displayName.length}/25</span>
+            </div>
             <input 
               type="text" 
               value={displayName}
-              maxLength={15}
+              maxLength={25}
               onChange={(e) => setDisplayName(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm text-white outline-none focus:border-purple-500/40 transition-all shadow-inner placeholder:text-white/20"
               placeholder={t("اكتب اسمك هنا...", "Write your name here...")}
