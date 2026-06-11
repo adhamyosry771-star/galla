@@ -1672,12 +1672,19 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         createdAt: serverTimestamp()
       });
 
+      const ownerName = ownerData?.displayName || currentRoom.owner?.displayName || t("صاحب الغرفة", "Room Owner");
+      const remainingWealth = currentWealth - chargeAmount;
+
       // 4. Send system notification to the recipient
       await addDoc(collection(db, "users", targetUserDoc.uid, "systemNotifications"), {
         title: t("شحن من ثروة البار", "Bar Wealth Coins Gifted"),
         text: language === 'ar' 
-          ? `تهانينا! لقد تم شحن ${chargeAmount} ذهب لك من ثروة بار الغرفة "${currentRoom.title}".`
-          : `Congratulations! You received ${chargeAmount} coins from the bar wealth of room "${currentRoom.title}".`,
+          ? `تهانينا! تم شحن ${chargeAmount.toLocaleString('en-US')} كوينز لك من ثروة البار الخاصة بـ "${ownerName}".`
+          : `Congratulations! You received ${chargeAmount.toLocaleString('en-US')} coins from the bar wealth of "${ownerName}".`,
+        desc: language === 'ar' 
+          ? `تهانينا! تم شحن ${chargeAmount.toLocaleString('en-US')} كوينز لك من ثروة البار الخاصة بـ "${ownerName}".`
+          : `Congratulations! You received ${chargeAmount.toLocaleString('en-US')} coins from the bar wealth of "${ownerName}".`,
+        icon: 'fa-coins',
         createdAt: serverTimestamp(),
         read: false
       });

@@ -10,6 +10,646 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+export const spanishDictionary: Record<string, string> = {};
+const dummySpanishDictionary: Record<string, string> = {
+  // Arabic keys to Spanish
+  "الرئيسية": "Inicio",
+  "أخبار": "Noticias",
+  "الرسائل": "Mensajes",
+  "أنا": "Yo",
+  "الملف الشخصي": "Perfil",
+  "رسائل": "Mensajes",
+  "يلا بارتي": "Yalla Party",
+  "عالم الترفيه والدردشة": "Mundo de entretenimiento y chat de voz",
+  "تسجيل الدخول": "Iniciar sesión",
+  "البريد الإلكتروني": "Correo electrónico",
+  "كلمة المرور": "Contraseña",
+  "اسم المستخدم": "Nombre de usuario",
+  "إنشاء حساب جديد": "Crear nueva cuenta",
+  "ليس لديك حساب؟": "¿No tienes una cuenta?",
+  "لديك حساب بالفعل؟": "¿Ya tienes una cuenta?",
+  "أكمل البيانات": "Por favor complete todos los detalles",
+  "تم تسجيل الدخول بنجاح": "Sesión iniciada con éxito",
+  "رمز المضيف": "Código exclusivo del anfitrión",
+  "مغادرة": "Salir",
+  "حفظ": "Guardar",
+  "تعديل": "Editar",
+  "حذف": "Eliminar",
+  "إلغاء": "Cancelar",
+  "إغلاق": "Cerrar",
+  "حفظ التغييرات": "Guardar cambios",
+  "تم الحفظ": "Guardado exitosamente",
+  "تحميل...": "Cargando...",
+  "تأكيد": "Confirmar",
+  "عرض": "Ver",
+  "إرسال": "Enviar",
+  "موافق": "Aceptar",
+  "بحث...": "Buscar...",
+  "تنبيه": "Advertencia",
+  "ممنوع": "Prohibido",
+  "تعديل البيانات": "Editar datos",
+  "يوم": "día",
+  "أيام": "días",
+  "لوحة التحكم": "Panel de control",
+  "إدارة المستخدمين": "Gestión de usuarios",
+  "إدارة الغرف": "Gestión de salas",
+  "خلفيات مجانية": "Fondos gratuitos",
+  "المتجر": "Tienda",
+  "إيموجي": "Emojis",
+  "الهدايا": "Regalos",
+  "لعبة فواكه": "Juego de Frutas",
+  "لعبة الفواكه": "Juego de Frutas",
+  "الصور الرئيسية": "Imágenes principales",
+  "تصميم الوكالات": "Diseño de agencias",
+  "استلام البلاغات": "Reportes recibidos",
+  "إعدادات الحساب": "Configuración de cuenta",
+  "تغيير بريد الحساب": "Cambiar correo de cuenta",
+  "تحديث البريد الإلكتروني الخاص بدخولك": "Actualizar correo de inicio de sesión",
+  "تغيير كلمة المرور": "Cambiar contraseña",
+  "تحديث مفتاح الأمان الخاص بحسابك": "Actualizar contraseña de seguridad de cuenta",
+  "الدعم الفني": "Soporte técnico",
+  "تواصل معنا للمساعدة والاستفسارات": "Contáctenos para ayuda y consultas",
+  "لغة التطبيق": "Idioma de aplicación",
+  "اللغة": "Idioma",
+  "العربية": "العربية (Árabe)",
+  "الإنجليزية": "English (Inglés)",
+  "الصينية المبسطة": "简体中文 (Chino)",
+  "الإسبانية": "Español (Español)",
+  "أدخل كلمة المرور الجديدة...": "Introduzca nueva contraseña...",
+  "كلمة المرور الحالية": "Contraseña actual",
+  "متجر يلا بارتي": "Tienda oficial de Yalla Party",
+  "مجوهرات": "Diamantes",
+  "عملات": "Monedas",
+  "ذهبية": "Monedas de oro",
+  "شراء": "Comprar",
+  "سعر": "Precio",
+  "محفظتي": "Mi billetera",
+  "رصيد": "Saldo de monedas",
+  "ذهبي": "Oro",
+  "مستوى": "Nivel",
+  "متجر الإيموجي": "Tienda de emojis",
+  "متجر الهدايا": "Tienda de regalos de lujo",
+  "تصميم المتجر": "Diseño de tienda",
+  "تفاصيل الحساب": "Detalles de cuenta",
+  "الحالة": "Estado",
+  "أصدقاء": "Amigos center",
+  "متابعين": "Seguidores",
+  "متابعة": "Seguir",
+  "أتابع": "Siguiendo",
+  "طلب متابعة": "Solicitud de seguimiento",
+  "رسالة": "Mensaje",
+  "هدية": "Regalo",
+  "العضو": "Miembro",
+  "شريك": "Pareja CP",
+  "لا يوجد": "Ninguno",
+  "الأوسمة والجوائز": "Medallas de honor",
+  "لا توجد شارات حالياً": "Actualmente no hay medallas",
+  "لا يوجد أحد على المايك": "Nadie en el micrófono",
+  "تحديد": "Filtrar",
+  "كل الغرفة": "Toda la sala",
+  "كل المايك": "Todos los micrófonos",
+  "عادية": "Regalo normal",
+  "مشاهير": "Exclusivo de celebridades",
+  "دولة": "Edición especial de país",
+  "ميلاد": "Cumpleaños feliz",
+  "لا يوجد شيء هنا": "No hay nada aquí",
+  "اختر الكمية": "Seleccione cantidad",
+  "مغادرة المايك": "Dejar el micrófono",
+  "عرض البيانات": "Ver perfil completo",
+  "أخذ المايك": "Subir al micrófono",
+  "فتح المايك": "Activar micrófono",
+  "قفل المايك": "Bloquear micrófono",
+  "منشن": "Mencionar @miembro",
+  "إدارة العضو": "Gestión de miembros",
+  "طرد من المايك": "Quitar del micrófono",
+  "كتم المايك": "Silenciar micrófono",
+  "إصمات من الغرفة": "Silenciar en sala",
+  "طرد من الغرفة": "Expulsar de la sala",
+  "جاري تحميل الملف الشخصي...": "Cargando perfil...",
+  "فشل فتح المحادثة": "No se pudo abrir el chat",
+  "إعدادات قفل الغرفة": "Configuración de bloqueo de sala",
+  "كلمة مرور الغرفة (6 أرقام)": "Contraseña de la sala (6 dígitos)",
+  "اترك الحقل فارغاً إذا كنت تريد فتح الغرفة للجميع": "Dejar en blanco para abrir a todos",
+  "قفل الغرفة الآن": "Bloquear sala ahora",
+  "فتح الغرفة للجميع": "Permitir entrada a todos",
+  "احتفاظ": "Mantener",
+  "خروج": "Salir",
+  "المتواجدون": "Usuarios en línea",
+  "تحكم المايك": "Control de micrófono",
+  "سبب البلاغ": "Razón de reporte",
+  "اباحي": "Contenido para adultos",
+  "اسائة": "Abuso",
+  "شتائم": "Insultos",
+  "ترويج": "Promoción",
+  "يرجى شرح ما حدث بالتفاصيل": "Por favor explique en detalle",
+  "اكتب هنا...": "Escribe aquí...",
+  "تقديم البلاغ": "Enviar reporte",
+  "تم تقديم البلاغ": "Reporte enviado",
+  "سيتم المراجعه شكرا لك على الحفاظ على بيئة Yalla Party": "Se revisará, gracias por mantener un ambiente seguro en Yalla Party",
+  "حسناً": "Entendido",
+  "نظام شحن الوكالات": "Sistema de carga de agencia",
+  "دخول الغرفة": "Entrar a la sala",
+  "تسجيل خروج": "Cerrar sesión",
+  "تم تحديث صورتك": "Su foto ha sido actualizada",
+  "بروفايلك": "Tu perfil",
+  "مستخدم": "Usuario",
+  "وقت": "Tiempo",
+  "التاريخ": "Fecha",
+  "عدد": "Cantidad",
+  "الملف": "Archivo",
+  "رصيد الوكالة": "Saldo de agencia",
+  "الحظر": "Baneo de cuenta",
+  "الأعضاء": "Miembros",
+  "أرسل إشعار": "Enviar notificación center",
+  "تنبيه رسمي": "Notificación oficial",
+  "مستوى المستخدم": "Nivel de usuario",
+  "شحن إداري": "Carga administrativa",
+  "سحب عملات": "Retirar monedas",
+  "منح الأوسمة": "Otorgar medallas",
+  "منح عناصر": "Otorgar artículos de tienda",
+  "تغيير الـ ID المتميز": "Personalizar ID especial",
+  "تفعيل/إلغاء نظام الحظر": "Activar/Desactivar baneo",
+  "تفعيل/إلغاء نظام المدير العام": "Activar/Desactivar GM",
+  "تفاصيل الحظر": "Detalles de bloqueos",
+  "لا توجد طلبات معلقة": "No hay solicitudes pendientes",
+  "يريد متابعتك": "Quiere seguirte",
+  "لوحة المسؤول": "Panel de administración",
+  "المستخدمين": "Usuarios",
+  "محادثات الدعم": "Conversaciones de soporte",
+  "الغرف": "Salas center",
+  "الأخبار": "Novedades oficiales",
+  "البنرات": "Banners de eventos",
+  "مرحباً بالسيد المدير": "Bienvenido, Administrador",
+  "لديك كامل الصلاحيات لإدارة المحتوى والمستخدمين.": "Tiene privilegios completos para administrar salas y usuarios",
+  "إدارة العضوية": "Gestión de membresías",
+  "إدارة الوكلاء": "Gestión de agentes autorizados",
+  "شحن": "Carga",
+  "خصم": "Descuento",
+  "تعديل الـ ID المتميز": "Editar ID premium",
+  "منح إطار وبادج وعناصر متميزة": "Otorgar marcos, insignias y artículos de lujo",
+  "المستخدمين المعلقين": "Usuarios suspendidos",
+  "إدارة البنارات": "Gestión de banners",
+  "نظام المدير العام": "Sistema de gerente general",
+  "إدارة البنارات المتحركة": "Gestión de banners animados",
+  "رفع صور بنارات جديدة لواجهة التطبيق": "Subir nuevos banners para la app",
+  "إجراءات الحظر وفك الحظر": "Procedimientos de bloqueo y desbloqueo",
+  "سجلات عمليات الإدارة": "Registros de operaciones administrativas",
+  "إعطاء عناصر المتجر": "Enviar artículos de tienda",
+  "إدارة وحذف الغرف": "Gestionar y eliminar salas",
+  "تحذير أصحاب الغرف أو حذفها نهائياً": "Advertir a dueños de salas o eliminarlas",
+  "استلام بلاغات الغرف": "Reportes de salas",
+  "مراجعة البلاغات المقدمة ضد الغرف": "Revisar reportes contra salas",
+  "إعدادات صفحة الـ CP": "Configurar la página de CP",
+
+  // English keys to Spanish
+  "Home": "Inicio",
+  "News": "Noticias",
+  "Messages": "Mensajes",
+  "Me": "Yo",
+  "Profile": "Perfil",
+  "Admin Panel": "Panel de administración",
+  "The World of Entertainment and Voice Chat": "El mundo del entretenimiento y chat de voz",
+  "Login": "Iniciar sesión",
+  "Email Address": "Correo electrónico",
+  "Password": "Contraseña",
+  "Username": "Nombre de usuario",
+  "Register New Account": "Crear nueva cuenta",
+  "Don't have an account?": "¿No tienes una cuenta?",
+  "Already have an account?": "¿Ya tienes una cuenta?",
+  "Please fill in all details": "Por favor complete todos los detalles",
+  "Logged in successfully": "Sesión iniciada con éxito",
+  "Host Code": "Código del anfitrión",
+  "Leave": "Salir",
+  "Save": "Guardar",
+  "Edit": "Editar",
+  "Delete": "Eliminar",
+  "Cancel": "Cancelar",
+  "Close": "Cerrar",
+  "Save Changes": "Guardar cambios",
+  "Saved successfully": "Guardado exitosamente",
+  "Loading...": "Cargando...",
+  "Confirm": "Confirmar",
+  "View": "Ver",
+  "Send": "Enviar",
+  "OK": "Aceptar",
+  "Okay": "Aceptar",
+  "Search...": "Buscar...",
+  "Notification": "Notificación",
+  "Edit Profile": "Editar perfil",
+  "day": "día",
+  "days": "días",
+  "Control Panel": "Panel de control",
+  "User Management": "Gestión de usuarios",
+  "Room Management": "Gestión de salas",
+  "Free Backgrounds": "Fondos gratuitos",
+  "Store": "Tienda",
+  "Emojis": "Emojis",
+  "Gifts": "Regalos",
+  "Fruits Game": "Juego de Frutas",
+  "Main Images": "Imágenes principales",
+  "Agency Design": "Diseño de agencia",
+  "Reports Received": "Reportes recibidos",
+  "Account Settings": "Configuración de cuenta",
+  "Change Account Email": "Cambiar correo de cuenta",
+  "Update your sign-in email address": "Actualizar su correo de inicio de sesión",
+  "Update your account security key": "Actualizar clave de seguridad de cuenta",
+  "Technical Support": "Soporte técnico",
+  "Contact us for help and inquiries": "Contáctenos para ayuda e inquietudes",
+  "App Language": "Idioma de aplicación",
+  "Language": "Idioma",
+  "Arabic (العربية)": "Árabe (العربية)",
+  "English": "English (Inglés)",
+  "Enter new password...": "Introduzca nueva contraseña...",
+  "Current Password": "Contraseña actual",
+  "Yalla Party Store": "Tienda Yalla Party",
+  "Diamonds": "Diamantes",
+  "Coins": "Monedas",
+  "Gold": "Monedas de oro",
+  "Buy": "Comprar",
+  "Price": "Precio",
+  "My Wallet": "Mi billetera",
+  "Balance": "Saldo de monedas",
+  "Level": "Nivel",
+  "Emoji Store": "Tienda de emojis",
+  "Gift Store": "Tienda de regalos",
+  "Store Design": "Diseño de tienda",
+  "Account Details": "Detalles de cuenta",
+  "Status": "Estado",
+  "Friends": "Amigos",
+  "Followers": "Seguidores",
+  "Following": "Siguiendo Centre",
+  "Follow Request": "Solicitud de seguimiento",
+  "Message": "Mensaje",
+  "Gift": "Regalo",
+  "Member": "Miembro",
+  "Partner": "CP Pareja",
+  "None": "Ninguno",
+  "Badges & Medals": "Medallas e insignias",
+  "No badges currently available": "No hay insignias disponibles",
+  "No one is on mic": "Nadie en el micrófono",
+  "Select": "Seleccionar",
+  "All Room": "Toda la sala",
+  "All Mics": "Todos los micrófonos",
+  "Normal": "Normal",
+  "CP": "CP Pareja",
+  "Famous": "Famosos",
+  "Country": "Edición País",
+  "VIP": "VIP",
+  "Birthday": "Cumpleaños Centennial",
+  "Nothing here": "Nada aquí",
+  "Select Quantity": "Seleccione cantidad",
+  "Leave Mic": "Dejar micrófono",
+  "View Profile": "Ver perfil",
+  "Take Mic": "Subir al micrófono",
+  "Unlock Mic": "Desbloquear micrófono",
+  "Lock Mic": "Bloquear micrófono",
+  "Mention": "Mencionar",
+  "Manage Member": "Gestionar miembro",
+  "Kick from Mic": "Quitar del micrófono",
+  "Mute Mic": "Silenciar micrófono",
+  "Silence in Room": "Silenciar en sala",
+  "Kick from Room": "Expulsar de sala",
+  "Loading profile...": "Cargando perfil...",
+  "Failed to open chat": "Error al abrir chat",
+  "Room Lock Settings": "Diseño de bloqueo de sala",
+  "Room Password (6 Digits)": "Contraseña de la sala (6 dígitos)",
+  "Leave empty to open the room to everyone": "Dejar vacío para abrir a todos",
+  "Lock Room Now": "Bloquear sala ahora",
+  "Open to All": "Abierto a todos",
+  "Open Room to All": "Abrir sala a todos",
+  "Keep": "Mantener",
+  "Exit": "Salir",
+  "Online": "En línea",
+  "Mic Control": "Control de micrófono",
+  "Report Reason": "Razón de reporte",
+  "Pornographic": "Pornográfico",
+  "Abuse": "Abuso",
+  "Slander": "Difamación",
+  "Promotion": "Promoción",
+  "Please explain in detail what happened": "Por favor explique en detalle qué sucedió",
+  "Write here...": "Escribe aquí...",
+  "Submit Report": "Enviar reporte",
+  "Report Submitted": "Reporte enviado",
+  "It will be reviewed. Thank you for keeping Yalla Party a safe community!": "Será revisado. ¡Gracias por mantener a Yalla Party como una comunidad segura!",
+  "Logout of Account": "Cerrar sesión de la cuenta",
+  "Changing language will dynamically convert the entire application interface and layout directions.": "Cambiar el idioma convertirá dinámicamente toda la interfaz.",
+  "Create Room": "Crear sala",
+  "Room Name": "Nombre de la sala",
+  "Enter Room Name": "Ingrese nombre de la sala...",
+  "Room Category": "Categoría de sala",
+  "Create Room Now": "Crear sala ahora",
+  "Join": "Entrar",
+  "Enter Room ID": "Ingrese ID de la sala...",
+  "Join Room": "Unirse a la sala",
+  "Private Chat": "Chat privado",
+  "Send a message...": "Enviar un mensaje...",
+  "Admin Control Panel": "Panel de control principal",
+  "User Ban System": "Sistema de baneo de usuarios",
+  "Official Notification": "Anuncio oficial",
+  "No pending requests": "No hay solicitudes pendientes",
+  "wants to follow you": "quiere seguirte",
+  "Banned Devices": "Dispositivos baneados",
+  "Agency Wallet": "Billetera de agencia",
+  "Agency Management": "Gestión de agencias",
+  "Manage": "Gestionar",
+  "User Info": "Información de usuario",
+  "Ban Device": "Banear dispositivo",
+  "Unban Device": "Desbanear dispositivo",
+  "Ban User": "Banear usuario",
+  "Unban User": "Desbanear usuario",
+  "Add Item": "Agregar artículo",
+  "Give Diamonds": "Entregar diamantes",
+  "Give Coins": "Entregar monedas",
+  "Send Notification": "Enviar advertencia",
+  "Default Images": "Imágenes oficiales",
+  "Set Design": "Diseño de tema",
+  "Reports": "Buzón de reportes",
+  "Accept": "Aceptar",
+  "Reject": "Rechazar",
+  "Simplified Chinese": "简体中文 (Chino)",
+  "Apps Language": "Idioma de la aplicación",
+  "Logout": "Cerrar sesión",
+  "Spanish (Español)": "Español (Spanish)",
+
+  // Additional rich dictionary keys (Arabic & English keys to Spanish)
+  "شحن كوينز": "Cargar monedas",
+  "خصم كوينز": "Descontar monedas",
+  "الكمية...": "Cantidad...",
+  "المبلغ...": "Cantidad...",
+  "الرسائل الرسمية": "Mensajes oficiales",
+  "حذف الغرفة": "Eliminar sala",
+  "طرد المايك": "Quitar de micrófono",
+  "كتم المايك": "Silenciar micrófono",
+  "إصمات": "Silenciar en sala",
+  "طرد": "Expulsar",
+  "تسجيل الخروج من الحساب": "Cerrar sesión segura",
+  "حظر جهاز": "Banear dispositivo",
+  "إلغاء حظر جهاز": "Desbanear dispositivo",
+  "حظر مستخدم": "Banear usuario",
+  "إلغاء حظر مستخدم": "Desbanear usuario",
+  "منح الآي دي": "Asignar ID especial",
+  "الآي دي الحالي": "ID actual",
+  "عدد الأيام": "Duración en días",
+  "عضو": "Miembro",
+  "مشرف": "Administrador",
+  "مالك": "Anfitrión",
+  "طلب ارتباط": "Solicitud de CP",
+  "الأصدقاء": "Amigos",
+  "إعدادات الغرفة": "Configuración de sala",
+  "تغيير الخلفية": "Cambiar fondo",
+  "خلفيات المتجر": "Fondos de tienda",
+  "إطارات المتجر": "Marcos de tienda",
+  "دخوليات المتجر": "Efectos de entrada",
+  "دخول الأبطال": "Entrada de héroes",
+  "تفاح": "🍎 Manzana",
+  "برتقال": "🍊 Naranja",
+  "ليمون": "🍋 Limón",
+  "خوخ": "🍑 Melocotón",
+  "فراولة": "🍓 Fresa",
+  "مانجو": "🥭 Mango",
+  "بطيخ": "🍉 Sandía",
+  "كرز": "🍒 Cereza",
+  "فترة الرهان": "Periodo de apuestas",
+  "ثانية": "segundos",
+  "جاري تحديد الفائز...": "Sorteando ganador...",
+  "هو الرابح!": "¡es el ganador!",
+  "مبارك! ربحت ": "¡Felicitaciones! Ganó ",
+  "اختر مبلغ الرهان": "Establecer cantidad de apuesta",
+  "المراهنة: ": "Apuesta total: ",
+  "النتائج السابقة": "Resultados anteriores",
+  "بانتظار الجولة الأولى...": "Esperando el inicio del juego...",
+  "وكالة الشحن": "Agencia de carga autorizada",
+  "سجل العمليات": "Historial de operaciones",
+  "سجلات الحظر": "Historial de bloqueos",
+  "إعطاء عناصر المتجر": "Obsequiar artículos",
+  "اختر المستخدم": "Seleccionar usuario",
+  "ابحث بالاسم أو ID...": "Buscar por nombre o ID...",
+  "تغيير": "Cambiar",
+  "اختر العنصر": "Seleccionar artículo",
+  "إطارات": "Marcos",
+  "دخوليات": "Entradas",
+  "خلفيات": "Fondos",
+  "المدة بالأيام": "Duración en días",
+  "منح العنصر الآن": "Otorgar artículo ahora",
+  "تم المنح بنجاح!": "¡Otorgado con éxito!",
+  "مساعد وكالة": "Asistente de agencia",
+  "محفظة الوكالة": "Billetera de agencia",
+  "شحن وكالة": "Cargar billetera de agencia",
+  "تفاصيل العمليات": "Historial de transacciones de agencia",
+  "طلب ارتباط (CP)": "Solicitud de relación de pareja (CP)",
+  "تصميم وتعديل الـ ID المخصص": "Personalizar ID de usuario",
+  "معاينة البروفايل (90 × 28)": "Vista previa de tarjeta (90 x 28)",
+  "أيقونة زر الهدايا": "Icono de botón de regalos",
+  "اختر الأيقونة": "Seleccionar icono",
+  "أو ضع رابط الأيقونة هنا": "O pegue la URL aquí",
+  "سحب الرصيد": "Retirar saldo",
+  "تعديل وتصميم الـ ID المتميز": "Personalizar ID premium",
+  "العنوان": "Título",
+  "التفاصيل": "Detalles",
+  "البريد": "Correo",
+  "تغيير البريد الإلكتروني": "Cambiar correo",
+  "تغيير البريد": "Cambiar correo",
+  "تغيير الباسورد": "Cambiar contraseña",
+  "أخبرنا بالمشكلة": "Cuéntenos su problema...",
+  "يرجى توضيح المشكلة": "Por favor explique el problema",
+  "إرسال رسالة للدعم": "Enviar mensaje de soporte",
+  "هل تريد طرد": "¿Seguro que desea expulsar?",
+  "فشل": "Error / Operación fallida",
+  "تم": "Completado con éxito",
+  "إضافة عنصر": "Agregar artículo de tienda",
+  "اسم الصنف": "Nombre de artículo",
+  "سعر العنصر": "Precio de artículo",
+  "مدة الصلاحية": "Validez (días)",
+  "أيقونة العنصر": "URL del icono o marco",
+  "تحميل الصورة": "Cargar imagen",
+  "دخولية الملك": "Entrada real del rey",
+  "تنين اللورد": "Entrada de dragón señor",
+  "سيارة رياضية": "Coche deportivo de entrada",
+  "برق ورعد": "Trueno y relámpago",
+  "خلفية ديسكو": "Fondo de fiesta disco",
+  "خلفية هادئة": "Fondo relajante",
+  "إطار ملكي": "Marco real de corona",
+  "إطار الورد": "Marco de rosas",
+  "خلفية الفضاء": "Fondo espacial elegante",
+  "سيستم الحظر نشط": "Sistema de baneo activo",
+  "بدون نظام حظر": "Baneo desactivado",
+  "نظام المدير نشط": "Sistema GM activo",
+  "بدون نظام مدير": "GM desactivado",
+  "كلمة المرور:": "Contraseña:",
+  "غير متوفرة بعد": "No disponible aún",
+
+  // Room Alerts & Dialogs
+  "لقد تم طردك من هذه الغرفة": "Usted ha sido expulsado o baneado de la sala.",
+  "لقد تم كتمك من الكتابة والدردشة في هذه الغرفة": "Se le ha silenciado el chat en esta sala.",
+  "يرجى اختيار هدية أولاً": "Por favor seleccione un regalo primero",
+  "يريد متابعتك": "quiere seguirte",
+  "لا يمكنك طرد هذا المستخدم": "No puedes expulsar a este usuario",
+  "تنبيه رسمي": "Aviso Oficial"
+};
+
+const spanishItemNames: Record<string, string> = {
+  "إطار النجوم": "Marco Estelar",
+  "إطار ذهبي": "Marco de Oro",
+  "تنين اللورد": "Entrada de Dragón Señor",
+  "سيارة رياضية": "Coche Deportivo",
+  "برق ورعد": "Efectos Eléctricos",
+  "خلفية ديسكو": "Fondo Disco",
+  "خلفية هادئة": "Fondo Relajante",
+  "إطار ملكي": "Marco Corona Real",
+  "إطار الورد": "Marco de Rosas",
+  "دخول الأبطال": "Entrada de Héroes",
+  "دخولية الملك": "Entrada Real del Rey",
+  "خلفية الفضاء": "Fondo Cósmico Cósmico"
+};
+
+const translateItemNameEs = (name: string): string => {
+  return spanishItemNames[name.trim()] || name;
+};
+
+export const translateEnToEs = (enText: string): string => {
+  return enText;
+};
+
+const dummyTranslateEnToEs = (enText: string): string => {
+  if (!enText) return enText;
+  let text = enText.trim();
+
+  if (spanishDictionary[text]) {
+    return spanishDictionary[text];
+  }
+
+  const rules = [
+    {
+      regex: /Congratulations!\s+You\s+received\s+a\s+premium\s+(frame|room entry|room background|item)\s*\((.*?)\)\s*for\s*(\d+)\s*days\.\s*Check\s*it\s*now\s*in\s*your\s*Bag\s*in\s*the\s*Store\./i,
+      replace: (_: string, type: string, name: string, days: string) => {
+        const typeEs: Record<string, string> = { "frame": "marco de fotos", "room entry": "efecto de entrada de sala", "room background": "fondo de sala premium", "item": "artículo en inventario" };
+        const nameEs = translateItemNameEs(name);
+        return `¡Felicitaciones! Has recibido un ${typeEs[type] || 'artículo'} premium (${nameEs}) por ${days} días. ¡Compruébalo ahora en tu Mochila en la Tienda!`;
+      }
+    },
+    {
+      regex: /Congratulations!\s+You\s+received\s+([\d,]+)\s+coins\s+from\s+the\s+bar\s+wealth\s+of\s*"(.*?)"\./i,
+      replace: (_: string, coins: string, owner: string) => {
+        return `¡Felicitaciones! Recibió ${coins} monedas de la barra de fortuna de "${owner}".`;
+      }
+    },
+    {
+      regex: /The\s+Administration\s+has\s+granted\s+you\s+a\s+special\s+frame\s+named\s*"(.*?)"\s*for\s*(\d+)\s*days\.\s*Check\s*it\s*now\s*in\s*your\s*store\s*settings!/i,
+      replace: (_: string, name: string, days: string) => {
+        return `La Administración le ha otorgado un marco de perfil especial llamado "${translateItemNameEs(name)}" por ${days} días. ¡Pruébelo ahora mismo en la configuración de la tienda!`;
+      }
+    },
+    {
+      regex: /The\s+Administration\s+has\s+granted\s+you\s+a\s+custom\s+room\s+theme\/background\s+named\s*"(.*?)"\s*for\s*(\d+)\s*days\.\s*Check\s*it\s*now\s*in\s*your\s*voice\s*room\s*settings!/i,
+      replace: (_: string, name: string, days: string) => {
+        return `La Administración le ha otorgado un fondo de sala personalizado llamado "${translateItemNameEs(name)}" por ${days} días. ¡Pruébelo ahora en la configuración de su sala de voz!`;
+      }
+    },
+    {
+      regex: /The\s+Administration\s+has\s+granted\s+your\s+profile\s+an\s+awesome\s+animated\s+profile\s+photo!\s+Enjoy\s+your\s+new\s+custom\s+look\./i,
+      replace: () => "¡La Administración le ha otorgado a su perfil una increíble foto animada! Disfrute de su nuevo diseño."
+    },
+    {
+      regex: /The\s+Administration\s+has\s+gifted\s+your\s+room\s*"(.*?)"\s*an\s+exclusive\s+premium\s+animated\s+cover\s+logo\.\s*See\s*your\s*channel's\s*fresh\s*style\s*now!/i,
+      replace: (_: string, titleName: string) => {
+        return `La Administración le ha regalado a su sala "${titleName}" un exclusivo diseño de logo animado para la portada. ¡Vea el nuevo aspecto ahora!`;
+      }
+    },
+    {
+      regex: /([\d,]+)\s+Gold\s+Coins\s+have\s+been\s+recharged\s+to\s+your\s+account\s+by\s+the\s+Administration\.\s*Enjoy!/i,
+      replace: (_: string, amount: string) => {
+        return `La Administración ha cargado con éxito ${amount} monedas de oro a su cuenta. ¡Que las disfrute mucho!`;
+      }
+    },
+    {
+      regex: /([\d,]+)\s+Gold\s+Coins\s+have\s+been\s+debited\s+from\s+your\s+account\s+by\s+the\s+Administration\./i,
+      replace: (_: string, amount: string) => {
+        return `La Администрация ha debitado con éxito ${amount} monedas de oro de su cuenta.`;
+      }
+    },
+    {
+      regex: /Congratulations!\s+You\s+received\s+an\s+exclusive\s+unique\s+ID\s+from\s+the\s+Administration\.\s+Your\s+new\s+ID\s+is:\s*(\w+)/i,
+      replace: (_: string, newId: string) => {
+        return `¡Felicitaciones! Recibió un ID único VIP especial de la Administración: ${newId}.`;
+      }
+    },
+    {
+      regex: /You\s+have\s+been\s+authorized\s+to\s+use\s+the\s+User\s+Ban\s+System\.\s+Access\s+privileges\s+are\s+active;\s+find\s+it\s+in\s+your\s+profile\s+menu\s+now\./i,
+      replace: () => "Se le ha otorgado autorización para usar el Sistema de Baneo. Acceda ahora en su menú de perfil."
+    },
+    {
+      regex: /The\s+User\s+Ban\s+System\s+access\s+was\s+revoked\s+from\s+your\s+account\s+due\s+to\s+rules\s+violations\./i,
+      replace: () => "Su acceso al Sistema de Baneo ha sido revocado debido a violaciones de las normas de la comunidad."
+    },
+    {
+      regex: /Congratulations!\s+You\s+have\s+been\s+granted\s+full\s+permissions\s+for\s+the\s+General\s+Manager\s+Panel\.\s+Open\s+your\s+profile\s+menu\s+to\s+configure\s+and\s+manage\./i,
+      replace: () => "¡Enhorabuena! Bienvenido, se le han concedido permisos completos para acceder al Panel GM. Abra su perfil para gestionarlo."
+    },
+    {
+      regex: /Access\s+to\s+the\s+General\s+Manager\s+Panel\s+has\s+been\s+revoked\s+from\s+this\s+account\s+due\s+to\s+guideline\s+violations\./i,
+      replace: () => "El acceso al Panel GM ha sido retirado debido a infracciones graves de las pautas."
+    },
+    {
+      regex: /Warning:\s+We\s+have\s+received\s+multiple\s+reports\s+against\s+your\s+voice\s+room\s+recently\.\s+Please\s+adhere\s+strictly\s+to\s+user\s+safety\s+guidelines,\s+otherwise\s+your\s+account\s+may\s+be\s+banned\s+and\s+your\s+room\s+suspended\.\s+We\s+hope\s+you\s+enjoy\s+your\s+special\s+highlights\s+here\./i,
+      replace: () => "Advertencia: Recibimos múltiples reportes de infracciones en su sala de voz recientemente. Respete estrictamente las pautas para evitar suspensión."
+    },
+    {
+      regex: /Congratulations!\s+You\s+received\s+the\s+user\s+shipping\s+panel\s+and\s+became\s+an\s+authorized\s+agent\s+with\s+a\s+welcome\s+balance\s+of\s+([\d,]+)\s+Gold\./i,
+      replace: (_: string, coins: string) => {
+        return `¡Felicitaciones! Ha sido acreditado oficialmente como Agente Autorizado de Carga de Monedas con saldo inicial de bienvenida de ${coins} de Oro.`;
+      }
+    },
+    {
+      regex: /We\s+regret\s+to\s+inform\s+you\s+that\s+the\s+Shipping\s+Agency\s+credentials\s+have\s+been\s+revoked\s+from\s+your\s+official\s+account\./i,
+      replace: () => "Lamentamos informarle que sus privilegios de Agencia Autorizada de Carga han sido revocados de su cuenta."
+    },
+    {
+      regex: /A\s+balance\s+of\s+([\d,]+)\s+credits\s+was\s+added\s+to\s+your\s+Shipping\s+Agency\s+wallet\s+by\s+the\s+Administration\./i,
+      replace: (_: string, amount: string) => {
+        return `La administración ha añadido un saldo de ${amount} créditos a su billetera de Agente de Carga.`;
+      }
+    },
+    {
+      regex: /A\s+balance\s+of\s+([\d,]+)\s+credits\s+was\s+deduced\s+from\s+your\s+Shipping\s+Agency\s+wallet\s+by\s+the\s+Administration\./i,
+      replace: (_: string, amount: string) => {
+        return `La administración ha descontado un saldo de ${amount} créditos de su billetera de Agente de Carga.`;
+      }
+    },
+    {
+      regex: /(.*?)\s+proposed\s+to\s+pair\s+\/\s+bond\s+CP\s+relationship\s+with\s+you\./i,
+      replace: (_: string, name: string) => `¡${name} te ha enviado una solicitud romántica para emparejarse y establecer una relación de novios CP!`
+    },
+    {
+      regex: /The\s+other\s+partner\s+dissolved\s+the\s+CP\s+link\s+and\s+compensated\s+you\s+with\s+([\d,]+)\s+Gold\s+Coins\./i,
+      replace: (_: string, amount: string) => `Aviso de relación: Tu pareja rescindió el vínculo CP y te compensó con ${amount} monedas.`
+    },
+    {
+      regex: /Congratulations!\s+You\s+have\s+successfully\s+recharged\s+([\d,]+)\s+Coins\s+from\s+Shipping\s+Agent\s+\((.*?)\)\s*\(ID_(\w+)\)/i,
+      replace: (_: string, coins: string, name: string, id: string) => {
+        return `Carga recibida: Carga exitosa de ${coins} Oro mediante el Agente Oficial de Carga ${name} (ID: ${id}). ¡Gracias!`;
+      }
+    }
+  ];
+
+  for (const item of rules) {
+    if (item.regex.test(text)) {
+      return text.replace(item.regex, item.replace as any);
+    }
+  }
+
+  return text
+    .replace(/\bCongratulations\b/gi, "¡Felicidades!")
+    .replace(/\bloading\b/gi, "cargando")
+    .replace(/\berror\b/gi, "error")
+    .replace(/\bRoom\b/gi, "Sala")
+    .replace(/\bUser\b/gi, "Usuario")
+    .replace(/\bBanned\b/gi, "Baneado")
+    .replace(/\bJoined\b/gi, "Unido")
+    .replace(/\bRecharged\b/gi, "Cargado")
+    .replace(/\bsuccessfully\b/gi, "correctamente")
+    .replace(/\bfailed\b/gi, "fallido");
+};
+
 // A core dictionary for Simplified Chinese translations (covers both Arabic keys and English fallbacks/terms)
 export const chineseDictionary: Record<string, string> = {
   // Arabic keys to Chinese
@@ -667,6 +1307,12 @@ export const translateEnToZh = (enText: string): string => {
   // Regex rules to map translated English dynamic admin notices to Chinese
   const rules = [
     {
+      regex: /Congratulations!\s+You\s+received\s+([\d,]+)\s+coins\s+from\s+the\s+bar\s+wealth\s+of\s*"(.*?)"\./i,
+      replace: (_: string, coins: string, owner: string) => {
+        return `恭喜！您从 “${owner}” 的吧财富中获得了 ${coins} 金币。`;
+      }
+    },
+    {
       regex: /Congratulations!\s+You\s+received\s+a\s+premium\s+(frame|room entry|room background|item)\s*\((.*?)\)\s*for\s*(\d+)\s*days\.\s*Check\s*it\s*now\s*in\s*your\s*Bag\s*in\s*the\s*Store\./i,
       replace: (_: string, type: string, name: string, days: string) => {
         const typeZh: Record<string, string> = { "frame": "头像框", "room entry": "专属座驾/入场特权", "room background": "房间定制壁纸", "item": "背包道具" };
@@ -949,7 +1595,8 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       return translateEnToZh(enText);
     }
-    
+
+
     // Check if we have an explicit fallback passed first
     if (enFallback !== undefined) return enFallback;
 
@@ -1036,6 +1683,12 @@ export const translateDynamicArabic = (arText: string): string => {
 
   // Regex rules
   const rules = [
+    {
+      regex: /تهانينا!\s+تم\s+شحن\s+([\d,]+)\s+كوينز\s+لك\s+من\s+ثروة\s+البار\s+الخاصة\s+بـ\s*"(.*?)"\./,
+      replace: (_: string, coins: string, owner: string) => {
+        return `Congratulations! You received ${coins} coins from the bar wealth of "${owner}".`;
+      }
+    },
     // 1. GiveItemsModal / AdminPanel frames & items grant
     {
       regex: /مبروك!\s+لقد\s+حصلت\s+على\s+(إطار|دخولية|خلفية|عنصر)\s*\((.*?)\)\s*لمدة\s*(\d+)\s*أيام\.\s*تفقدها\s*الآن\s*في\s*حقيبتك\s*في\s*المتجر\./,
