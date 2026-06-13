@@ -50,9 +50,22 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
   const [customMultipliersInput, setCustomMultipliersInput] = useState<{[key: string]: string}>({});
   const [saveFeedback, setSaveFeedback] = useState<{[key: string]: boolean}>({});
 
+  // Lucky77 States
+  const [lucky77GlobalSettings, setLucky77GlobalSettings] = useState<any>({
+    lossThreshold: 8000000,
+    globalDifficulty: 'balanced',
+    totalProfit24h: 0,
+    totalRounds: 0,
+    gameIcon: null
+  });
+  const [lucky77GameIcon, setLucky77GameIcon] = useState<string | null>(null);
+  const [lucky77ActiveBets, setLucky77ActiveBets] = useState<any[]>([]);
+  const [lucky77Players, setLucky77Players] = useState<any[]>([]);
+  const [lucky77SearchQuery, setLucky77SearchQuery] = useState('');
+
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'fruits' | 'aviator'>('fruits');
+  const [activeTab, setActiveTab] = useState<'fruits' | 'aviator' | 'lucky77'>('fruits');
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -103,6 +116,25 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
       setAviatorPlayers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (err) => console.log("Aviator players snapshot error:", err));
 
+    // Listen to global lucky77 settings
+    const unsubLucky77Settings = onSnapshot(doc(db, "settings", "lucky77Game"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setLucky77GlobalSettings(data);
+        setLucky77GameIcon(data.gameIcon || null);
+      }
+    }, (err) => console.log("Lucky77 settings snapshot error:", err));
+
+    // Listen to lucky77 active bets
+    const unsubLucky77ActiveBets = onSnapshot(collection(db, "lucky77ActiveBets"), (snap) => {
+      setLucky77ActiveBets(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => console.log("Lucky77 active bets snapshot error:", err));
+
+    // Listen to players with active history/total bets in Lucky77
+    const unsubLucky77Players = onSnapshot(query(collection(db, "users"), where("lucky77TotalBet", ">", 0), limit(100)), (snap) => {
+      setLucky77Players(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (err) => console.log("Lucky77 players snapshot error:", err));
+
     return () => {
       unsubUsers();
       unsubFruitsSettings();
@@ -110,6 +142,9 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
       unsubFruitsActiveBets();
       unsubFruitsPlayers();
       unsubAviatorPlayers();
+      unsubLucky77Settings();
+      unsubLucky77ActiveBets();
+      unsubLucky77Players();
     };
   }, [isOpen, refreshTrigger]);
 
@@ -258,6 +293,65 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
     });
   }
 
+  // Compile full user listing for Lucky77 user search and custom luck tuning
+  const uniqueLucky77PlayersMap = new Map<string, any>();
+  
+  if (currentUid) {
+    const adminUserDoc = allUsers.find(u => u.id === currentUid);
+    if (adminUserDoc) {
+      uniqueLucky77PlayersMap.set(currentUid, adminUserDoc);
+    }
+  }
+
+  // Seed with actual lucky77 players
+  lucky77Players.forEach(p => {
+    if (p && p.id) {
+      uniqueLucky77PlayersMap.set(p.id, p);
+    }
+  });
+  
+  // Seed other general users by default so the listing is never empty
+  allUsers.slice(0, 50).forEach(u => {
+    if (u && u.id && !uniqueLucky77PlayersMap.has(u.id)) {
+      uniqueLucky77PlayersMap.set(u.id, u);
+    }
+  });
+
+  if (lucky77SearchQuery.trim()) {
+    const searchLower = lucky77SearchQuery.toLowerCase();
+    allUsers.forEach(u => {
+      if (u && u.id) {
+        const dispName = (u?.displayName || "").toLowerCase();
+        const custId = (u?.customId || "").toString().toLowerCase();
+        const matches = dispName.includes(searchLower) || custId.includes(searchLower);
+        if (matches && !uniqueLucky77PlayersMap.has(u.id)) {
+          uniqueLucky77PlayersMap.set(u.id, u);
+        }
+      }
+    });
+  }
+
+  let unifiedLucky77PlayersList = Array.from(uniqueLucky77PlayersMap.values());
+
+  // Sort current logged-in user at the absolute top of the Lucky77 control panel
+  if (currentUid) {
+    unifiedLucky77PlayersList.sort((a, b) => {
+      if (a.id === currentUid) return -1;
+      if (b.id === currentUid) return 1;
+      return 0;
+    });
+  }
+
+  if (lucky77SearchQuery.trim()) {
+    const searchLower = lucky77SearchQuery.toLowerCase();
+    unifiedLucky77PlayersList = unifiedLucky77PlayersList.filter(p => {
+      const dispName = (p?.displayName || "").toLowerCase();
+      const custId = (p?.customId || "").toString().toLowerCase();
+      const pId = (p?.id || "").toLowerCase();
+      return dispName.includes(searchLower) || custId.includes(searchLower) || pId.includes(searchLower);
+    });
+  }
+
   return (
     <div className="fixed inset-0 z-[600] bg-[#0d051a]/98 backdrop-blur-2xl flex flex-col h-full overflow-hidden text-right" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <header className="p-4 border-b border-white/10 flex justify-between items-center bg-[#0d051a]">
@@ -294,10 +388,196 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
           <span>✈️</span>
           <span>{t("لعبة الطائرة", "Aviator Game")}</span>
         </button>
+        <button 
+          onClick={() => setActiveTab('lucky77')}
+          className={`flex-1 py-3 text-xs font-black rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
+            activeTab === 'lucky77' 
+              ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/10' 
+              : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+          }`}
+        >
+          <span>🎰</span>
+          <span>{t("Lucky 77", "Lucky 77")}</span>
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-20">
-        {activeTab === 'fruits' ? (
+        {/* Unified Game Launch Icons & Previews Section */}
+        <div className="bg-gradient-to-br from-purple-950/40 via-indigo-950/30 to-amber-950/30 p-5 rounded-[2rem] border border-white/10 shadow-2xl space-y-4">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <h3 className="text-sm font-black text-white flex items-center gap-2">
+              <i className="fas fa-images text-purple-400"></i>
+              {t("صور وأيقونات تشغيل الألعاب في الغرفة", "Room Game Launch Icons & Previews")}
+            </h3>
+            <span className="text-[9px] font-black tracking-widest text-white/40 uppercase bg-white/5 px-2.5 py-1 rounded-full border border-white/10">3 {t("ألعاب", "GAMES")}</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-right">
+            {/* 1. Fruits Icon Config */}
+            <div className="bg-[#140624]/60 p-4 rounded-2xl border border-purple-500/10 flex flex-col justify-between space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 justify-start">
+                  <span className="text-sm">🍓</span>
+                  <span className="text-xs font-extrabold text-purple-200">{t("لعبة الفواكه", "Fruits Game")}</span>
+                </div>
+                
+                {/* Live Preview */}
+                <div className="w-full h-32 rounded-xl bg-purple-950/30 border border-purple-500/20 overflow-hidden flex items-center justify-center relative group">
+                  {fruitsGameIcon ? (
+                    <img 
+                      src={fruitsGameIcon || ''} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100%" height="100%" fill="%231a0b36"/><text x="50%" y="55%" font-size="24" dominant-baseline="middle" text-anchor="middle" fill="%23ffffff">⚠️ Error</text></svg>';
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 opacity-60">
+                      <span className="text-4xl">🍓</span>
+                      <span className="text-[10px] text-white/50">{t("الأيقونة الافتراضية", "Default Icon")}</span>
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2 bg-black/60 px-2 py-0.5 rounded-md text-[8px] font-black text-purple-300 border border-purple-500/20 uppercase">
+                    {t("معاينة حية", "Live Preview")}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] text-white/40 block font-bold text-right">{t("رابط صورة الفواكه:", "Fruits Image URL:")}</label>
+                  <input 
+                    type="text"
+                    value={fruitsGameIcon || ''}
+                    onChange={(e) => setFruitsGameIcon(e.target.value)}
+                    placeholder={t("ضع رابط الصورة...", "Image URL...")}
+                    className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-2.5 text-[10px] font-bold text-white focus:outline-none focus:border-purple-500 text-left truncate"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={async () => {
+                  try {
+                    await setDoc(doc(db, "settings", "fruitsGame"), { gameIcon: fruitsGameIcon }, { merge: true });
+                    alert(t("تم حفظ أيقونة لعبة الفواكه بنجاح!", "Fruits game icon saved successfully!"));
+                  } catch (err) {}
+                }}
+                className="w-full py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-[10px] font-black text-white active:scale-95 transition-all shadow-md mt-auto shadow-purple-600/20 font-sans"
+              >
+                {t("حفظ صورة الفواكه", "Save Fruits Icon")}
+              </button>
+            </div>
+
+            {/* 2. Aviator Icon Config */}
+            <div className="bg-[#0e0722]/60 p-4 rounded-2xl border border-indigo-500/10 flex flex-col justify-between space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 justify-start">
+                  <span className="text-sm">✈️</span>
+                  <span className="text-xs font-extrabold text-indigo-200">{t("لعبة الطائرة", "Aviator Game")}</span>
+                </div>
+                
+                {/* Live Preview */}
+                <div className="w-full h-32 rounded-xl bg-indigo-950/30 border border-indigo-500/20 overflow-hidden flex items-center justify-center relative group">
+                  {aviatorGameIcon ? (
+                    <img 
+                      src={aviatorGameIcon || ''} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100%" height="100%" fill="%230b0525"/><text x="50%" y="55%" font-size="24" dominant-baseline="middle" text-anchor="middle" fill="%23ffffff">⚠️ Error</text></svg>';
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 opacity-60">
+                      <span className="text-4xl">✈️</span>
+                      <span className="text-[10px] text-white/50">{t("الأيقونة الافتراضية", "Default Icon")}</span>
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2 bg-black/60 px-2 py-0.5 rounded-md text-[8px] font-black text-indigo-300 border border-indigo-500/20 uppercase">
+                    {t("معاينة حية", "Live Preview")}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] text-white/40 block font-bold text-right">{t("رابط صورة الطائرة:", "Aviator Image URL:")}</label>
+                  <input 
+                    type="text"
+                    value={aviatorGameIcon || ''}
+                    onChange={(e) => setAviatorGameIcon(e.target.value)}
+                    placeholder={t("ضع رابط الصورة...", "Image URL...")}
+                    className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-2.5 text-[10px] font-bold text-white focus:outline-none focus:border-indigo-500 text-left truncate"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={async () => {
+                  try {
+                    await setDoc(doc(db, "settings", "aviatorGame"), { gameIcon: aviatorGameIcon }, { merge: true });
+                    alert(t("تم حفظ أيقونة لعبة الطائرة بنجاح!", "Aviator game icon saved successfully!"));
+                  } catch (err) {}
+                }}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-black text-white active:scale-95 transition-all shadow-md mt-auto shadow-indigo-600/20 font-sans"
+              >
+                {t("حفظ صورة الطائرة", "Save Aviator Icon")}
+              </button>
+            </div>
+
+            {/* 3. Lucky77 Icon Config */}
+            <div className="bg-[#1f0f05]/60 p-4 rounded-2xl border border-amber-500/10 flex flex-col justify-between space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 justify-start">
+                  <span className="text-sm">🎰</span>
+                  <span className="text-xs font-extrabold text-amber-200">{t("لعبة Lucky 77", "Lucky 77 Game")}</span>
+                </div>
+                
+                {/* Live Preview */}
+                <div className="w-full h-32 rounded-xl bg-amber-950/30 border border-amber-500/20 overflow-hidden flex items-center justify-center relative group">
+                  {lucky77GameIcon ? (
+                    <img 
+                      src={lucky77GameIcon || ''} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100%" height="100%" fill="%232b1302"/><text x="50%" y="55%" font-size="24" dominant-baseline="middle" text-anchor="middle" fill="%23ffffff">⚠️ Error</text></svg>';
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 opacity-60">
+                      <span className="text-4xl">🎰</span>
+                      <span className="text-[10px] text-white/50">{t("الأيقونة الافتراضية", "Default Icon")}</span>
+                    </div>
+                  )}
+                  <div className="absolute top-2 right-2 bg-black/60 px-2 py-0.5 rounded-md text-[8px] font-black text-amber-300 border border-amber-500/20 uppercase">
+                    {t("معاينة حية", "Live Preview")}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] text-white/40 block font-bold text-right">{t("رابط صورة Lucky 77:", "Lucky 77 Image URL:")}</label>
+                  <input 
+                    type="text"
+                    value={lucky77GameIcon || ''}
+                    onChange={(e) => setLucky77GameIcon(e.target.value)}
+                    placeholder={t("ضع رابط الصورة...", "Image URL...")}
+                    className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 px-2.5 text-[10px] font-bold text-white focus:outline-none focus:border-amber-500 text-left truncate"
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={async () => {
+                  try {
+                    await setDoc(doc(db, "settings", "lucky77Game"), { gameIcon: lucky77GameIcon }, { merge: true });
+                    alert(t("تم حفظ أيقونة لعبة Lucky 77 بنجاح!", "Lucky 77 game icon saved successfully!"));
+                  } catch (err) {}
+                }}
+                className="w-full py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-[10px] font-black text-white active:scale-95 transition-all shadow-md mt-auto shadow-amber-600/25 font-sans"
+              >
+                {t("حفظ صورة Lucky 77", "Save Lucky 77 Icon")}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {activeTab === 'fruits' && (
           <div className="space-y-6 animate-in fade-in">
             {/* Section title */}
             <div className="flex items-center gap-2 border-b border-white/5 pb-2">
@@ -339,45 +619,7 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
               </div>
             </div>
 
-            {/* Game Icon Settings */}
-            <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
-              <h4 className="text-sm font-black text-white flex items-center gap-2">
-                <i className="fas fa-image text-pink-400 flex-shrink-0"></i>
-                {t("أيقونة اللعبة", "Game Icon")}
-              </h4>
-              
-              <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
-                <div 
-                  className={`w-14 h-14 rounded-2xl shadow-lg group relative overflow-hidden flex-shrink-0 ${!fruitsGameIcon ? 'bg-gradient-to-br from-orange-400 to-rose-500 p-[1px]' : ''}`}
-                >
-                  {fruitsGameIcon ? (
-                    <img src={fruitsGameIcon} className="w-full h-full object-cover rounded-2xl" />
-                  ) : (
-                    <div className="w-full h-full rounded-2xl bg-[#130624] flex items-center justify-center border border-white/10">
-                      <span className="text-2xl">🍓</span>
-                    </div>
-                  )}
-                </div>
 
-                <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-[10px] text-white/40 font-black">{t("رابط أيقونة اللعبة", "Game Icon Link")}</p>
-                  <input 
-                    type="text"
-                    value={fruitsGameIcon || ''}
-                    onChange={(e) => setFruitsGameIcon(e.target.value)}
-                    placeholder={t("ضع رابط الصورة هنا...", "Enter image link here...")}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-[11px] font-bold text-white focus:outline-none focus:border-purple-500/50 transition-all truncate text-left"
-                  />
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setDoc(doc(db, "settings", "fruitsGame"), { gameIcon: fruitsGameIcon }, { merge: true })}
-                className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl text-[11px] font-black text-white hover:opacity-90 active:scale-[0.98] transition-all shadow-md"
-              >
-                {t("حفظ أيقونة اللعبة", "Save Game Icon")}
-              </button>
-            </div>
 
             {/* Global Algorithm Settings */}
             <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
@@ -583,7 +825,9 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
             </div>
 
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'aviator' && (
           <div className="space-y-6 animate-in fade-in">
             {/* Section title */}
             <div className="flex items-center gap-2 border-b border-white/5 pb-2">
@@ -625,45 +869,7 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
               </div>
             </div>
 
-            {/* Game Icon Settings */}
-            <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
-              <h4 className="text-sm font-black text-white flex items-center gap-2">
-                <i className="fas fa-image text-indigo-400 flex-shrink-0"></i>
-                {t("أيقونة اللعبة", "Game Icon")}
-              </h4>
-              
-              <div className="flex items-center gap-4 bg-black/20 p-3 rounded-2xl border border-white/5">
-                <div 
-                  className={`w-14 h-14 rounded-2xl shadow-lg group relative overflow-hidden flex-shrink-0 ${!aviatorGameIcon ? 'bg-gradient-to-br from-indigo-500 to-purple-600 p-[1px]' : ''}`}
-                >
-                  {aviatorGameIcon ? (
-                    <img src={aviatorGameIcon} className="w-full h-full object-cover rounded-2xl" />
-                  ) : (
-                    <div className="w-full h-full rounded-2xl bg-[#0e0722] flex items-center justify-center border border-white/10">
-                      <span className="text-2xl">✈️</span>
-                    </div>
-                  )}
-                </div>
 
-                <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-[10px] text-white/40 font-black">{t("رابط أيقونة لعبة الطائرة", "Aviator Game Icon Link")}</p>
-                  <input 
-                    type="text"
-                    value={aviatorGameIcon || ''}
-                    onChange={(e) => setAviatorGameIcon(e.target.value)}
-                    placeholder={t("ضع رابط الصورة هنا...", "Enter image link here...")}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-[11px] font-bold text-white focus:outline-none focus:border-indigo-500/50 transition-all truncate text-left"
-                  />
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setDoc(doc(db, "settings", "aviatorGame"), { gameIcon: aviatorGameIcon }, { merge: true })}
-                className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl text-[11px] font-black text-white hover:opacity-90 active:scale-[0.98] transition-all shadow-md animate-gradient"
-              >
-                {t("حفظ أيقونة اللعبة", "Save Game Icon")}
-              </button>
-            </div>
 
             {/* Players List with Individual Management */}
             <div className="space-y-3">
@@ -912,6 +1118,215 @@ export const GamesControlPanel: React.FC<GamesControlPanelProps> = ({ isOpen, on
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'lucky77' && (
+          <div className="space-y-6 animate-in fade-in">
+            {/* Section title */}
+            <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+              <span className="text-xl">🎰</span>
+              <h3 className="text-sm font-black text-white">{t("Lucky 77 Game", "Lucky 77 Game")}</h3>
+            </div>
+
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 gap-3 pb-2">
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[85px]">
+                 <div className="flex items-center justify-between">
+                   <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest leading-none">{t("إجمالي الجولات", "Total Rounds")}</p>
+                   <i className="fas fa-history text-amber-400/50 text-[10px]"></i>
+                 </div>
+                 <p className="text-lg font-black text-white mt-1.5 truncate leading-none">{Number(lucky77GlobalSettings?.totalRounds || 0).toLocaleString('en-US')}</p>
+              </div>
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[85px]">
+                 <div className="flex items-center justify-between">
+                   <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest leading-none">{t("أرباح المنصة", "Platform Profits")}</p>
+                   <i className="fas fa-coins text-emerald-400/50 text-[10px]"></i>
+                 </div>
+                 <p className="text-lg font-black text-white mt-1.5 truncate leading-none flex items-center gap-1">
+                   {Number(lucky77GlobalSettings?.totalProfit24h || 0).toLocaleString('en-US')} <span className="text-[8px] text-yellow-500 font-black">{t("كوينز", "Coins")}</span>
+                 </p>
+              </div>
+            </div>
+
+            {/* Global Rules Tuning */}
+            <div className="bg-white/5 p-5 rounded-[2rem] border border-white/10 shadow-2xl space-y-4">
+              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <i className="fas fa-sliders-h text-amber-400"></i>
+                {t("الإعدادات العامة للعبة", "Lucky77 Global Config")}
+              </h4>
+
+              {/* Loss Threshold Limit */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-white/40 block font-black">{t("حد الربح الإجمالي لتنشيط الإصابة الإلزامية", "Loss Threshold Trigger (Coins)")}</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="number"
+                    className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-amber-500"
+                    placeholder="8,000,000"
+                    defaultValue={lucky77GlobalSettings?.lossThreshold || 8000000}
+                    id="lucky77-loss-threshold"
+                  />
+                  <button
+                    onClick={() => {
+                      const val = (document.getElementById('lucky77-loss-threshold') as HTMLInputElement)?.value;
+                      const parsed = parseInt(val) || 8000000;
+                      updateDoc(doc(db, "settings", "lucky77Game"), { lossThreshold: parsed }, { merge: true });
+                    }}
+                    className="px-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-black"
+                  >
+                    {t("تحديث", "Update")}
+                  </button>
+                </div>
+                <p className="text-[8px] text-white/30">{t("إذا تجاوز صافي أرباح اللاعب هذا الحد، تخسر اللعبة رهاناته تلقائياً لحماية مخازن اللعبة.", "Automatic loss forces once a user reaches this threshold of cumulative win profits.")}</p>
+              </div>
+
+
+            </div>
+
+            {/* Active bets logs */}
+            <div className="bg-white/5 p-5 rounded-[2rem] border border-white/10 shadow-2xl space-y-4">
+              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <i className="fas fa-history text-amber-500"></i>
+                  {t("الرهانات النشطة بالجولة الحالية", "Active Players This Round")}
+                </span>
+                <span className="text-[9px] bg-amber-600/20 text-amber-400 px-2.5 py-1 rounded-full font-black">
+                  {lucky77ActiveBets.length} {t("رهانات نشطة", "Active")}
+                </span>
+              </h4>
+
+              {lucky77ActiveBets.length === 0 ? (
+                <p className="text-[10px] text-white/30 text-start">{t("لا توجد مراهنات نشطة في الجولة الحالية.", "No active bets placed right now.")}</p>
+              ) : (
+                <div className="space-y-2 border-t border-white/5 pt-2 font-mono">
+                  {lucky77ActiveBets.map((bet, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-[11px] bg-black/20 p-2.5 rounded-xl border border-white/5">
+                      <div className="text-right">
+                        <span className="font-sans font-black text-amber-300">{bet.userName}</span>
+                        <div className="text-[8px] text-white/40 mt-0.5">ID: {bet.userId?.substring(0,8)}</div>
+                      </div>
+                      <div className="text-left font-sans flex items-center gap-3">
+                        {bet.watermelon > 0 && <span className="text-emerald-400">🍉 {bet.watermelon.toLocaleString('en-US')}</span>}
+                        {bet.plum > 0 && <span className="text-violet-400">🍇 {bet.plum.toLocaleString('en-US')}</span>}
+                        {bet.lucky77 > 0 && <span className="text-yellow-400">🎰 {bet.lucky77.toLocaleString('en-US')}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* User Tweak List for Lucky77 */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <i className="fas fa-users-cog text-amber-400"></i>
+                {t("تعديل حظ اللاعبين فرادياً", "Custom Player Tuning (Lucky77)")}
+              </h4>
+
+              {/* Search query input */}
+              <div className="relative">
+                <input 
+                  type="text" 
+                  value={lucky77SearchQuery} 
+                  onChange={(e) => setLucky77SearchQuery(e.target.value)}
+                  placeholder={t("ابحث بالاسم أو ID اللاعب...", "Search by Name or Member ID...")}
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 px-4 text-xs font-bold text-white focus:outline-none focus:border-amber-500 text-right placeholder-white/20"
+                />
+              </div>
+
+              {unifiedLucky77PlayersList.length === 0 ? (
+                <p className="text-[10px] text-white/30 text-center">{t("لا يوجد مستخدمين للمطابقة", "No users matching your parameters found")}</p>
+              ) : (
+                <div className="space-y-3.5">
+                  {unifiedLucky77PlayersList.map((player) => {
+                    const totalBetAmt = player.lucky77TotalBet || 0;
+                    const totalWinAmt = player.lucky77TotalWin || 0;
+                    const luckRate = player.lucky77LuckPercent ?? 100;
+
+                    return (
+                      <div key={player.id} className="bg-white/5 p-4 rounded-[1.75rem] border border-white/10 shadow-2xl space-y-3 relative overflow-hidden">
+                        <div className="flex items-center gap-3 justify-between">
+                          <div className="flex items-center gap-2 text-right">
+                            <img src={player.photoURL || 'https://via.placeholder.com/150'} className="w-10 h-10 rounded-full border border-white/10 object-cover" />
+                            <div>
+                              <div className="font-extrabold text-xs text-white flex items-center gap-1.5">
+                                <span>{player.displayName || 'لاعب'}</span>
+                                {player.id === currentUid && (
+                                  <span className="text-[7px] text-[#0d051a] bg-amber-400 px-1 py-0.5 rounded-full font-black">أنت</span>
+                                )}
+                              </div>
+                              <div className="text-[9px] text-white/30 font-mono mt-0.5 font-bold">
+                                ID: {player.customId || player.id?.substring(0, 8)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end text-left font-mono">
+                            <span className="text-[9px] font-black text-white/25">{t("إحصائيات المراهنات", "Bet Ratios")}</span>
+                            <div className="text-[10px] text-white/70 space-y-0.5 mt-0.5 font-bold">
+                              <div>{t("إجمالي المراهنات: ", "Total Bet: ")}{totalBetAmt.toLocaleString('en-US')}</div>
+                              <div className="text-emerald-400">{t("إجمالي الأرباح: ", "Total Win: ")}{totalWinAmt.toLocaleString('en-US')}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Luck Adjuster Slider */}
+                        <div className="bg-black/20 p-3 rounded-2xl border border-white/5 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-black text-amber-300 flex items-center gap-1">
+                              <i className="fas fa-percentage text-[10px]"></i>
+                              {t("معدل الحظ المخصص:", "Custom Luck Factor:")}
+                            </span>
+                            <span className="text-xs font-black text-white font-mono">{luckRate}%</span>
+                          </div>
+                          
+                          <input 
+                            type="range"
+                            min="0"
+                            max="300"
+                            step="5"
+                            value={luckRate}
+                            onChange={(e) => updateDoc(doc(db, "users", player.id), { lucky77LuckPercent: parseInt(e.target.value) })}
+                            className="w-full h-1 bg-white/15 rounded-lg appearance-none cursor-pointer"
+                          />
+                          <p className="text-[8px] text-white/30 text-start">{t("100% نسبة طبيعية. أقل من 100% يقلل فرصته بالفوز تدريجياً. أعلى من 100% يمنحه فوزاً سهلاً متعمداً.", "100% is regular. Under 100% lowers probability. Above 100% increases odds.")}</p>
+                        </div>
+
+                        {/* Forced Win / Loss Toggles */}
+                        <div className="grid grid-cols-2 gap-2 font-sans">
+                          <button
+                            onClick={() => updateDoc(doc(db, "users", player.id), { lucky77ForcedWin: !player.lucky77ForcedWin, lucky77ForcedLoss: false })}
+                            className={`py-2 px-3 rounded-2xl text-[10px] font-black border transition-all flex items-center justify-center gap-1.5 shadow-md ${
+                              player.lucky77ForcedWin 
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                                : 'bg-white/5 text-white/55 border-white/10'
+                            }`}
+                          >
+                            <i className={`fas ${player.lucky77ForcedWin ? 'fa-toggle-on text-emerald-400' : 'fa-toggle-off text-white/30'}`}></i>
+                            {player.lucky77ForcedWin ? t('فوز إجباري نشط', 'Forced Win Active') : t('إجبار فوز', 'Force Win')}
+                          </button>
+                          
+                          <button
+                            onClick={() => updateDoc(doc(db, "users", player.id), { lucky77ForcedLoss: !player.lucky77ForcedLoss, lucky77ForcedWin: false })}
+                            className={`py-2 px-3 rounded-2xl text-[10px] font-black border transition-all flex items-center justify-center gap-1.5 shadow-md ${
+                              player.lucky77ForcedLoss 
+                                ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' 
+                                : 'bg-white/5 text-white/55 border-white/10'
+                            }`}
+                          >
+                            <i className={`fas ${player.lucky77ForcedLoss ? 'fa-toggle-on text-rose-400' : 'fa-toggle-off text-white/30'}`}></i>
+                            {player.lucky77ForcedLoss ? t('خسارة إجبارية نشطة', 'Forced Loss Active') : t('إجبار خسارة', 'Force Loss')}
+                          </button>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
           </div>
         )}
       </div>

@@ -919,6 +919,26 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const userCustomId =
     liveUserData?.customId ||
     (isOfficialAdmin ? "OFFICIAL" : user?.uid.substring(0, 8));
+
+  const handleCopyId = (idToCopy: string) => {
+    if (!idToCopy) return;
+    navigator.clipboard.writeText(idToCopy).then(() => {
+      alert(t("تم نسخ الآي دي بنجاح!", "ID copied successfully!"));
+    }).catch(() => {
+      const textArea = document.createElement("textarea");
+      textArea.value = idToCopy;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        alert(t("تم نسخ الآي دي بنجاح!", "ID copied successfully!"));
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      }
+      document.body.removeChild(textArea);
+    });
+  };
+
   const userCoins = liveUserData?.coins || 0;
   const userDiamonds = liveUserData?.diamonds || 0;
   const userCustomIdIcon = liveUserData?.customIdIcon;
@@ -1046,29 +1066,40 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               {userDisplayName}
             </h2>
             <div className="flex items-center gap-2">
-              {userCustomIdIcon ? (
-                <div
-                  className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300"
-                  style={{ backgroundImage: `url(${userCustomIdIcon})` }}
-                >
-                  <span
-                    className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
-                    style={{
-                      paddingLeft: `${idX}px`,
-                      paddingTop: `${idY}px`,
-                      fontSize: `${idFontSizeValue}px`,
-                    }}
+              <div className="flex items-center gap-0.5">
+                {userCustomIdIcon ? (
+                  <div
+                    className="relative w-[90px] h-[28px] flex items-center bg-contain bg-center bg-no-repeat animate-in zoom-in duration-300"
+                    style={{ backgroundImage: `url(${userCustomIdIcon})` }}
                   >
-                    {userCustomId}
+                    <span
+                      className="font-black text-white tracking-widest text-center w-full block drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+                      style={{
+                        paddingLeft: `${idX}px`,
+                        paddingTop: `${idY}px`,
+                        fontSize: `${idFontSizeValue}px`,
+                      }}
+                    >
+                      {userCustomId}
+                    </span>
+                  </div>
+                ) : (
+                  <span
+                    className={`text-[11px] font-black w-fit ${userCustomId === "OFFICIAL" ? "text-blue-400 bg-blue-500/10 border-blue-500/20" : "text-purple-300 bg-white/5 border-white/5"} px-3 py-1 rounded-xl border tracking-wider`}
+                  >
+                    ID: {userCustomId}
                   </span>
-                </div>
-              ) : (
-                <span
-                  className={`text-[11px] font-black w-fit ${userCustomId === "OFFICIAL" ? "text-blue-400 bg-blue-500/10 border-blue-500/20" : "text-purple-300 bg-white/5 border-white/5"} px-3 py-1 rounded-xl border tracking-wider`}
+                )}
+
+                {/* Copy ID Button */}
+                <button
+                  onClick={() => handleCopyId(userCustomId)}
+                  className="w-7 h-7 flex items-center justify-center bg-white/5 hover:bg-white/10 text-purple-300 hover:text-white rounded-xl border border-white/5 cursor-pointer shadow-sm"
+                  title={t("نسخ الآي دي", "Copy ID")}
                 >
-                  ID: {userCustomId}
-                </span>
-              )}
+                  <i className="fas fa-copy text-[11px]"></i>
+                </button>
+              </div>
 
               {/* Gender and Region Info */}
               <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-xl border border-white/5">

@@ -353,7 +353,8 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ db, user, currentUse
   const formatTime = (timestamp: any) => {
     if (!timestamp) return "";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Force English numerals for the timestamp
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -432,7 +433,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ db, user, currentUse
                   >
                     <div className="relative flex-shrink-0">
                       <img 
-                        src={otherUser.animatedAvatar || otherUser.photoURL || defaultImages?.profileImage || "https://api.dicebear.com/7.x/avataaars/svg?seed=chat"} 
+                        src={otherUser.animatedAvatar || otherUser.photoURL || defaultImages?.profileImage || ""} 
                         className="w-10 h-10 rounded-full object-cover shadow-2xl border border-white/10" 
                         alt="" 
                       />
@@ -492,7 +493,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ db, user, currentUse
               requests.map((req) => {
                 const reqSenderData = otherUsersData[req.id || req.uid] || {};
                 const displayName = reqSenderData.displayName || req.displayName || t("مستخدم", "User");
-                const avatarUrl = reqSenderData.animatedAvatar || reqSenderData.photoURL || req.animatedAvatar || req.photoURL || defaultImages?.profileImage || "https://api.dicebear.com/7.x/avataaars/svg?seed=chat";
+                const avatarUrl = reqSenderData.animatedAvatar || reqSenderData.photoURL || req.animatedAvatar || req.photoURL || defaultImages?.profileImage || "";
 
                 return (
                   <div 
@@ -547,7 +548,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ db, user, currentUse
                 <div className="flex items-center gap-3 flex-row text-left">
                   <div className="relative flex-shrink-0">
                     <img 
-                      src={otherUser.animatedAvatar || otherUser.photoURL || defaultImages?.profileImage || "https://api.dicebear.com/7.x/avataaars/svg?seed=chat"} 
+                      src={otherUser.animatedAvatar || otherUser.photoURL || defaultImages?.profileImage || ""} 
                       className="w-10 h-10 rounded-full object-cover border border-white/10 shadow-md" 
                       alt="" 
                     />
@@ -583,7 +584,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ db, user, currentUse
                 const isMe = msg.senderId === user.uid;
                 return (
                   <div key={msg.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[75%] rounded-3xl p-3 px-4 text-xs font-bold leading-relaxed shadow-lg backdrop-blur-md border bg-purple-600/20 text-white border-purple-500/30 ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+                    <div className={`max-w-[75%] rounded-3xl p-3 px-4 text-xs font-bold leading-relaxed shadow-lg backdrop-blur-md border ${isMe ? 'bg-white/5 border-white/10 text-white/90 rounded-br-sm' : 'bg-purple-600/20 text-white border-purple-500/30 rounded-bl-sm'}`}>
                       <p>{msg.text}</p>
                       <span className="text-[8px] font-black opacity-40 float-right mt-1.5 ml-1.5 tracking-tighter">
                         {formatTime(msg.createdAt)}

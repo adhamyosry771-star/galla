@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { auth, db } from '../firebase';
-import { doc, updateDoc, serverTimestamp, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { doc, updateDoc, serverTimestamp, collection, addDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 interface CarnivalEventPageProps {
   onBack: () => void;
@@ -13,6 +13,12 @@ export const CarnivalEventPage: React.FC<CarnivalEventPageProps> = ({ onBack, us
   const { language, t } = useLanguage();
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimSuccess, setClaimSuccess] = useState(false);
+  
+  // Activation state variables
+  const [showUnlockError, setShowUnlockError] = useState(false);
+  const [showCodeInputModal, setShowCodeInputModal] = useState(false);
+  const [enteredCode, setEnteredCode] = useState('');
+  const [isActivating, setIsActivating] = useState(false);
   
   // Parse last claim time robustly
   const getLastClaimTime = () => {
@@ -107,10 +113,68 @@ export const CarnivalEventPage: React.FC<CarnivalEventPageProps> = ({ onBack, us
     return { days, hours, minutes, seconds };
   };
 
+  const handleActivateCode = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    if (!enteredCode.trim()) {
+      alert(t("يرجى إدخال كود التفعيل أولاً", "Please enter the activation code first"));
+      return;
+    }
+
+    setIsActivating(true);
+    try {
+      const trimmed = enteredCode.trim().toUpperCase();
+      const codeRef = doc(db, "carnivalCodes", trimmed);
+      const codeSnap = await getDoc(codeRef);
+
+      if (!codeSnap.exists()) {
+        alert(t("كود التفعيل غير صحيح أو غير موجود", "The activation code is incorrect or does not exist"));
+        setIsActivating(false);
+        return;
+      }
+
+      const codeData = codeSnap.data();
+      if (codeData.used) {
+        alert(t("عذراً، هذا الكود تم استخدامه من قبل", "Sorry, this code has already been used"));
+        setIsActivating(false);
+        return;
+      }
+
+      // Mark code as used
+      await updateDoc(codeRef, {
+        used: true,
+        usedBy: user.uid,
+        usedAt: serverTimestamp()
+      });
+
+      // Mark user as unlocked
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        carnivalUnlocked: true
+      });
+
+      alert(t("تم تفعيل الكرنفال بنجاح! يمكنك الآن استلام الجائزة بنجاح.", "Carnival activated successfully! You can now claim the reward."));
+      setShowCodeInputModal(false);
+      setShowUnlockError(false);
+    } catch (err: any) {
+      console.error("Error activating code:", err);
+      alert(t("حدث خطأ أثناء تفعيل الكود: ", "An error occurred during verification: ") + (err.message || err));
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
   const handleClaim = async () => {
     const user = auth.currentUser;
     if (!user) {
       alert(t("رجاء تسجيل الدخول أولاً", "Please sign in first"));
+      return;
+    }
+
+    const hasClaimedBefore = lastClaim > 0;
+    if (hasClaimedBefore && !userData?.carnivalUnlocked) {
+      setShowUnlockError(true);
       return;
     }
 
@@ -172,6 +236,102 @@ export const CarnivalEventPage: React.FC<CarnivalEventPageProps> = ({ onBack, us
             >
               {t("فهمت", "I understand")}
             </button>
+          </div>
+        </div>
+      )}
+
+      {showUnlockError && !showCodeInputModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-black/80">
+          <div 
+            className="bg-[#1a0b2e]/80 border border-purple-500/20 rounded-[2rem] p-6 w-full max-w-[320px] text-center shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 text-purple-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 rounded-2xl bg-purple-900/40 border border-purple-500/20 flex items-center justify-center text-purple-200 mx-auto mb-2 shadow-lg">
+              <i className="fas fa-exclamation-triangle text-xl"></i>
+            </div>
+            <h4 className="text-purple-200 font-black text-sm">
+              {t("تنبيه تفعيل الكرنفال", "Track Activation Required")}
+            </h4>
+            <p className="text-purple-300 text-xs leading-relaxed font-bold">
+              {t(
+                "عذرا يتعين عليك شحن 2 دولار لكي تستمتع بمده الحدث الفعليه بعد الشحن بالرجاء الاستلام كود من المسؤول لتفعيل الحدث",
+                "Sorry, you must recharge $2 to enjoy the actual event duration. After recharging, please obtain an activation code from the administrator to activate the event."
+              )}
+            </p>
+            <div className="space-y-2">
+              <button 
+                onClick={() => {
+                  setShowCodeInputModal(true);
+                }}
+                className="w-full py-3 bg-purple-900/40 hover:bg-purple-900/50 text-purple-200 text-xs font-black rounded-xl active:scale-95 transition-transform cursor-pointer border border-purple-500/20 hover:border-purple-500/30"
+              >
+                {t("وضع الكود", "Enter Code")}
+              </button>
+              <button 
+                onClick={() => setShowUnlockError(false)}
+                className="w-full py-2.5 bg-white/5 border border-white/10 text-white/60 text-xs font-bold rounded-xl active:scale-95 transition-transform cursor-pointer"
+              >
+                {t("إلغاء", "Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCodeInputModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-black/80">
+          <div 
+            className="bg-[#1a0b2e]/80 border border-purple-500/20 rounded-[2rem] p-6 w-full max-w-[320px] text-center shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-purple-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-2xl bg-purple-900/40 border border-purple-500/20 flex items-center justify-center text-purple-200 mx-auto shadow-lg">
+              <i className="fas fa-key text-lg"></i>
+            </div>
+            
+            <div className="space-y-1">
+              <h4 className="text-purple-200 font-black text-sm">
+                {t("إدخال كود التفعيل", "Enter Activation Code")}
+              </h4>
+              <p className="text-purple-300/60 text-[9px] font-bold">
+                {t("يرجى كتابة الكود المستلم من الإدارة بشكل صحيح", "Please write the code received from administration accurately")}
+              </p>
+            </div>
+
+            <input 
+              type="text"
+              value={enteredCode}
+              onChange={(e) => setEnteredCode(e.target.value)}
+              placeholder=""
+              className="w-full bg-black/40 border border-purple-500/20 rounded-xl py-3 px-4 text-center font-mono font-black text-white focus:outline-none focus:border-purple-500 text-xs text-center"
+              autoFocus
+            />
+
+            <div className="space-y-2">
+              <button 
+                onClick={handleActivateCode}
+                disabled={isActivating}
+                className="w-full py-3 bg-purple-900/40 hover:bg-purple-900/50 text-purple-200 text-xs font-black rounded-xl active:scale-95 transition-transform flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 border border-purple-500/20 hover:border-purple-500/30"
+              >
+                {isActivating ? (
+                  <>
+                    <i className="fas fa-spinner animate-spin text-xs"></i>
+                    <span>{t("جاري التحقق والتفعيل...", "Verifying and activating...")}</span>
+                  </>
+                ) : (
+                  <span>{t("تفعيل الآن", "Activate Now")}</span>
+                )}
+              </button>
+
+              <button 
+                onClick={() => {
+                  setShowCodeInputModal(false);
+                  setShowUnlockError(true);
+                }}
+                className="w-full py-2.5 bg-white/5 border border-white/10 text-white/60 text-xs font-bold rounded-xl active:scale-95 transition-transform cursor-pointer"
+              >
+                {t("رجوع", "Go Back")}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -348,15 +508,15 @@ export const CarnivalEventPage: React.FC<CarnivalEventPageProps> = ({ onBack, us
             </h4>
             <div className="text-[10px] text-white/40 space-y-2 leading-relaxed">
               <div className="flex gap-2 items-start">
-                <span className="text-purple-500 font-bold">•</span>
+                <i className="fas fa-info-circle text-purple-400 text-[10px] mt-0.5"></i>
                 <p>{t("يمكن لجميع المستخدمين المسجلين الجدد والمخضرمين المطالبة بالمكافأة في أي وقت.", "All registered new and existing users are fully eligible to claim.")}</p>
               </div>
               <div className="flex gap-2 items-start">
-                <span className="text-purple-500 font-bold">•</span>
+                <i className="fas fa-info-circle text-purple-400 text-[10px] mt-0.5"></i>
                 <p>{t("يتم تجديد الصلاحية تماماً كل 24 ساعة من تاريخ آخر عملية مطالبة للمستخدم.", "Eligibility resets exactly 24 hours after your last coin claim.")}</p>
               </div>
               <div className="flex gap-2 items-start">
-                <span className="text-purple-500 font-bold">•</span>
+                <i className="fas fa-info-circle text-purple-400 text-[10px] mt-0.5"></i>
                 <p>{t("تطبيق يلا بارتي يحتفظ بالحق في إنهاء أو تمديد هذا الكرنفال الافتتاحي في أي وقت.", "Yalla Party reserve the rights to terminate or extend this opening carnival event anytime.")}</p>
               </div>
             </div>

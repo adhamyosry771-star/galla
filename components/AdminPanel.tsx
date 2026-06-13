@@ -38,6 +38,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [carnivalBgUrl, setCarnivalBgUrl] = useState('');
   const [isCarnivalSaving, setIsCarnivalSaving] = useState(false);
   const [carnivalSettings, setCarnivalSettings] = useState<any>(null);
+  const [carnivalCodes, setCarnivalCodes] = useState<any[]>([]);
+  const [generatedCode, setGeneratedCode] = useState('');
 
   // Agency Design States
   const [agencyBackgroundUrl, setAgencyBackgroundUrl] = useState('');
@@ -287,9 +289,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
       }
     });
 
+    const unsubCarnivalCodes = onSnapshot(collection(db, "carnivalCodes"), (snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      });
+      setCarnivalCodes(list);
+    });
+
     return () => {
       unsubUsers(); unsubNews(); unsubBanners(); unsubBgs(); unsubRooms(); unsubDesign(); unsubOfficialMsgs(); unsubAppearance(); unsubStoreFrames(); unsubStoreEntries(); unsubStoreBgs(); unsubEmojis(); unsubGifts(); unsubSupport();
       unsubFruitsSettings(); unsubFruitsActiveBets(); unsubFruitsPlayers(); unsubReports(); unsubDefaultImages(); unsubAgencyDesign(); unsubCarnival();
+      unsubCarnivalCodes();
     };
   }, [isOpen]);
 
@@ -1760,6 +1773,129 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                     <i className="fas fa-stop text-[9px]"></i>
                     <span>إيقاف الحدث</span>
                   </button>
+                )}
+              </div>
+            </div>
+
+            {/* Carnival Activation Codes Generator Section */}
+            <div className="bg-[#1d0a33]/85 p-6 rounded-[2.5rem] border border-purple-500/20 space-y-4 shadow-2xl mt-4 text-right">
+              <h3 className="text-sm font-black text-white flex items-center gap-2 justify-start">
+                <i className="fas fa-key text-purple-400"></i>
+                أكواد تفعيل الكرنفال للمستخدمين
+              </h3>
+              <p className="text-[10px] text-purple-300/60 font-bold uppercase tracking-widest">توليد وإدارة الأكواد التي يتم منحها للمستخدمين لتفعيل استلام جائزة الـ 10 مليون عملة بعد شحن 2$</p>
+
+              <button
+                onClick={async () => {
+                  try {
+                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                    let codePart = '';
+                    for (let i = 0; i < 6; i++) {
+                      codePart += chars.charAt(Math.floor(Math.random() * chars.length));
+                    }
+                    const finalCode = `CARNIVAL-${codePart}`;
+                    
+                    await setDoc(doc(db, "carnivalCodes", finalCode), {
+                      code: finalCode,
+                      createdAt: serverTimestamp(),
+                      used: false,
+                      usedBy: null,
+                      usedAt: null
+                    });
+                    
+                    setGeneratedCode(finalCode);
+                    alert(`تم توليد كود التفعيل بنجاح: ${finalCode}`);
+                  } catch (err) {
+                    alert("حدث خطأ أثناء توليد الكود");
+                  }
+                }}
+                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 py-3.5 rounded-2xl font-black text-xs text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <i className="fas fa-plus animate-pulse"></i>
+                <span>توليد كود تفعيل جديد</span>
+              </button>
+
+              {generatedCode && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 text-center space-y-1">
+                  <p className="text-[9px] text-emerald-400 font-black uppercase tracking-wider">الكود المولد الأخير (انسخه لمشاركته):</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <p className="text-lg font-mono font-black text-white select-all">{generatedCode}</p>
+                    <button
+                      onClick={() => {
+                        try {
+                          navigator.clipboard.writeText(generatedCode);
+                          alert("تم نسخ الكود بنجاح!");
+                        } catch (err) {}
+                      }}
+                      className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer"
+                      title="نسخ الكود"
+                    >
+                      <i className="fas fa-copy text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2 pt-2 border-t border-white/5">
+                <h4 className="text-[11px] font-black text-white/50 tracking-wider">الأكواد الفعالة والسجلات:</h4>
+                
+                {carnivalCodes.length === 0 ? (
+                  <p className="text-[10px] text-white/30 text-center py-4">لم يتم توليد أي أكواد بعد.</p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {carnivalCodes.map((codeItem) => (
+                      <div key={codeItem.id} className="bg-black/40 border border-white/5 p-3 rounded-xl flex items-center justify-between text-xs">
+                        <div className="text-right">
+                          <p className="font-mono font-black text-purple-300 select-all">{codeItem.code}</p>
+                          <p className="text-[8px] text-white/40 mt-0.5">
+                            تاريخ الإنشاء: {codeItem.createdAt ? new Date(codeItem.createdAt.seconds * 1000).toLocaleString('ar-EG') : 'الآن'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {codeItem.used ? (
+                            <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/10 rounded-full text-[9px] font-extrabold">
+                              مستخدم (UID: {codeItem.usedBy?.substring(0, 6)}...)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 rounded-full text-[9px] font-extrabold">
+                              جاهز ومتاح
+                            </span>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              try {
+                                navigator.clipboard.writeText(codeItem.code);
+                                alert("تم نسخ الكود بنجاح!");
+                              } catch (err) {}
+                            }}
+                            className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer"
+                            title="نسخ الكود"
+                          >
+                            <i className="fas fa-copy text-[10px]"></i>
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              if (confirm("هل أنت متأكد من حذف هذا الكود بالكامل؟")) {
+                                try {
+                                  await deleteDoc(doc(db, "carnivalCodes", codeItem.id));
+                                  alert("تم حذف كود التفعيل بنجاح.");
+                                } catch (e) {
+                                  alert("حدث خطأ أثناء حذف الكود");
+                                }
+                              }
+                            }}
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer"
+                            title="حذف الكود"
+                          >
+                            <i className="fas fa-trash-alt text-[10px]"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

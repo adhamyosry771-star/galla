@@ -150,7 +150,7 @@ export const SetupProfile: React.FC<SetupProfileProps> = ({ onComplete }) => {
           regionCode: region.code,
           regionFlag: region.flag,
           birthDate: `${birthDate.year}-${birthDate.month}-${birthDate.day}`,
-          photoURL: imagePreview || defaultImages?.profileImage || `https://api.dicebear.com/7.x/avataaars/svg?seed=${randomID}`,
+          photoURL: imagePreview || defaultImages?.profileImage || "",
           headerURL: defaultImages?.coverImage || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 300'><rect width='600' height='300' fill='%2312071f'/><circle cx='300' cy='150' r='100' fill='%23ffffff' fill-opacity='0.03'/></svg>",
           email: user.email,
           password: sessionStorage.getItem('pending_password') || null,
@@ -161,7 +161,7 @@ export const SetupProfile: React.FC<SetupProfileProps> = ({ onComplete }) => {
         await setDoc(doc(db, "users", user.uid), userData);
         await updateProfile(user, {
           displayName: displayName,
-          photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${randomID}`
+          photoURL: imagePreview || defaultImages?.profileImage || ""
         });
         sessionStorage.removeItem('pending_password');
         onComplete();
