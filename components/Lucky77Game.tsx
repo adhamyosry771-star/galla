@@ -37,6 +37,26 @@ const CHIPS_CONFIG = [
   { value: 500000, label: '500K', colors: 'from-cyan-400 via-blue-600 to-blue-800', border: 'border-cyan-300/40 text-cyan-100' }
 ];
 
+// Module-level shared AudioContext for ultra-responsive sound effects with absolutely zero lag
+let sharedSfxCtx: AudioContext | null = null;
+const getSharedSfxCtx = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!sharedSfxCtx) {
+      sharedSfxCtx = new AudioContextClass();
+    }
+    if (sharedSfxCtx.state === 'suspended') {
+      sharedSfxCtx.resume().catch(() => {});
+    }
+    return sharedSfxCtx;
+  } catch (err) {
+    console.warn("Shared AudioContext creation failed", err);
+    return null;
+  }
+};
+
 export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, onUpdateBalance }) => {
   const { language, t } = useLanguage();
   const [gameState, setGameState] = useState<'betting' | 'spinning' | 'result'>('betting');
@@ -70,6 +90,7 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
   // Wheel Visual Rotation
   const [wheelRotation, setWheelRotation] = useState(0);
   const [winningSectorIdx, setWinningSectorIdx] = useState<number | null>(null);
+  const [winAmount, setWinAmount] = useState<number>(0);
   const [history, setHistory] = useState<string[]>([]);
 
   // Admin and Luck Synchronization
@@ -84,82 +105,82 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
   const playSfx = (type: 'chip' | 'tick' | 'win' | 'lose' | 'modal' | 'warn' | 'clear') => {
     if (isMuted) return;
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
+      const ctx = getSharedSfxCtx();
+      if (!ctx) return;
+      const now = ctx.currentTime;
 
       if (type === 'chip') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); 
-        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.08); 
-        gain.gain.setValueAtTime(0.18, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.15);
+        osc.frequency.setValueAtTime(587.33, now); 
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.08); 
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.005, now + 0.15);
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.16);
+        osc.start(now);
+        osc.stop(now + 0.16);
       } else if (type === 'tick') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(140, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.04);
-        gain.gain.setValueAtTime(0.22, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.04);
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.04);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.005, now + 0.04);
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
       } else if (type === 'clear') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(220, ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(110, ctx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.linearRampToValueAtTime(110, now + 0.15);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.17);
+        osc.start(now);
+        osc.stop(now + 0.17);
       } else if (type === 'modal') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, ctx.currentTime);
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.06);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.06);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.22);
+        osc.start(now);
+        osc.stop(now + 0.22);
       } else if (type === 'warn') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(900, ctx.currentTime);
-        gain.gain.setValueAtTime(0.20, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(900, now);
+        gain.gain.setValueAtTime(0.20, now);
+        gain.gain.exponentialRampToValueAtTime(0.005, now + 0.08);
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.09);
+        osc.start(now);
+        osc.stop(now + 0.09);
       } else if (type === 'win') {
         const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5]; 
         notes.forEach((freq, idx) => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
-          gain.gain.setValueAtTime(0.18, ctx.currentTime + idx * 0.08);
-          gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + idx * 0.08 + 0.25);
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          gain.gain.setValueAtTime(0.18, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.005, now + idx * 0.08 + 0.25);
           osc.connect(gain);
           gain.connect(ctx.destination);
-          osc.start(ctx.currentTime + idx * 0.08);
-          osc.stop(ctx.currentTime + idx * 0.08 + 0.3);
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.3);
         });
       } else if (type === 'lose') {
         const notes = [293.66, 220, 146.83]; 
@@ -167,17 +188,17 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
-          gain.gain.setValueAtTime(0.12, ctx.currentTime + idx * 0.12);
-          gain.gain.exponentialRampToValueAtTime(0.002, ctx.currentTime + idx * 0.12 + 0.2);
+          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+          gain.gain.setValueAtTime(0.12, now + idx * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.002, now + idx * 0.12 + 0.2);
           osc.connect(gain);
           gain.connect(ctx.destination);
-          osc.start(ctx.currentTime + idx * 0.12);
-          osc.stop(ctx.currentTime + idx * 0.12 + 0.25);
+          osc.start(now + idx * 0.12);
+          osc.stop(now + idx * 0.12 + 0.25);
         });
       }
     } catch (e) {
-      console.warn("WebAudio context initial access failed", e);
+      console.warn("WebAudio context play failed", e);
     }
   };
 
@@ -466,6 +487,8 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
     const finalWinReward = userBetOnWinner * winningSector.multiplier;
     const totalPlacedBet = Object.values(bets).reduce((a, b) => a + b, 0);
 
+    setWinAmount(finalWinReward);
+
     if (finalWinReward > 0) {
       onUpdateBalance(finalWinReward);
       playSfx('win');
@@ -514,6 +537,7 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
       setBets({ watermelon: 0, lucky77: 0, plum: 0 });
       setWinningSectorIdx(null);
       setWheelRotation(0);
+      setWinAmount(0);
       
       setTimeLeft(15);
       setGameState('betting');
@@ -686,7 +710,17 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
           </div>
 
           {/* Right side close action: Transparent Circle Look */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
+            {/* Premium Transparent Mute Button */}
+            <button 
+              id="lucky77-mute-btn"
+              onClick={toggleMute} 
+              className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/90 border border-white/10 shadow-sm cursor-pointer"
+              title={isMuted ? t("تشغيل الصوت", "Unmute Audio") : t("كتم الصوت", "Mute Audio")}
+            >
+              <i className={`fas ${isMuted ? "fa-volume-mute" : "fa-volume-up"} text-xs text-center`}></i>
+            </button>
+
             {/* Premium Transparent Exit Button */}
             <button 
               id="lucky77-close-btn"
@@ -724,15 +758,14 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
               ))}
 
               {/* Spinning Inner Canvas */}
-              <motion.div
+              <div
                 id="lucky77-spinning-wheel"
                 className="w-full h-full rounded-full bg-[#120427] overflow-hidden relative"
-                animate={{ rotate: wheelRotation }}
-                transition={
-                  gameState === 'spinning' 
-                    ? { duration: 5.0, ease: [0.12, 0.95, 0.18, 1] } 
-                    : { duration: 0 }
-                }
+                style={{
+                  transform: `rotate(${wheelRotation}deg)`,
+                  transition: gameState === 'spinning' ? 'transform 5.0s cubic-bezier(0.12, 0.95, 0.18, 1)' : 'none',
+                  willChange: 'transform'
+                }}
               >
                 {/* SVG circular sectors */}
                 <svg className="w-full h-full transform" viewBox="0 0 200 200">
@@ -804,7 +837,7 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
                   );
                 })}
 
-              </motion.div>
+              </div>
 
               {/* Royal Center Hub Shield - Static (does not rotate) */}
               <div className="absolute w-[76px] h-[76px] rounded-full bg-gradient-to-br from-[#f8d479] via-[#94711d] to-[#4c390a] p-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-20 flex items-center justify-center top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
@@ -981,11 +1014,19 @@ export const Lucky77Game: React.FC<Lucky77GameProps> = ({ onClose, userBalance, 
               <span className="text-[10px] font-extrabold text-white/40 uppercase tracking-widest">
                 {t("اختر مبلغ الرهان", "CHOOSE CHIP TO BET")}
               </span>
-              <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider leading-none flex items-center gap-1">
-                <span>{t("المراهنة بالجولة: ", "Current Bet: ")}</span>
-                <span className="font-mono font-black">{totalBetAmount.toLocaleString('en-US')}</span>
-                <i className="fas fa-coins text-[9.5px] text-yellow-500 -mt-0.5" />
-              </span>
+              {gameState === 'result' && winAmount > 0 ? (
+                <span className="text-[11px] font-black text-green-400 capitalize tracking-wider leading-none flex items-center gap-1.5">
+                  <span>{t("مبارك ربحت: ", "Congrats! You Won: ")}</span>
+                  <span className="font-sans font-black">+{winAmount.toLocaleString('en-US')}</span>
+                  <i className="fas fa-coins text-[10px] text-yellow-400 -mt-0.5" />
+                </span>
+              ) : (
+                <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider leading-none flex items-center gap-1">
+                  <span>{t("المراهنة بالجولة: ", "Current Bet: ")}</span>
+                  <span className="font-mono font-black">{totalBetAmount.toLocaleString('en-US')}</span>
+                  <i className="fas fa-coins text-[9.5px] text-yellow-500 -mt-0.5" />
+                </span>
+              )}
             </div>
 
             {/* Interactive Tactile Chips Tray */}

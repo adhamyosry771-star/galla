@@ -110,6 +110,12 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const [hasUnreadSupport, setHasUnreadSupport] = useState(false);
   const [dynamicFollowersCount, setDynamicFollowersCount] = useState<number>(0);
   const [dynamicFriendsCount, setDynamicFriendsCount] = useState<number>(0);
+  const [relationsModal, setRelationsModal] = useState<"friends" | "following" | "followers" | null>(null);
+  const [relationsSearch, setRelationsSearch] = useState("");
+  const [relationsUsers, setRelationsUsers] = useState<any[]>([]);
+  const [isLoadingRelations, setIsLoadingRelations] = useState(false);
+  const [followersList, setFollowersList] = useState<string[]>([]);
+  const [friendsList, setFriendsList] = useState<string[]>([]);
 
   // CP Feature States
   const [partnerData, setPartnerData] = useState<any>(null);
@@ -253,6 +259,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         setIsWalletOpen(false);
         return true;
       }
+      if (relationsModal) {
+        setRelationsModal(null);
+        return true;
+      }
       return false;
     });
   }, [
@@ -276,6 +286,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     showCPBreakupModal,
     showCountryPicker,
     showCPConfirmModal,
+    relationsModal,
   ]);
 
   const countries = [
@@ -405,12 +416,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     const unsub = onSnapshot(q, (snap) => {
       const followersUids = snap.docs.map((doc) => doc.id);
       setDynamicFollowersCount(followersUids.length);
+      setFollowersList(followersUids);
 
       const myFollowing = liveUserData?.following || [];
       const friendsUids = myFollowing.filter((uid: string) =>
         followersUids.includes(uid),
       );
       setDynamicFriendsCount(friendsUids.length);
+      setFriendsList(friendsUids);
     });
     return unsub;
   }, [user, liveUserData?.following]);
@@ -453,6 +466,55 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     });
     return () => unsub();
   }, [user]);
+
+  useEffect(() => {
+    if (!relationsModal || !user) {
+      setRelationsUsers([]);
+      return;
+    }
+
+    const targetUids = 
+      relationsModal === "friends"
+        ? friendsList
+        : relationsModal === "followers"
+          ? followersList
+          : liveUserData?.following || [];
+
+    if (targetUids.length === 0) {
+      setRelationsUsers([]);
+      return;
+    }
+
+    setIsLoadingRelations(true);
+
+    const fetchUsersDetails = async () => {
+      try {
+        const chunks: string[][] = [];
+        for (let i = 0; i < targetUids.length; i += 30) {
+          chunks.push(targetUids.slice(i, i + 30));
+        }
+
+        const loadedUsers: any[] = [];
+        for (const chunk of chunks) {
+          const q = query(
+            collection(db, "users"),
+            where("uid", "in", chunk)
+          );
+          const snap = await getDocs(q);
+          snap.forEach((doc) => {
+            loadedUsers.push({ id: doc.id, ...doc.data() });
+          });
+        }
+        setRelationsUsers(loadedUsers);
+      } catch (err) {
+        console.error("Error fetching relation users:", err);
+      } finally {
+        setIsLoadingRelations(false);
+      }
+    };
+
+    fetchUsersDetails();
+  }, [relationsModal, friendsList, followersList, liveUserData?.following, user]);
 
   useEffect(() => {
     if (user && settingsView === "support") {
@@ -1094,7 +1156,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 {/* Copy ID Button */}
                 <button
                   onClick={() => handleCopyId(userCustomId)}
-                  className="w-7 h-7 flex items-center justify-center bg-white/5 hover:bg-white/10 text-purple-300 hover:text-white rounded-xl border border-white/5 cursor-pointer shadow-sm"
+                  className="w-7 h-7 flex items-center justify-center bg-white/5 text-purple-300 rounded-xl border border-white/5 cursor-pointer shadow-sm"
                   title={t("نسخ الآي دي", "Copy ID")}
                 >
                   <i className="fas fa-copy text-[11px]"></i>
@@ -1177,7 +1239,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             return (
               <button
                 key={type}
-                className="bg-white/5 border border-white/5 p-3 rounded-2xl flex flex-col items-center active:scale-95 transition-transform"
+                onClick={() => setRelationsModal(type as "friends" | "following" | "followers")}
+                className="bg-white/5 border border-white/5 p-3 rounded-2xl flex flex-col items-center"
               >
                 <span className="text-lg font-black text-purple-400">
                   {count}
@@ -2741,6 +2804,110 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 <span>{t("حفظ التغييرات", "Save Changes")}</span>
               )}
             </button>
+          </div>
+        </div>
+      )}
+
+      {relationsModal && (
+        <div 
+          className="fixed inset-0 z-[700] bg-[#0d051a]/98 backdrop-blur-2xl flex flex-col pt-12 pb-6 px-6 animate-in fade-in" 
+          dir={language === "ar" ? "rtl" : "ltr"}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={() => {
+                setRelationsModal(null);
+                setRelationsSearch("");
+              }}
+              className="w-10 h-10 rounded-full bg-white/5 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all"
+            >
+              <i className={`fas ${language === "ar" ? "fa-chevron-right" : "fa-chevron-left"} text-white`}></i>
+            </button>
+            <h3 className="text-lg font-black text-white">
+              {relationsModal === "friends"
+                ? t("الأصدقاء", "Friends")
+                : relationsModal === "following"
+                  ? t("المتابعة", "Following")
+                  : t("المتابعون", "Followers")}
+            </h3>
+            <div className="w-10"></div>
+          </div>
+
+          {/* Search bar inside relations modal */}
+          <div className="relative mb-4">
+            <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-purple-300/40 text-xs"></i>
+            <input
+              type="text"
+              value={relationsSearch}
+              onChange={(e) => setRelationsSearch(e.target.value)}
+              placeholder={t("ابحث عن الاسم أو الآي دي...", "Search by name or ID...")}
+              className={`w-full bg-white/5 border border-white/10 rounded-2xl py-3 ${language === "ar" ? "pr-4 pl-12 text-right" : "pl-4 pr-12 text-left"} text-xs font-bold text-white placeholder-white/30 outline-none focus:border-purple-500/40 transition-all`}
+            />
+            {relationsSearch && (
+              <button
+                onClick={() => setRelationsSearch("")}
+                className={`absolute ${language === "ar" ? "left-12" : "right-12"} top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors`}
+              >
+                <i className="fas fa-times text-xs"></i>
+              </button>
+            )}
+          </div>
+
+          {/* Users List Container */}
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {isLoadingRelations ? (
+              <div className="h-40 flex flex-col items-center justify-center gap-3">
+                <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-xs text-white/45 font-bold">
+                  {t("جاري التحميل...", "Loading...")}
+                </p>
+              </div>
+            ) : (() => {
+              const term = relationsSearch.toLowerCase().trim();
+              const filteredUsers = relationsUsers.filter((u: any) => {
+                if (!term) return true;
+                const name = (u.displayName || "").toLowerCase();
+                const customId = (u.customId || u.uid || "").toString().toLowerCase();
+                return name.includes(term) || customId.includes(term);
+              });
+
+              if (filteredUsers.length === 0) {
+                return (
+                  <div className="h-40 flex flex-col items-center justify-center opacity-40">
+                    <i className="fas fa-user-friends text-2xl text-purple-400 mb-2"></i>
+                    <p className="text-xs text-white font-bold text-center">
+                      {relationsSearch 
+                        ? t("لا توجد نتائج مطابقة", "No matching results found") 
+                        : t("القائمة فارغة", "No users in this list")}
+                    </p>
+                  </div>
+                );
+              }
+
+              return filteredUsers.map((item: any) => (
+                <div
+                  key={item.uid}
+                  className="bg-white/5 border border-white/5 rounded-2xl p-3 flex items-center justify-between hover:bg-white/10 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={item.photoURL || "https://space-yalla.web.app/default-avatar.png"}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://space-yalla.web.app/default-avatar.png";
+                      }}
+                      className="w-11 h-11 rounded-2xl object-cover border border-white/10"
+                      alt={item.displayName}
+                    />
+                    <div className="flex flex-col items-start gap-0.5">
+                      <span className="text-xs font-black text-white">{item.displayName}</span>
+                      <span className="text-[10px] text-purple-400 font-bold">
+                        ID: {item.customId || item.uid?.substring(0, 8)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       )}

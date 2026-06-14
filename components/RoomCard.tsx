@@ -14,9 +14,10 @@ interface RoomCardProps {
   room: Room;
   design: any;
   onClick: (room: Room) => void;
+  frameUrl?: string;
 }
 
-export const RoomCard: React.FC<RoomCardProps> = ({ room, design, onClick }) => {
+export const RoomCard: React.FC<RoomCardProps> = ({ room, design, onClick, frameUrl }) => {
   const [ownerData, setOwnerData] = useState<any>(room.owner);
 
   useEffect(() => {
@@ -52,10 +53,8 @@ export const RoomCard: React.FC<RoomCardProps> = ({ room, design, onClick }) => 
         userSelect: 'none',
         outline: 'none',
         WebkitTapHighlightColor: 'transparent',
-        WebkitMaskImage: '-webkit-radial-gradient(white, black)',
-        maskImage: 'radial-gradient(white, black)',
       }}
-      className="relative rounded-3xl overflow-hidden cursor-default bg-[#0d051a] aspect-[1/1.1] transform-gpu select-none"
+      className="relative rounded-3xl cursor-default bg-[#0d051a] aspect-[1/1.1] transform-gpu select-none"
     >
       {/* Container for image and overlays to prevent border-radius clipping/blur bugs */}
       <div 
@@ -126,6 +125,15 @@ export const RoomCard: React.FC<RoomCardProps> = ({ room, design, onClick }) => 
           </div>
         </div>
       </div>
+
+      {frameUrl && (
+        <img 
+          src={frameUrl} 
+          className="absolute -inset-[6px] w-[calc(100%+12px)] h-[calc(100%+12px)] max-w-none object-fill pointer-events-none select-none z-30" 
+          alt="Room Frame" 
+          draggable={false}
+        />
+      )}
     </div>
   );
 };

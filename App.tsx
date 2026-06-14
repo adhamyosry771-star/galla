@@ -66,10 +66,12 @@ const App: React.FC = () => {
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [banners, setBanners] = useState<any[]>([]);
+  const [banners2, setBanners2] = useState<any[]>([]);
   const [designSettings, setDesignSettings] = useState<any>(null);
   const [defaultImages, setDefaultImages] = useState<any>(null);
   const [carnivalSettings, setCarnivalSettings] = useState<any>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [currentBannerIndex2, setCurrentBannerIndex2] = useState(0);
 
   // تتبع العناصر التي تمت معالجة انتهاء صلاحيتها لمنع التكرار
   const processedExpirations = useRef<Set<string>>(new Set());
@@ -436,7 +438,13 @@ const App: React.FC = () => {
       setBanners([carnivalBannerItem, ...dbBanners]);
     });
 
-    const roomsQuery = query(collection(db, "rooms"), orderBy("createdAt", "desc"), limit(20));
+    const banners2Query = query(collection(db, "banners2"), orderBy("createdAt", "desc"), limit(5));
+    const unsubscribeBanners2 = onSnapshot(banners2Query, (snapshot) => {
+      const dbBanners2 = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBanners2(dbBanners2);
+    });
+
+    const roomsQuery = query(collection(db, "rooms"), orderBy("createdAt", "desc"), limit(150));
     const unsubscribeRooms = onSnapshot(roomsQuery, (snapshot) => {
       const fetchedRooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       setRooms(fetchedRooms.reverse());
@@ -444,6 +452,7 @@ const App: React.FC = () => {
 
     return () => {
       unsubscribeBanners();
+      unsubscribeBanners2();
       unsubscribeRooms();
     };
   }, [language, carnivalSettings]);
@@ -456,6 +465,15 @@ const App: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [banners]);
+
+  useEffect(() => {
+    if (banners2.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentBannerIndex2(prev => (prev + 1) % banners2.length);
+      }, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [banners2]);
 
   // Back key event interceptors for App-level state
   useEffect(() => {
@@ -690,7 +708,7 @@ const App: React.FC = () => {
           {activeTab === 'home' && (
             <main className="flex-1 overflow-y-auto px-4 py-2 space-y-6">
               {/* تم تقليل حواف البنر من rounded-[2.5rem] إلى rounded-2xl */}
-              <div className="w-full h-32 rounded-2xl overflow-hidden relative shadow-2xl border border-white/5 bg-white/5">
+              <div className="w-full h-32 rounded-2xl overflow-hidden relative shadow-2xl border border-white/5 bg-white/5 group">
                 {banners.length > 0 ? banners.map((banner, index) => (
                   <div 
                     key={banner.id} 
@@ -709,14 +727,181 @@ const App: React.FC = () => {
                     )}
                   </div>
                 )) : <div className="h-full flex items-center justify-center opacity-20"><i className="fas fa-images"></i></div>}
+
+                {banners.length > 1 && (
+                  <>
+                    {/* Left click area to navigate to NEXT banner image */}
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setCurrentBannerIndex(prev => (prev + 1) % banners.length);
+                      }}
+                      className="absolute top-0 bottom-0 left-0 w-[45%] z-20 cursor-pointer"
+                      title="التالي"
+                    />
+                    {/* Right click area to navigate to PREVIOUS banner image */}
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setCurrentBannerIndex(prev => (prev - 1 + banners.length) % banners.length);
+                      }}
+                      className="absolute top-0 bottom-0 right-0 w-[45%] z-20 cursor-pointer"
+                      title="السابق"
+                    />
+                  </>
+                )}
               </div>
               <section>
                 <h2 className="text-base font-black text-white mb-3">{t("غرف صوتية", "Voice Rooms")}</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {rooms.map(room => (
-                    <RoomCard key={room.id} room={room} design={designSettings} onClick={handleRoomClick} />
-                  ))}
-                </div>
+                
+                {(() => {
+                  let orderedRooms = [...rooms];
+                  
+                  // Find pinned rooms in the live rooms array
+                  const pinned1 = designSettings?.topRoom1Id ? orderedRooms.find(r => r.id === designSettings.topRoom1Id) : null;
+                  const pinned2 = designSettings?.topRoom2Id ? orderedRooms.find(r => r.id === designSettings.topRoom2Id) : null;
+                  const pinned3 = designSettings?.topRoom3Id ? orderedRooms.find(r => r.id === designSettings.topRoom3Id) : null;
+                  const pinned4 = designSettings?.topRoom4Id ? orderedRooms.find(r => r.id === designSettings.topRoom4Id) : null;
+
+                  // Exclude pinned rooms from their original index positions to avoid duplicates
+                  if (pinned1) orderedRooms = orderedRooms.filter(r => r.id !== pinned1.id);
+                  if (pinned2) orderedRooms = orderedRooms.filter(r => r.id !== pinned2.id);
+                  if (pinned3) orderedRooms = orderedRooms.filter(r => r.id !== pinned3.id);
+                  if (pinned4) orderedRooms = orderedRooms.filter(r => r.id !== pinned4.id);
+
+                  const finalRooms: any[] = [];
+
+                  // Position 0 (Top 1)
+                  if (pinned1) {
+                    finalRooms.push(pinned1);
+                  } else {
+                    const firstVal = orderedRooms.shift();
+                    if (firstVal) finalRooms.push(firstVal);
+                  }
+
+                  // Position 1 (Top 2)
+                  if (pinned2) {
+                    finalRooms.push(pinned2);
+                  } else {
+                    const firstVal = orderedRooms.shift();
+                    if (firstVal) finalRooms.push(firstVal);
+                  }
+
+                  // Position 2 (Top 3)
+                  if (pinned3) {
+                    finalRooms.push(pinned3);
+                  } else {
+                    const firstVal = orderedRooms.shift();
+                    if (firstVal) finalRooms.push(firstVal);
+                  }
+
+                  // Position 3 (Top 4)
+                  if (pinned4) {
+                    finalRooms.push(pinned4);
+                  } else {
+                    const firstVal = orderedRooms.shift();
+                    if (firstVal) finalRooms.push(firstVal);
+                  }
+
+                  // Append rest of rooms
+                  finalRooms.push(...orderedRooms);
+
+                  const top4Rooms = finalRooms.slice(0, 4);
+                  const remainingRooms = finalRooms.slice(4);
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Grid for top 4 rooms in the forefront */}
+                      {top4Rooms.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {top4Rooms.map((room, index) => {
+                            let frameUrl = undefined;
+                            if (index === 0) frameUrl = designSettings?.roomFrameTop1 || undefined;
+                            else if (index === 1) frameUrl = designSettings?.roomFrameTop2 || undefined;
+                            else if (index === 2) frameUrl = designSettings?.roomFrameTop3 || undefined;
+                            else if (index === 3) frameUrl = designSettings?.roomFrameTop4 || undefined;
+                            return (
+                              <RoomCard 
+                                key={room.id} 
+                                room={room} 
+                                design={designSettings} 
+                                frameUrl={frameUrl} 
+                                onClick={handleRoomClick} 
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Secondary Banner Slider (matching width & height aspect ratio perfectly) */}
+                      <div className="w-full aspect-[792/236] h-auto rounded-2xl overflow-hidden relative shadow-lg border border-white/5 bg-white/5 group">
+                        {banners2.length > 0 ? (
+                          <>
+                            {banners2.map((banner, index) => (
+                              <div 
+                                key={banner.id} 
+                                className={`absolute inset-0 transition-opacity duration-1000 ${index === currentBannerIndex2 ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                              >
+                                <img src={banner.imageUrl} className="w-full h-full object-cover" />
+                                {banner.title && (
+                                  <div className="absolute inset-0 bg-gradient-to-t from-[#1a0b2e]/90 via-transparent to-transparent px-4 py-2 flex flex-col justify-end">
+                                    <h4 className="font-black text-[10px] text-white text-shadow-sm">{banner.title}</h4>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                            
+                            {banners2.length > 1 && (
+                              <>
+                                {/* Left click area to navigate to NEXT banner image */}
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    setCurrentBannerIndex2(prev => (prev + 1) % banners2.length);
+                                  }}
+                                  className="absolute top-0 bottom-0 left-0 w-[45%] z-20 cursor-pointer"
+                                  title="التالي"
+                                />
+                                {/* Right click area to navigate to PREVIOUS banner image */}
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    setCurrentBannerIndex2(prev => (prev - 1 + banners2.length) % banners2.length);
+                                  }}
+                                  className="absolute top-0 bottom-0 right-0 w-[45%] z-20 cursor-pointer"
+                                  title="السابق"
+                                />
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          // If empty, keep it quiet and clean as requested: (فاضي ما تحطش فيه صور)
+                          <div className="h-full flex items-center justify-center opacity-10">
+                            <i className="fas fa-images text-sm" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Grid for other remaining rooms of the application */}
+                      {remainingRooms.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {remainingRooms.map((room) => (
+                            <RoomCard 
+                              key={room.id} 
+                              room={room} 
+                              design={designSettings} 
+                              onClick={handleRoomClick} 
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </section>
             </main>
           )}

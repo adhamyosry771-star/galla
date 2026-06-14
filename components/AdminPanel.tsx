@@ -21,6 +21,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [searchId, setSearchId] = useState('');
   const [allBanners, setAllBanners] = useState<any[]>([]);
+  const [allBanners2, setAllBanners2] = useState<any[]>([]);
   const [allRoomBgs, setAllRoomBgs] = useState<any[]>([]);
   const [allNews, setAllNews] = useState<any[]>([]);
   const [allRooms, setAllRooms] = useState<any[]>([]);
@@ -31,8 +32,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [defaultProfileImage, setDefaultProfileImage] = useState<string | null>(null);
   const [defaultCoverImage, setDefaultCoverImage] = useState<string | null>(null);
 
-  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign' | 'carnival'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign' | 'carnival' | 'roomFrames' | 'roomCenters'>('users');
   
+  // Room Position / Center Pinned rooms
+  const [topRoom1Id, setTopRoom1Id] = useState('');
+  const [topRoom2Id, setTopRoom2Id] = useState('');
+  const [topRoom3Id, setTopRoom3Id] = useState('');
+  const [topRoom4Id, setTopRoom4Id] = useState('');
+
+  // States for beautiful custom room selector modal
+  const [isRoomSelectorOpen, setIsRoomSelectorOpen] = useState(false);
+  const [activeSlotToSelect, setActiveSlotToSelect] = useState<1 | 2 | 3 | 4 | null>(null);
+  const [roomSelectorSearchQuery, setRoomSelectorSearchQuery] = useState('');
+
   // Carnival Opening Event states
   const [carnivalBannerUrlSetting, setCarnivalBannerUrlSetting] = useState('');
   const [carnivalBgUrl, setCarnivalBgUrl] = useState('');
@@ -96,6 +108,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerImage, setBannerImage] = useState<string | null>(null);
+  const [bannerTitle2, setBannerTitle2] = useState('');
+  const [bannerImage2, setBannerImage2] = useState<string | null>(null);
 
   const [roomBgImage, setRoomBgImage] = useState<string | null>(null);
   const [loginBgImage, setLoginBgImage] = useState<string | null>(null);
@@ -105,6 +119,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [micLockedIcon, setMicLockedIcon] = useState<string | null>(null);
   const [waveRoomIcon, setWaveRoomIcon] = useState<string | null>(null);
   const [giftButtonIcon, setGiftButtonIcon] = useState<string | null>(null);
+
+  // Room Frame settings
+  const [roomFrameTop1, setRoomFrameTop1] = useState('');
+  const [roomFrameTop2, setRoomFrameTop2] = useState('');
+  const [roomFrameTop3, setRoomFrameTop3] = useState('');
+  const [roomFrameTop4, setRoomFrameTop4] = useState('');
 
   const [emojiUrl, setEmojiUrl] = useState('');
 
@@ -159,6 +179,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
 
   const newsInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef2 = useRef<HTMLInputElement>(null);
   const roomBgInputRef = useRef<HTMLInputElement>(null);
   const loginBgInputRef = useRef<HTMLInputElement>(null);
   const loginLogoInputRef = useRef<HTMLInputElement>(null);
@@ -190,6 +211,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
 
     const unsubBanners = onSnapshot(query(collection(db, "banners"), orderBy("createdAt", "desc")), (snap) => {
       setAllBanners(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubBanners2 = onSnapshot(query(collection(db, "banners2"), orderBy("createdAt", "desc")), (snap) => {
+      setAllBanners2(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
     const unsubBgs = onSnapshot(query(collection(db, "roomBackgrounds"), orderBy("createdAt", "desc")), (snap) => {
@@ -243,6 +268,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
         setMicLockedIcon(data.micLockedIcon || null);
         setWaveRoomIcon(data.waveRoomIcon || null);
         setGiftButtonIcon(data.giftButtonIcon || null);
+        setRoomFrameTop1(data.roomFrameTop1 || '');
+        setRoomFrameTop2(data.roomFrameTop2 || '');
+        setRoomFrameTop3(data.roomFrameTop3 || '');
+        setRoomFrameTop4(data.roomFrameTop4 || '');
+        setTopRoom1Id(data.topRoom1Id || '');
+        setTopRoom2Id(data.topRoom2Id || '');
+        setTopRoom3Id(data.topRoom3Id || '');
+        setTopRoom4Id(data.topRoom4Id || '');
       }
     });
 
@@ -300,7 +333,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     });
 
     return () => {
-      unsubUsers(); unsubNews(); unsubBanners(); unsubBgs(); unsubRooms(); unsubDesign(); unsubOfficialMsgs(); unsubAppearance(); unsubStoreFrames(); unsubStoreEntries(); unsubStoreBgs(); unsubEmojis(); unsubGifts(); unsubSupport();
+      unsubUsers(); unsubNews(); unsubBanners(); unsubBanners2(); unsubBgs(); unsubRooms(); unsubDesign(); unsubOfficialMsgs(); unsubAppearance(); unsubStoreFrames(); unsubStoreEntries(); unsubStoreBgs(); unsubEmojis(); unsubGifts(); unsubSupport();
       unsubFruitsSettings(); unsubFruitsActiveBets(); unsubFruitsPlayers(); unsubReports(); unsubDefaultImages(); unsubAgencyDesign(); unsubCarnival();
       unsubCarnivalCodes();
     };
@@ -917,6 +950,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
+  const saveRoomFramesSettings = async () => {
+    try {
+      await setDoc(doc(db, "settings", "design"), {
+        roomFrameTop1,
+        roomFrameTop2,
+        roomFrameTop3,
+        roomFrameTop4
+      }, { merge: true });
+      alert(t("تم حفظ إعدادات إطارات الغرف بنجاح", "Room Frame settings saved successfully"));
+    } catch (e) {
+      alert(t("خطأ في حفظ إعدادات إطارات الغرف", "Error saving room frame settings"));
+    }
+  };
+
+  const saveRoomCentersSettings = async () => {
+    try {
+      await setDoc(doc(db, "settings", "design"), {
+        topRoom1Id,
+        topRoom2Id,
+        topRoom3Id,
+        topRoom4Id
+      }, { merge: true });
+      alert(t("تم حفظ مراكز وترتيب الغرف بنجاح", "Room rankings and positions saved successfully"));
+    } catch (e) {
+      alert(t("خطأ في حفظ مراكز الغرف", "Error saving room rankings"));
+    }
+  };
+
   const handleSaveLoginSettings = async () => {
     try {
       await setDoc(doc(db, "settings", "appearance"), {
@@ -1003,6 +1064,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     <div className="fixed inset-0 z-[600] bg-[#1a0b2e] flex flex-col animate-in slide-in-from-bottom" dir="rtl">
       <input type="file" ref={newsInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setNewsImage)} />
       <input type="file" ref={bannerInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setBannerImage)} />
+      <input type="file" ref={bannerInputRef2} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setBannerImage2)} />
       <input type="file" ref={roomBgInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setRoomBgImage)} />
       <input type="file" ref={loginBgInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setLoginBgImage)} />
       <input type="file" ref={loginLogoInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageSelect(e, setLoginLogoImage)} />
@@ -1042,6 +1104,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               {id: 'reports', label: t('استلام البلاغات', 'Received Reports')},
               {id: 'cp', label: t('CP', 'CP')},
               {id: 'design', label: t('التصميم', 'Design Settings')},
+              {id: 'roomFrames', label: t('اطارات الغرف', 'Room Frames')},
+              {id: 'roomCenters', label: t('مراكز الغرف', 'Room Centers')},
               {id: 'messages', label: t('الرسائل', 'Messages')}
             ].map((tab) => (
               <button key={tab.id} onClick={() => setAdminTab(tab.id as any)} className={`flex-shrink-0 px-4 py-2 text-[10px] font-black rounded-xl transition-all uppercase relative ${adminTab === tab.id ? 'bg-purple-600 text-white shadow-lg' : 'bg-white/5 text-purple-300/60'}`}>
@@ -2719,31 +2783,185 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
         )}
 
         {adminTab === 'banners' && (
-          <div className="space-y-6">
-             <div className="bg-white/5 p-4 rounded-2xl space-y-3">
-                <input value={bannerTitle} onChange={e => setBannerTitle(e.target.value)} placeholder="عنوان البنر" className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-xs text-white outline-none" />
-                <button onClick={() => bannerInputRef.current?.click()} className="w-full aspect-video bg-white/5 rounded-2xl flex items-center justify-center border-2 border-dashed border-white/10 overflow-hidden">{bannerImage ? <img src={bannerImage} className="w-full h-full object-cover" /> : <i className="fas fa-plus text-2xl opacity-20 text-white"></i>}</button>
-                <button onClick={async () => {
-                  if (!bannerImage) return alert("اختر صورة");
-                  await addDoc(collection(db, "banners"), { title: bannerTitle, imageUrl: bannerImage, createdAt: serverTimestamp() });
-                  setBannerTitle(''); setBannerImage(null); alert("تم الإضافة");
-                }} className="w-full bg-purple-600 py-3 rounded-xl text-xs font-black shadow-lg text-white">إضافة البنر</button>
-             </div>
-             <div className="space-y-4">
-              <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest px-1">البنرات الحالية ({allBanners.length})</p>
-              <div className="grid grid-cols-1 gap-4">{allBanners.map(banner => (
-                  <div key={banner.id} className="relative aspect-video rounded-2xl overflow-hidden bg-white/5 border border-white/5 group shadow-xl"><img src={banner.imageUrl} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-4 flex flex-col justify-end"><p className="text-xs font-black text-white">{banner.title}</p></div><button onClick={async () => { 
-                    if(confirm("حذف؟")) {
-                      try {
-                        await deleteDoc(doc(db, "banners", banner.id));
-                        alert("تم الحذف بنجاح.");
-                      } catch (e: any) {
-                        console.error("Error deleting banner:", e);
-                        alert("حدث خطأ أثناء حذف البنر: " + (e.message || e));
-                      }
-                    }
-                  }} className="absolute top-2 right-2 w-8 h-8 rounded-xl bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg active:scale-90"><i className="fas fa-trash-alt text-[10px]"></i></button></div>
-                ))}</div>
+          <div className="space-y-8 animate-fade-in pb-10">
+            {/* Row 1: البنرات العلوية */}
+            <div className="bg-[#180e2d]/60 backdrop-blur-md p-5 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex flex-col gap-1 border-b border-white/5 pb-3">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">البنرات العلوية (البنر 1)</p>
+                <p className="text-[9px] font-bold text-white/40">تظهر في أعلى الصفحة الرئيسية للتطبيق.</p>
+              </div>
+
+              <div className="space-y-3">
+                <input 
+                  value={bannerTitle || ""} 
+                  onChange={e => setBannerTitle(e.target.value)} 
+                  placeholder="عنوان البنر العلوي (اختياري)" 
+                  className="w-full bg-[#100623] border border-white/10 p-3.5 rounded-xl text-xs text-white outline-none focus:border-purple-500/50 transition-all font-bold" 
+                />
+                
+                <button 
+                  type="button"
+                  onClick={() => bannerInputRef.current?.click()} 
+                  className="w-full aspect-[21/9] bg-white/5 hover:bg-white/10 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-white/10 hover:border-purple-500/30 overflow-hidden group transition-all"
+                >
+                  {bannerImage ? (
+                    <img src={bannerImage} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <i className="fas fa-plus text-xl opacity-30 text-white group-hover:scale-110 transition-transform" />
+                      <span className="text-[9px] text-white/40 font-bold">رفع صورة البنر العلوي</span>
+                    </div>
+                  )}
+                </button>
+
+                <input 
+                  type="text"
+                  value={bannerImage || ''} 
+                  onChange={e => setBannerImage(e.target.value || null)} 
+                  placeholder="أو ضع رابط الصورة المباشر هنا..." 
+                  className="w-full bg-[#100623] border border-white/10 p-3 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left" 
+                  dir="ltr"
+                />
+
+                <button 
+                  onClick={async () => {
+                    if (!bannerImage) return alert("الرجاء اختيار صورة أو وضع رابط مباشر أولاً");
+                    await addDoc(collection(db, "banners"), { title: bannerTitle, imageUrl: bannerImage, createdAt: serverTimestamp() });
+                    setBannerTitle(''); 
+                    setBannerImage(null); 
+                    alert("تم إضافة البنر العلوي بنجاح!");
+                  }} 
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 py-3.5 rounded-xl text-xs font-black shadow-lg text-white hover:opacity-95 active:scale-[0.98] transition-all border border-white/10"
+                >
+                  إضافة البنر العلوي
+                </button>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest px-1">البنرات العلوية الحالية ({allBanners.length})</p>
+                {allBanners.length === 0 ? (
+                  <div className="py-6 text-center text-white/20 text-[10px] font-bold border border-dashed border-white/5 rounded-xl">لا توجد بنرات علوية حالياً</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {allBanners.map(banner => (
+                      <div key={banner.id} className="relative aspect-[21/9] rounded-xl overflow-hidden bg-white/5 border border-white/5 group shadow-lg">
+                        <img src={banner.imageUrl} className="w-full h-full object-cover" />
+                        {banner.title && (
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-3 flex flex-col justify-end">
+                            <p className="text-[9px] font-black text-white truncate">{banner.title}</p>
+                          </div>
+                        )}
+                        <button 
+                          onClick={async () => { 
+                            if (confirm("هل تريد حذف هذا البنر بالتأكيد؟")) {
+                              try {
+                                await deleteDoc(doc(db, "banners", banner.id));
+                                alert("تم الحذف بنجاح.");
+                              } catch (e: any) {
+                                console.error("Error deleting banner:", e);
+                                alert("حدث خطأ أثناء الحذف: " + (e.message || e));
+                              }
+                            }
+                          }} 
+                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-lg bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg active:scale-90"
+                        >
+                          <i className="fas fa-trash-alt text-[9px]" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: البنرات السفلية */}
+            <div className="bg-[#180e2d]/60 backdrop-blur-md p-5 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex flex-col gap-1 border-b border-white/5 pb-3">
+                <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest">البنرات السفلية (البنر 2)</p>
+                <p className="text-[9px] font-bold text-white/40">تظهر أسفل الغرف الأربعة المثبتة في الصفحة الرئيسية ويتم تقليل ارتفاعها.</p>
+              </div>
+
+              <div className="space-y-3">
+                <input 
+                  value={bannerTitle2 || ""} 
+                  onChange={e => setBannerTitle2(e.target.value)} 
+                  placeholder="عنوان البنر السفلي (اختياري)" 
+                  className="w-full bg-[#100623] border border-white/10 p-3.5 rounded-xl text-xs text-white outline-none focus:border-pink-500/50 transition-all font-bold" 
+                />
+                
+                <button 
+                  type="button"
+                  onClick={() => bannerInputRef2.current?.click()} 
+                  className="w-full aspect-[792/236] bg-white/5 hover:bg-white/10 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-white/10 hover:border-pink-500/30 overflow-hidden group transition-all"
+                >
+                  {bannerImage2 ? (
+                    <img src={bannerImage2} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <i className="fas fa-plus text-lg opacity-30 text-white group-hover:scale-110 transition-transform" />
+                      <span className="text-[9px] text-white/40 font-bold">رفع صورة البنر السفلي</span>
+                    </div>
+                  )}
+                </button>
+
+                <input 
+                  type="text"
+                  value={bannerImage2 || ''} 
+                  onChange={e => setBannerImage2(e.target.value || null)} 
+                  placeholder="أو ضع رابط الصورة المباشر هنا..." 
+                  className="w-full bg-[#100623] border border-white/10 p-3 rounded-xl text-[10px] text-white outline-none focus:border-pink-500/50 transition-all font-bold placeholder:text-white/20 text-left" 
+                  dir="ltr"
+                />
+
+                <button 
+                  onClick={async () => {
+                    if (!bannerImage2) return alert("الرجاء اختيار صورة أو وضع رابط مباشر أولاً");
+                    await addDoc(collection(db, "banners2"), { title: bannerTitle2, imageUrl: bannerImage2, createdAt: serverTimestamp() });
+                    setBannerTitle2(''); 
+                    setBannerImage2(null); 
+                    alert("تم إضافة البنر السفلي بنجاح!");
+                  }} 
+                  className="w-full bg-gradient-to-r from-pink-600 to-rose-600 py-3.5 rounded-xl text-xs font-black shadow-lg text-white hover:opacity-95 active:scale-[0.98] transition-all border border-white/10"
+                >
+                  إضافة البنر السفلي
+                </button>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest px-1">البنرات السفلية الحالية ({allBanners2.length})</p>
+                {allBanners2.length === 0 ? (
+                  <div className="py-6 text-center text-white/20 text-[10px] font-bold border border-dashed border-white/5 rounded-xl">لا توجد بنرات سفلية حالياً</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {allBanners2.map(banner => (
+                      <div key={banner.id} className="relative aspect-[792/236] rounded-xl overflow-hidden bg-white/5 border border-white/5 group shadow-lg">
+                        <img src={banner.imageUrl} className="w-full h-full object-cover" />
+                        {banner.title && (
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-2.5 flex flex-col justify-end">
+                            <p className="text-[8.5px] font-black text-white truncate">{banner.title}</p>
+                          </div>
+                        )}
+                        <button 
+                          onClick={async () => { 
+                            if (confirm("هل تريد حذف هذا البنر بالتأكيد؟")) {
+                              try {
+                                await deleteDoc(doc(db, "banners2", banner.id));
+                                alert("تم الحذف بنجاح.");
+                              } catch (e: any) {
+                                console.error("Error deleting banner2:", e);
+                                alert("حدث خطأ أثناء الحذف: " + (e.message || e));
+                              }
+                            }
+                          }} 
+                          className="absolute top-1 right-1 w-5 h-5 rounded-md bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg active:scale-90"
+                        >
+                          <i className="fas fa-trash-alt text-[8px]" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2964,6 +3182,279 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
             </div>
           </div>
         )}
+
+        {adminTab === 'roomFrames' && (
+          <div className="space-y-6">
+            <div className="bg-white/5 p-5 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex justify-between items-center">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">إطارات الغرف المميزة (Top Rooms)</p>
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-white/40 mr-2 uppercase tracking-tighter">إطار الغرفة الأولى (اليمين - Top 1)</label>
+                  <input 
+                    type="text" 
+                    value={roomFrameTop1} 
+                    onChange={e => setRoomFrameTop1(e.target.value)} 
+                    placeholder="https://... (رابط صورة الإطار)" 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-[10px] text-white outline-none font-mono"
+                  />
+                  {roomFrameTop1 && (
+                    <div className="mt-2 text-center text-[9px] text-white/40 flex items-center gap-2 justify-center">
+                      <span>معاينة:</span>
+                      <div className="relative w-28 h-16 bg-black/40 rounded border border-white/10 overflow-hidden flex items-center justify-center">
+                        <img src={roomFrameTop1} className="absolute inset-0 w-full h-full object-fill pointer-events-none z-10" alt="Preview Frame 1" />
+                        <span className="text-[8px] text-white/20">كارت الغرفة</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-white/40 mr-2 uppercase tracking-tighter">إطار الغرفة الثانية (اليسار - Top 2)</label>
+                  <input 
+                    type="text" 
+                    value={roomFrameTop2} 
+                    onChange={e => setRoomFrameTop2(e.target.value)} 
+                    placeholder="https://... (رابط صورة الإطار)" 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-[10px] text-white outline-none font-mono"
+                  />
+                  {roomFrameTop2 && (
+                    <div className="mt-2 text-center text-[9px] text-white/40 flex items-center gap-2 justify-center">
+                      <span>معاينة:</span>
+                      <div className="relative w-28 h-16 bg-black/40 rounded border border-white/10 overflow-hidden flex items-center justify-center">
+                        <img src={roomFrameTop2} className="absolute inset-0 w-full h-full object-fill pointer-events-none z-10" alt="Preview Frame 2" />
+                        <span className="text-[8px] text-white/20">كارت الغرفة</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-white/40 mr-2 uppercase tracking-tighter block">إطار الغرفة الثالثة (الريدر - الصف الثاني اليمين - Top 3)</label>
+                  <input 
+                    type="text" 
+                    value={roomFrameTop3} 
+                    onChange={e => setRoomFrameTop3(e.target.value)} 
+                    placeholder="https://... (رابط صورة الإطار)" 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-[10px] text-white outline-none font-mono"
+                  />
+                  {roomFrameTop3 && (
+                    <div className="mt-2 text-center text-[9px] text-white/40 flex items-center gap-2 justify-center">
+                      <span>معاينة:</span>
+                      <div className="relative w-28 h-16 bg-black/40 rounded border border-white/10 overflow-hidden flex items-center justify-center">
+                        <img src={roomFrameTop3} className="absolute inset-0 w-full h-full object-fill pointer-events-none z-10" alt="Preview Frame 3" />
+                        <span className="text-[8px] text-white/20">كارت الغرفة</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-white/40 mr-2 uppercase tracking-tighter block">إطار الغرفة الرابعة (اليسار - الصف الثاني - Top 4)</label>
+                  <input 
+                    type="text" 
+                    value={roomFrameTop4} 
+                    onChange={e => setRoomFrameTop4(e.target.value)} 
+                    placeholder="https://... (رابط صورة الإطار)" 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-[10px] text-white outline-none font-mono"
+                  />
+                  {roomFrameTop4 && (
+                    <div className="mt-2 text-center text-[9px] text-white/40 flex items-center gap-2 justify-center">
+                      <span>معاينة:</span>
+                      <div className="relative w-28 h-16 bg-black/40 rounded border border-white/10 overflow-hidden flex items-center justify-center">
+                        <img src={roomFrameTop4} className="absolute inset-0 w-full h-full object-fill pointer-events-none z-10" alt="Preview Frame 4" />
+                        <span className="text-[8px] text-white/20">كارت الغرفة</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button 
+                onClick={saveRoomFramesSettings} 
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-transform border border-white/10"
+              >
+                حفظ إطارات الغرف
+              </button>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'roomCenters' && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="bg-[#180e2d]/60 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex flex-col gap-1">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">تحديد مراكز وترتيب الغرف (Top Pinned Rooms)</p>
+                <p className="text-[9px] font-bold text-white/40">تتيح لك هذه الميزة تثبيت أي غرف تم إنشاؤها لتظهر في المراكز الأربعة الأولى بالصفحة الرئيسية بشكل دائم.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Slot 1 */}
+                {(() => {
+                  const room = allRooms.find(r => r.id === topRoom1Id);
+                  const title = room ? (room.title || "غرفة بدون عنوان") : "تلقائي (أحدث الغرف نشاطاً)";
+                  const bg = room ? (room.coverImage || room.roomBackground) : null;
+                  const displayId = room ? (room.roomIdDisplay || room.owner?.customId || room.id.substring(0, 8)) : null;
+                  return (
+                    <div className="bg-[#140b27] border border-white/5 hover:border-purple-500/20 rounded-2xl p-4 flex flex-col justify-between gap-4 transition-all shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-purple-500/20 flex items-center justify-center text-purple-400 font-black overflow-hidden flex-shrink-0 shadow-inner">
+                          {bg ? <img src={bg} className="w-full h-full object-cover" /> : <i className="fas fa-crown text-base" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] font-black text-purple-400 uppercase tracking-tight">المركز الأول (اليمين - Top 1)</p>
+                          <h4 className="text-[11px] font-black text-white mt-0.5 truncate">{title}</h4>
+                          {displayId && (
+                            <p className="text-[9px] font-bold text-white/40 mt-1 flex flex-col gap-0.5">
+                              <span>رقم الغرفة (ID): <span className="font-mono text-purple-400 select-all">{room?.roomIdDisplay || room?.owner?.customId || displayId}</span></span>
+                              <span>المالك: {room?.owner?.name || "مستخدم"} (ID: <span className="font-mono text-purple-300">{room?.owner?.customId || "N/A"}</span>)</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setActiveSlotToSelect(1);
+                          setRoomSelectorSearchQuery('');
+                          setIsRoomSelectorOpen(true);
+                        }}
+                        className="w-full bg-[#1e1035] hover:bg-purple-600/20 text-purple-300 border border-purple-500/10 hover:border-purple-500/30 py-2.5 px-3 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <i className="fas fa-exchange-alt text-[8.5px] text-purple-400" />
+                        اختيار غرفة للمركز الأول
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Slot 2 */}
+                {(() => {
+                  const room = allRooms.find(r => r.id === topRoom2Id);
+                  const title = room ? (room.title || "غرفة بدون عنوان") : "تلقائي (أحدث الغرف نشاطاً)";
+                  const bg = room ? (room.coverImage || room.roomBackground) : null;
+                  const displayId = room ? (room.roomIdDisplay || room.owner?.customId || room.id.substring(0, 8)) : null;
+                  return (
+                    <div className="bg-[#140b27] border border-white/5 hover:border-purple-500/20 rounded-2xl p-4 flex flex-col justify-between gap-4 transition-all shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-purple-500/20 flex items-center justify-center text-purple-400 font-black overflow-hidden flex-shrink-0 shadow-inner">
+                          {bg ? <img src={bg} className="w-full h-full object-cover" /> : <i className="fas fa-gem text-base" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] font-black text-purple-400 uppercase tracking-tight">المركز الثاني (اليسار - Top 2)</p>
+                          <h4 className="text-[11px] font-black text-white mt-0.5 truncate">{title}</h4>
+                          {displayId && (
+                            <p className="text-[9px] font-bold text-white/40 mt-1 flex flex-col gap-0.5">
+                              <span>رقم الغرفة (ID): <span className="font-mono text-purple-400 select-all">{room?.roomIdDisplay || room?.owner?.customId || displayId}</span></span>
+                              <span>المالك: {room?.owner?.name || "مستخدم"} (ID: <span className="font-mono text-purple-300">{room?.owner?.customId || "N/A"}</span>)</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setActiveSlotToSelect(2);
+                          setRoomSelectorSearchQuery('');
+                          setIsRoomSelectorOpen(true);
+                        }}
+                        className="w-full bg-[#1e1035] hover:bg-purple-600/20 text-purple-300 border border-purple-500/10 hover:border-purple-500/30 py-2.5 px-3 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <i className="fas fa-exchange-alt text-[8.5px] text-purple-400" />
+                        اختيار غرفة للمركز الثاني
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Slot 3 */}
+                {(() => {
+                  const room = allRooms.find(r => r.id === topRoom3Id);
+                  const title = room ? (room.title || "غرفة بدون عنوان") : "تلقائي (أحدث الغرف نشاطاً)";
+                  const bg = room ? (room.coverImage || room.roomBackground) : null;
+                  const displayId = room ? (room.roomIdDisplay || room.owner?.customId || room.id.substring(0, 8)) : null;
+                  return (
+                    <div className="bg-[#140b27] border border-white/5 hover:border-purple-500/20 rounded-2xl p-4 flex flex-col justify-between gap-4 transition-all shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-purple-500/20 flex items-center justify-center text-purple-400 font-black overflow-hidden flex-shrink-0 shadow-inner">
+                          {bg ? <img src={bg} className="w-full h-full object-cover" /> : <i className="fas fa-star text-base" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] font-black text-purple-400 uppercase tracking-tight">المركز الثالث (الريدر - الصف الثاني اليمين - Top 3)</p>
+                          <h4 className="text-[11px] font-black text-white mt-0.5 truncate">{title}</h4>
+                          {displayId && (
+                            <p className="text-[9px] font-bold text-white/40 mt-1 flex flex-col gap-0.5">
+                              <span>رقم الغرفة (ID): <span className="font-mono text-purple-400 select-all">{room?.roomIdDisplay || room?.owner?.customId || displayId}</span></span>
+                              <span>المالك: {room?.owner?.name || "مستخدم"} (ID: <span className="font-mono text-purple-300">{room?.owner?.customId || "N/A"}</span>)</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setActiveSlotToSelect(3);
+                          setRoomSelectorSearchQuery('');
+                          setIsRoomSelectorOpen(true);
+                        }}
+                        className="w-full bg-[#1e1035] hover:bg-purple-600/20 text-purple-300 border border-purple-500/10 hover:border-purple-500/30 py-2.5 px-3 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <i className="fas fa-exchange-alt text-[8.5px] text-purple-400" />
+                        اختيار غرفة للمركز الثالث
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Slot 4 */}
+                {(() => {
+                  const room = allRooms.find(r => r.id === topRoom4Id);
+                  const title = room ? (room.title || "غرفة بدون عنوان") : "تلقائي (أحدث الغرف نشاطاً)";
+                  const bg = room ? (room.coverImage || room.roomBackground) : null;
+                  const displayId = room ? (room.roomIdDisplay || room.owner?.customId || room.id.substring(0, 8)) : null;
+                  return (
+                    <div className="bg-[#140b27] border border-white/5 hover:border-purple-500/20 rounded-2xl p-4 flex flex-col justify-between gap-4 transition-all shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-purple-900/40 border border-purple-500/20 flex items-center justify-center text-purple-400 font-black overflow-hidden flex-shrink-0 shadow-inner">
+                          {bg ? <img src={bg} className="w-full h-full object-cover" /> : <i className="fas fa-award text-base" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] font-black text-purple-400 uppercase tracking-tight">المركز الرابع (اليسار - الصف الثاني - Top 4)</p>
+                          <h4 className="text-[11px] font-black text-white mt-0.5 truncate">{title}</h4>
+                          {displayId && (
+                            <p className="text-[9px] font-bold text-white/40 mt-1 flex flex-col gap-0.5">
+                              <span>رقم الغرفة (ID): <span className="font-mono text-purple-400 select-all">{room?.roomIdDisplay || room?.owner?.customId || displayId}</span></span>
+                              <span>المالك: {room?.owner?.name || "مستخدم"} (ID: <span className="font-mono text-purple-300">{room?.owner?.customId || "N/A"}</span>)</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setActiveSlotToSelect(4);
+                          setRoomSelectorSearchQuery('');
+                          setIsRoomSelectorOpen(true);
+                        }}
+                        className="w-full bg-[#1e1035] hover:bg-purple-600/20 text-purple-300 border border-purple-500/10 hover:border-purple-500/30 py-2.5 px-3 rounded-xl text-[9px] font-black transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <i className="fas fa-exchange-alt text-[8.5px] text-purple-400" />
+                        اختيار غرفة للمركز الرابع
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <button 
+                onClick={saveRoomCentersSettings} 
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-transform border border-white/10"
+              >
+                حفظ ترتيب مراكز الغرف
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showChargePopup && (
@@ -2981,6 +3472,169 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
             <div className="flex gap-2">
               <button onClick={handleDeductSubmit} className="flex-1 bg-orange-600 py-3.5 rounded-xl text-[11px] font-black text-white shadow-lg active:scale-95 transition-all">سحب الرصيد</button>
               <button onClick={() => { setShowDeductPopup(null); setDeductAmount(''); }} className="flex-1 bg-white/5 py-3.5 rounded-xl text-[11px] font-black text-white border border-white/10 active:scale-95 transition-all">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isRoomSelectorOpen && activeSlotToSelect !== null && (
+        <div 
+          className="fixed inset-0 z-[800] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => { setIsRoomSelectorOpen(false); setActiveSlotToSelect(null); }}
+        >
+          <div 
+            className="bg-[#170a2d] w-full max-w-md rounded-[2.5rem] border border-purple-500/20 p-6 shadow-2xl flex flex-col gap-4 max-h-[85vh] overflow-hidden"
+            onClick={e => e.stopPropagation()}
+            style={{ direction: 'rtl' }}
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-white/5 pb-4">
+              <div>
+                <h4 className="text-sm font-black text-white">تثبيت وتحديد غرف الصدارة</h4>
+                <p className="text-[10px] font-bold text-purple-400 mt-0.5">
+                  {activeSlotToSelect === 1 && "تحديد الغرفة المثبتة بالمركز الأول (Top 1)"}
+                  {activeSlotToSelect === 2 && "تحديد الغرفة المثبتة بالمركز الثاني (Top 2)"}
+                  {activeSlotToSelect === 3 && "تحديد الغرفة المثبتة بالمركز الثالث (Top 3)"}
+                  {activeSlotToSelect === 4 && "تحديد الغرفة المثبتة بالمركز الرابع (Top 4)"}
+                </p>
+              </div>
+              <button 
+                onClick={() => { setIsRoomSelectorOpen(false); setActiveSlotToSelect(null); }}
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/60 hover:text-white transition-all"
+              >
+                <i className="fas fa-times text-xs" />
+              </button>
+            </div>
+
+            {/* Realtime Search Bar */}
+            <div className="relative">
+              <i className="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-white/30 text-xs" />
+              <input 
+                type="text" 
+                value={roomSelectorSearchQuery} 
+                onChange={e => setRoomSelectorSearchQuery(e.target.value)} 
+                placeholder="ابحث باسم الغرفة أو الـ ID..." 
+                className="w-full bg-[#100623] border border-white/10 rounded-2xl py-3.5 pr-10 pl-4 text-xs text-white outline-none focus:border-purple-500/50 transition-all font-bold"
+              />
+              {roomSelectorSearchQuery && (
+                <button 
+                  onClick={() => setRoomSelectorSearchQuery('')} 
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs"
+                >
+                  مسح
+                </button>
+              )}
+            </div>
+
+            {/* Scrollable Room List */}
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+              {/* Option 1: Automatic / Reset to Default style */}
+              <div 
+                onClick={() => {
+                  if (activeSlotToSelect === 1) setTopRoom1Id('');
+                  else if (activeSlotToSelect === 2) setTopRoom2Id('');
+                  else if (activeSlotToSelect === 3) setTopRoom3Id('');
+                  else if (activeSlotToSelect === 4) setTopRoom4Id('');
+                  setIsRoomSelectorOpen(false);
+                  setActiveSlotToSelect(null);
+                }}
+                className="bg-purple-600/10 hover:bg-purple-600/20 border border-purple-500/20 rounded-2xl p-4 flex items-center justify-between cursor-pointer transition-all hover:scale-[0.99] active:scale-[0.97]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-600/20 flex items-center justify-center text-purple-400">
+                    <i className="fas fa-sync-alt text-sm" />
+                  </div>
+                  <div>
+                    <h5 className="text-[11px] font-black text-purple-300">تلقائي (أحدث الغرف نشاطاً)</h5>
+                    <p className="text-[9px] text-white/40 font-bold mt-0.5">تظهر الغرف النشطة تلقائياً بالترتيب الزمني الافتراضي</p>
+                  </div>
+                </div>
+                <div className="text-[10px] font-black text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 h-9 px-5 rounded-xl flex items-center justify-center transition-all whitespace-nowrap flex-shrink-0 shadow-sm active:scale-95">
+                  إلغاء التثبيت
+                </div>
+              </div>
+
+              {/* Filtered Rooms */}
+              {(() => {
+                const queryFiltered = allRooms.filter(room => {
+                  const query = roomSelectorSearchQuery.trim().toLowerCase();
+                  if (!query) return true;
+                  const roomTitle = (room.title || '').toLowerCase();
+                  const roomId = (room.id || '').toLowerCase();
+                  const roomIdDisplay = (room.roomIdDisplay || '').toLowerCase();
+                  const ownerName = (room.owner?.name || '').toLowerCase();
+                  const ownerCustomId = (room.owner?.customId || '').toLowerCase();
+                  
+                  return roomTitle.includes(query) || 
+                         roomId.includes(query) || 
+                         roomIdDisplay.includes(query) || 
+                         ownerName.includes(query) || 
+                         ownerCustomId.includes(query);
+                });
+
+                if (queryFiltered.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-white/20 text-xs font-bold">
+                      لا توجد غرف تطابق هذا البحث
+                    </div>
+                  );
+                }
+
+                return queryFiltered.map((room) => {
+                  const isCurrent = 
+                    (activeSlotToSelect === 1 && topRoom1Id === room.id) ||
+                    (activeSlotToSelect === 2 && topRoom2Id === room.id) ||
+                    (activeSlotToSelect === 3 && topRoom3Id === room.id) ||
+                    (activeSlotToSelect === 4 && topRoom4Id === room.id);
+
+                  return (
+                    <div 
+                      key={room.id}
+                      onClick={() => {
+                        if (activeSlotToSelect === 1) setTopRoom1Id(room.id);
+                        else if (activeSlotToSelect === 2) setTopRoom2Id(room.id);
+                        else if (activeSlotToSelect === 3) setTopRoom3Id(room.id);
+                        else if (activeSlotToSelect === 4) setTopRoom4Id(room.id);
+                        setIsRoomSelectorOpen(false);
+                        setActiveSlotToSelect(null);
+                      }}
+                      className={`border rounded-2xl p-4 flex items-center justify-between cursor-pointer transition-all hover:scale-[0.99] active:scale-[0.97] ${
+                        isCurrent 
+                          ? 'bg-purple-600/20 border-purple-500/80' 
+                          : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {room.coverImage || room.roomBackground ? (
+                            <img src={room.coverImage || room.roomBackground} className="w-full h-full object-cover" />
+                          ) : (
+                            <i className="fas fa-couch text-purple-400" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h5 className="text-[11px] font-black text-white truncate">{room.title || "غرفة بدون عنوان"}</h5>
+                          <p className="text-[9px] font-bold text-white/40 mt-1 flex flex-col gap-0.5">
+                            <span>رقم الغرفة (ID): <span className="font-mono text-purple-400 font-black">{room.roomIdDisplay || room.owner?.customId || room.id.substring(0, 8)}</span></span>
+                            <span>المالك: {room.owner?.name || "مستخدم"} (ID: <span className="font-mono text-purple-300 font-black">{room.owner?.customId || "N/A"}</span>)</span>
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {isCurrent ? (
+                        <div className="text-[9px] font-black text-purple-400 flex items-center gap-1 bg-purple-500/20 px-2.5 py-1 rounded-lg flex-shrink-0">
+                          <i className="fas fa-check text-[8px]" />
+                          محدد حالياً
+                        </div>
+                      ) : (
+                        <div className="text-[9px] font-black text-white/30 bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 flex-shrink-0 hover:text-white transition-colors">
+                          تحديد الغرفة
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>

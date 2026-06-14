@@ -1376,68 +1376,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     return unsubLogs;
   }, [showBarWealthModal, currentRoom.id]);
 
-  // Real-time custom background validation and auto-revert to public/default background
-  useEffect(() => {
-    if (!currentRoom.id || !currentRoom.roomBackground) return;
-    
-    const bgUrl = currentRoom.roomBackground;
-    
-    const checkBgValidity = async () => {
-      try {
-        // 1. Get public/default backgrounds
-        const publicSnapshot = await getDocs(collection(db, "roomBackgrounds"));
-        const publicBgs = publicSnapshot.docs.map(doc => doc.data().imageUrl);
-        
-        // If it is a public background or matches the room cover image, it is automatically valid.
-        if (publicBgs.includes(bgUrl) || bgUrl === currentRoom.coverImage) {
-          return;
-        }
-        
-        // 2. It's a custom background. Verify if the owner still has it in their active inventory
-        const ownerUid = currentRoom.owner?.uid || currentRoom.owner?.id;
-        if (!ownerUid) return;
-        
-        const now = new Date();
-        const inventorySnapshot = await getDocs(query(
-          collection(db, "users", ownerUid, "inventory"),
-          where("type", "==", "background")
-        ));
-        
-        let hasValidItem = false;
-        for (const itemDoc of inventorySnapshot.docs) {
-          const item = itemDoc.data();
-          if (item.imageUrl === bgUrl || item.videoUrl === bgUrl) {
-            if (item.expiresAt) {
-              if (item.expiresAt.toDate() > now) {
-                hasValidItem = true;
-                break;
-              }
-            } else {
-              hasValidItem = true;
-              break;
-            }
-          }
-        }
-        
-        // If no matching valid item found, revert style to first public background or coverImage if empty
-        if (!hasValidItem) {
-          console.log("[Background Validation] Custom background expired/deleted. Reverting to default...");
-          const defaultBgUrl = publicBgs.length > 0 ? publicBgs[0] : currentRoom.coverImage;
-          await updateDoc(doc(db, "rooms", currentRoom.id), {
-            roomBackground: defaultBgUrl
-          });
-        }
-      } catch (err) {
-        console.error("Error validating background active state:", err);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      checkBgValidity();
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [currentRoom.id, currentRoom.roomBackground, currentRoom.coverImage, currentRoom.owner?.uid, currentRoom.owner?.id]);
+  // Real-time custom background validation has been disabled because it caused
+  // issues for visitors (due to Firestore inventory read restrictions or query delay)
+  // which wrongly reverted set backgrounds to the room cover/default images.
+  // The background set by the owner now remains persistent and secure.
 
   const hasSentJoinMessage = useRef(false);
 
@@ -3408,7 +3350,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     {/* Copy ID Button */}
                     <button
                       onClick={() => handleCopyId(profileCustomId)}
-                      className="w-7 h-7 flex items-center justify-center bg-white/5 hover:bg-white/10 text-purple-300 hover:text-white rounded-xl border border-white/5 cursor-pointer shadow-sm"
+                      className="w-7 h-7 flex items-center justify-center bg-white/5 text-purple-300 rounded-xl border border-white/5 cursor-pointer shadow-sm"
                       title={t("نسخ الآي دي", "Copy ID")}
                     >
                       <i className="fas fa-copy text-[11px]"></i>
