@@ -14,6 +14,7 @@ import { NotificationsPage } from './components/NotificationsPage';
 import { BanModal } from './components/BanModal';
 import { RoomBanModal } from './components/RoomBanModal';
 import { CarnivalEventPage } from './components/CarnivalEventPage';
+import { WealthLeaderboardPage } from './components/WealthLeaderboardPage';
 // @ts-ignore
 import carnivalBannerUrl from './src/assets/images/carnival_banner_1780918603249.png';
 import { auth, db } from './firebase';
@@ -50,6 +51,8 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'home' | 'news' | 'messages' | 'me'>('home');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showCarnivalPage, setShowCarnivalPage] = useState(false);
+  const [showWealthLeaderboard, setShowWealthLeaderboard] = useState(false);
+  const [leaderboardMode, setLeaderboardMode] = useState<'wealth' | 'charisma'>('wealth');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [showHasRoomError, setShowHasRoomError] = useState(false);
   const [shouldOpenWalletOnProfile, setShouldOpenWalletOnProfile] = useState(false);
@@ -68,6 +71,7 @@ const App: React.FC = () => {
   const [banners, setBanners] = useState<any[]>([]);
   const [banners2, setBanners2] = useState<any[]>([]);
   const [designSettings, setDesignSettings] = useState<any>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [defaultImages, setDefaultImages] = useState<any>(null);
   const [carnivalSettings, setCarnivalSettings] = useState<any>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -91,6 +95,14 @@ const App: React.FC = () => {
     });
     const unsubCarnival = onSnapshot(doc(db, "settings", "carnival"), (snap) => {
       if (snap.exists()) setCarnivalSettings(snap.data());
+    });
+
+    const unsubAllUsers = onSnapshot(query(collection(db, "users"), limit(55)), (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+      setAllUsers(list);
     });
 
     // منع النسخ والقص وتحديد النصوص بشكل كامل لجميع عناصر التطبيق
@@ -132,6 +144,7 @@ const App: React.FC = () => {
       unsubDesign();
       unsubDefaultImages();
       unsubCarnival();
+      unsubAllUsers();
       document.removeEventListener('copy', handlePreventCopy);
       document.removeEventListener('cut', handlePreventCopy);
       document.removeEventListener('selectstart', handlePreventSelect);
@@ -486,6 +499,15 @@ const App: React.FC = () => {
   }, [showCarnivalPage]);
 
   useEffect(() => {
+    if (showWealthLeaderboard) {
+      return registerBackAction(() => {
+        setShowWealthLeaderboard(false);
+        return true;
+      });
+    }
+  }, [showWealthLeaderboard]);
+
+  useEffect(() => {
     if (showNotifications) {
       return registerBackAction(() => {
         setShowNotifications(false);
@@ -589,7 +611,8 @@ const App: React.FC = () => {
     }
 
     // If room is locked and user is not owner
-    if (room.isLocked && room.owner?.uid !== user?.uid) {
+    const isAdmin = user?.email === 'admin@yalla.com' || userData?.email === 'admin@yalla.com';
+    if (room.isLocked && room.owner?.uid !== user?.uid && !isAdmin) {
       setPasswordRoom(room);
       setShowPasswordPrompt(true);
       setJoiningPassword('');
@@ -654,8 +677,8 @@ const App: React.FC = () => {
   const finalUserPhoto = userData?.photoURL || defaultImages?.profileImage || user?.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>";
 
   return (
-    <div className={`min-h-screen max-w-md mx-auto bg-[#1a0b2e] shadow-2xl relative overflow-hidden flex flex-col border-x border-white/5 ${(!showNotifications && !showCarnivalPage) ? 'pb-16' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
-      {activeTab === 'home' && !showNotifications && !showCarnivalPage && (
+    <div className={`min-h-screen max-w-md mx-auto bg-[#1a0b2e] shadow-2xl relative overflow-hidden flex flex-col border-x border-white/5 ${(!showNotifications && !showCarnivalPage && !showWealthLeaderboard) ? 'pb-16' : ''}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      {activeTab === 'home' && !showNotifications && !showCarnivalPage && !showWealthLeaderboard && (
         <header className="px-5 py-3 flex justify-between items-center sticky top-0 z-10 bg-[#1a0b2e]/90 backdrop-blur-md">
           <h1 className="text-lg font-black tracking-tighter bg-gradient-to-r from-purple-400 via-pink-500 via-fuchsia-500 to-purple-400 bg-clip-text text-transparent animate-gradient-x">Yalla Party</h1>
           <div className="flex gap-2">
@@ -701,8 +724,10 @@ const App: React.FC = () => {
 
       {showNotifications ? (
         <NotificationsPage onBack={() => setShowNotifications(false)} />
+      ) : showWealthLeaderboard ? (
+        <WealthLeaderboardPage onBack={() => setShowWealthLeaderboard(false)} designSettings={designSettings} defaultImages={defaultImages} mode={leaderboardMode} />
       ) : showCarnivalPage ? (
-        <CarnivalEventPage onBack={() => setShowCarnivalPage(false)} userData={userData} carnivalSettings={carnivalSettings} />
+        <CarnivalEventPage onBack={() => setShowCarnivalPage(false)} userData={userData} carnivalSettings={carnivalSettings} designSettings={designSettings} />
       ) : (
         <>
           {activeTab === 'home' && (
@@ -753,8 +778,50 @@ const App: React.FC = () => {
                   </>
                 )}
               </div>
-              <section>
-                <h2 className="text-base font-black text-white mb-3">{t("غرف صوتية", "Voice Rooms")}</h2>
+
+              {/* Menu Buttons & Voice Rooms wrapper with tight top spacing */}
+              <div className="space-y-2.5 w-full">
+                {/* Menu Buttons Grid with native size/borderless design */}
+                {(designSettings?.menuBox1Url || designSettings?.menuBox2Url) && (
+                  <div className="grid grid-cols-2 gap-3 w-full">
+                    {designSettings?.menuBox1Url && (
+                      <div 
+                        onClick={() => {
+                          setLeaderboardMode('wealth');
+                          setShowWealthLeaderboard(true);
+                        }} 
+                        className="w-full relative hover:opacity-[0.88] active:scale-[0.98] transition-all bg-transparent p-0 cursor-pointer select-none"
+                      >
+                        <img 
+                          src={designSettings.menuBox1Url} 
+                          className="w-full h-auto block" 
+                          alt="Menu Button 1" 
+                        />
+                        <PodiumOverlay mode="wealth" designSettings={designSettings} allUsers={allUsers} />
+                      </div>
+                    )}
+
+                    {designSettings?.menuBox2Url && (
+                      <div 
+                        onClick={() => {
+                          setLeaderboardMode('charisma');
+                          setShowWealthLeaderboard(true);
+                        }} 
+                        className="w-full relative hover:opacity-[0.88] active:scale-[0.98] transition-all bg-transparent p-0 cursor-pointer select-none"
+                      >
+                        <img 
+                          src={designSettings.menuBox2Url} 
+                          className="w-full h-auto block" 
+                          alt="Menu Button 2" 
+                        />
+                        <PodiumOverlay mode="charisma" designSettings={designSettings} allUsers={allUsers} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <section>
+                  <h2 className="text-base font-black text-white mb-3">{t("غرف صوتية", "Voice Rooms")}</h2>
                 
                 {(() => {
                   let orderedRooms = [...rooms];
@@ -903,7 +970,8 @@ const App: React.FC = () => {
                   );
                 })()}
               </section>
-            </main>
+            </div>
+          </main>
           )}
 
           {activeTab === 'news' && <NewsPage />}
@@ -912,7 +980,7 @@ const App: React.FC = () => {
         </>
       )}
 
-      {!showNotifications && !showCarnivalPage && (
+      {!showNotifications && !showCarnivalPage && !showWealthLeaderboard && (
         <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto h-16 bg-[#0d051a]/98 backdrop-blur-xl border-t border-white/5 flex justify-around items-center px-2 z-50 rounded-t-3xl">
           <button onClick={() => { setActiveTab('home'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'home' && !showNotifications ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-home text-sm"></i><span className="text-[8px] font-black uppercase">{t("الرئيسية", "Home")}</span></button>
           <button onClick={() => { setActiveTab('news'); setShowNotifications(false); }} className={`flex flex-col items-center gap-0.5 ${activeTab === 'news' ? 'text-purple-400' : 'text-purple-300/30'}`}><i className="fas fa-newspaper text-sm"></i><span className="text-[8px] font-black uppercase">{t("أخبار", "News")}</span></button>
@@ -1116,6 +1184,160 @@ const App: React.FC = () => {
           animation: gradientX 4s linear infinite;
         }
       `}</style>
+    </div>
+  );
+};
+
+// Component for rendering Top 1, Top 2, and Top 3 user avatars and customizable podium frames on the main buttons
+const PodiumOverlay: React.FC<{ mode: 'wealth' | 'charisma', designSettings: any, allUsers: any[] }> = ({ mode, designSettings, allUsers }) => {
+  const { t } = useLanguage();
+  
+  const getTop3Users = (mode: 'wealth' | 'charisma') => {
+    const list = [...allUsers]
+      .map(u => ({ ...u, score: mode === 'charisma' ? (u.charismaXP || 0) : (u.wealthXP || 0) }))
+      .sort((a, b) => b.score - a.score);
+
+    // Mock fallbacks
+    const fallbackTop1 = {
+      id: "mock-1",
+      displayName: t("أدهم يسري", "Adham Yosry"),
+      photoURL: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150"
+    };
+    const fallbackTop2 = {
+      id: "mock-2",
+      displayName: t("رائد فضاء", "Space Traveler"),
+      photoURL: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150"
+    };
+    const fallbackTop3 = {
+      id: "mock-3",
+      displayName: t("مستكشف", "Explorer"),
+      photoURL: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
+    };
+
+    return [
+      list[0] || fallbackTop1,
+      list[1] || fallbackTop2,
+      list[2] || fallbackTop3
+    ];
+  };
+
+  const getUserAvatar = (userObj: any) => {
+    if (!userObj) return "https://space-yalla.web.app/default-avatar.png";
+    if (userObj.animatedAvatar && String(userObj.animatedAvatar).trim() !== "") {
+      return userObj.animatedAvatar;
+    }
+    if (userObj.photoURL && String(userObj.photoURL).trim() !== "") {
+      return userObj.photoURL;
+    }
+    if (userObj.profileImage && String(userObj.profileImage).trim() !== "") {
+      return userObj.profileImage;
+    }
+    if (userObj.userImage && String(userObj.userImage).trim() !== "") {
+      return userObj.userImage;
+    }
+    if (userObj.avatar && String(userObj.avatar).trim() !== "") {
+      return userObj.avatar;
+    }
+    return "https://space-yalla.web.app/default-avatar.png";
+  };
+
+  const renderAvatar = (userObj: any, sizeClass: string) => {
+    const url = getUserAvatar(userObj);
+    const isVid = url.match(/\.(mp4|webm|ogg|mov)$/) !== null || url.includes('video');
+    
+    if (isVid) {
+      return (
+        <video 
+          src={url}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className={`${sizeClass} rounded-full object-cover relative z-0`}
+        />
+      );
+    }
+    
+    return (
+      <img 
+        referrerPolicy="no-referrer"
+        src={url} 
+        className={`${sizeClass} rounded-full object-cover relative z-0`} 
+        alt="Avatar"
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = "https://space-yalla.web.app/default-avatar.png";
+        }}
+      />
+    );
+  };
+
+  const top3 = getTop3Users(mode);
+  const top1User = top3[0];
+  const top2User = top3[1];
+  const top3User = top3[2];
+
+  // Load configured custom podium frames
+  const f1 = designSettings?.top1PodiumFrame || "";
+  const f2 = designSettings?.top2PodiumFrame || "";
+  const f3 = designSettings?.top3PodiumFrame || "";
+
+  return (
+    <div className="absolute inset-y-0 right-[5px] z-10 pointer-events-none flex items-center justify-center">
+      {/* Trio Arrangement: Rank 2, Rank 1, Rank 3 */}
+      <div className="flex items-end justify-center h-full pb-[10%] gap-1">
+        
+        {/* Rank 2 - Left */}
+        <div className="flex flex-col items-center relative">
+          <div className="relative w-[27px] h-[27px] flex items-center justify-center">
+            {renderAvatar(top2User, "w-[21px] h-[21px]")}
+            {f2 ? (
+              <img 
+                referrerPolicy="no-referrer"
+                src={f2} 
+                className="absolute inset-0 w-full h-full object-contain z-10 scale-[1.14] pointer-events-none" 
+                alt="Rank 2 Frame"
+              />
+            ) : (
+              <div className="absolute inset-0 rounded-full border border-slate-300 z-10 pointer-events-none" />
+            )}
+          </div>
+        </div>
+
+        {/* Rank 1 - Center (Elevated) */}
+        <div className="flex flex-col items-center relative pb-1">
+          <div className="relative w-[34px] h-[34px] flex items-center justify-center">
+            {renderAvatar(top1User, "w-[26px] h-[26px]")}
+            {f1 ? (
+              <img 
+                referrerPolicy="no-referrer"
+                src={f1} 
+                className="absolute inset-0 w-full h-full object-contain z-10 scale-[1.14] pointer-events-none" 
+                alt="Rank 1 Frame"
+              />
+            ) : (
+              <div className="absolute inset-0 rounded-full border border-yellow-400 z-10 pointer-events-none" />
+            )}
+          </div>
+        </div>
+
+        {/* Rank 3 - Right */}
+        <div className="flex flex-col items-center relative">
+          <div className="relative w-[27px] h-[27px] flex items-center justify-center">
+            {renderAvatar(top3User, "w-[21px] h-[21px]")}
+            {f3 ? (
+              <img 
+                referrerPolicy="no-referrer"
+                src={f3} 
+                className="absolute inset-0 w-full h-full object-contain z-10 scale-[1.14] pointer-events-none" 
+                alt="Rank 3 Frame"
+              />
+            ) : (
+              <div className="absolute inset-0 rounded-full border border-amber-600 z-10 pointer-events-none" />
+            )}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 };

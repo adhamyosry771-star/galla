@@ -7,9 +7,10 @@ interface CarnivalEventPageProps {
   onBack: () => void;
   userData: any;
   carnivalSettings?: any;
+  designSettings?: any;
 }
 
-export const CarnivalEventPage: React.FC<CarnivalEventPageProps> = ({ onBack, userData, carnivalSettings }) => {
+export const CarnivalEventPage: React.FC<CarnivalEventPageProps> = ({ onBack, userData, carnivalSettings, designSettings }) => {
   const { language, t } = useLanguage();
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimSuccess, setClaimSuccess] = useState(false);
@@ -340,8 +341,8 @@ export const CarnivalEventPage: React.FC<CarnivalEventPageProps> = ({ onBack, us
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <div 
           className="w-full h-full bg-cover bg-center bg-no-repeat" 
-          style={carnivalSettings?.backgroundUrl ? { 
-            backgroundImage: `url(${carnivalSettings.backgroundUrl})`,
+          style={(designSettings?.wealthEventBg || carnivalSettings?.backgroundUrl) ? { 
+            backgroundImage: `url(${designSettings?.wealthEventBg || carnivalSettings.backgroundUrl})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',

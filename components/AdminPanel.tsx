@@ -32,7 +32,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [defaultProfileImage, setDefaultProfileImage] = useState<string | null>(null);
   const [defaultCoverImage, setDefaultCoverImage] = useState<string | null>(null);
 
-  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign' | 'carnival' | 'roomFrames' | 'roomCenters'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign' | 'carnival' | 'roomFrames' | 'roomCenters' | 'wealthDesign' | 'charismaDesign' | 'topFramesDesign' | 'menuButtonsDesign'>('users');
+  
+  // Top Frames / Podium Frames (اطارات التوبات)
+  const [top1PodiumFrame, setTop1PodiumFrame] = useState('');
+  const [top2PodiumFrame, setTop2PodiumFrame] = useState('');
+  const [top3PodiumFrame, setTop3PodiumFrame] = useState('');
   
   // Room Position / Center Pinned rooms
   const [topRoom1Id, setTopRoom1Id] = useState('');
@@ -125,6 +130,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [roomFrameTop2, setRoomFrameTop2] = useState('');
   const [roomFrameTop3, setRoomFrameTop3] = useState('');
   const [roomFrameTop4, setRoomFrameTop4] = useState('');
+
+  // Wealth Design settings
+  const [wealthWingTop1, setWealthWingTop1] = useState('');
+  const [wealthWingTop2, setWealthWingTop2] = useState('');
+  const [wealthWingTop3, setWealthWingTop3] = useState('');
+  const [wealthFrameTop1, setWealthFrameTop1] = useState('');
+  const [wealthFrameTop2, setWealthFrameTop2] = useState('');
+  const [wealthFrameTop3, setWealthFrameTop3] = useState('');
+  const [wealthListBgOthers, setWealthListBgOthers] = useState('');
+  const [wealthEventBg, setWealthEventBg] = useState('');
+  const [wealthActiveTabBg, setWealthActiveTabBg] = useState('');
+
+  // Charisma Design settings
+  const [charismaWingTop1, setCharismaWingTop1] = useState('');
+  const [charismaWingTop2, setCharismaWingTop2] = useState('');
+  const [charismaWingTop3, setCharismaWingTop3] = useState('');
+  const [charismaFrameTop1, setCharismaFrameTop1] = useState('');
+  const [charismaFrameTop2, setCharismaFrameTop2] = useState('');
+  const [charismaFrameTop3, setCharismaFrameTop3] = useState('');
+  const [charismaListBgOthers, setCharismaListBgOthers] = useState('');
+  const [charismaEventBg, setCharismaEventBg] = useState('');
+  const [charismaActiveTabBg, setCharismaActiveTabBg] = useState('');
+
+  // Menu Buttons settings
+  const [menuBox1Url, setMenuBox1Url] = useState('');
+  const [menuBox2Url, setMenuBox2Url] = useState('');
 
   const [emojiUrl, setEmojiUrl] = useState('');
 
@@ -276,6 +307,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
         setTopRoom2Id(data.topRoom2Id || '');
         setTopRoom3Id(data.topRoom3Id || '');
         setTopRoom4Id(data.topRoom4Id || '');
+        // Wealth Design
+        setWealthWingTop1(data.wealthWingTop1 || '');
+        setWealthWingTop2(data.wealthWingTop2 || '');
+        setWealthWingTop3(data.wealthWingTop3 || '');
+        setWealthFrameTop1(data.wealthFrameTop1 || '');
+        setWealthFrameTop2(data.wealthFrameTop2 || '');
+        setWealthFrameTop3(data.wealthFrameTop3 || '');
+        setWealthListBgOthers(data.wealthListBgOthers || '');
+        setWealthEventBg(data.wealthEventBg || '');
+        setWealthActiveTabBg(data.wealthActiveTabBg || '');
+        // Charisma Design
+        setCharismaWingTop1(data.charismaWingTop1 !== undefined ? data.charismaWingTop1 : (data.wealthWingTop1 || ''));
+        setCharismaWingTop2(data.charismaWingTop2 !== undefined ? data.charismaWingTop2 : (data.wealthWingTop2 || ''));
+        setCharismaWingTop3(data.charismaWingTop3 !== undefined ? data.charismaWingTop3 : (data.wealthWingTop3 || ''));
+        setCharismaFrameTop1(data.charismaFrameTop1 !== undefined ? data.charismaFrameTop1 : (data.wealthFrameTop1 || ''));
+        setCharismaFrameTop2(data.charismaFrameTop2 !== undefined ? data.charismaFrameTop2 : (data.wealthFrameTop2 || ''));
+        setCharismaFrameTop3(data.charismaFrameTop3 !== undefined ? data.charismaFrameTop3 : (data.wealthFrameTop3 || ''));
+        setCharismaListBgOthers(data.charismaListBgOthers !== undefined ? data.charismaListBgOthers : (data.wealthListBgOthers || ''));
+        setCharismaEventBg(data.charismaEventBg !== undefined ? data.charismaEventBg : (data.wealthEventBg || ''));
+        setCharismaActiveTabBg(data.charismaActiveTabBg !== undefined ? data.charismaActiveTabBg : (data.wealthActiveTabBg || ''));
+        // Menu Buttons
+        setMenuBox1Url(data.menuBox1Url || '');
+        setMenuBox2Url(data.menuBox2Url || '');
+        // Podium Frames
+        setTop1PodiumFrame(data.top1PodiumFrame || '');
+        setTop2PodiumFrame(data.top2PodiumFrame || '');
+        setTop3PodiumFrame(data.top3PodiumFrame || '');
       }
     });
 
@@ -978,6 +1036,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
+  const saveWealthDesignSettings = async () => {
+    try {
+      await setDoc(doc(db, "settings", "design"), {
+        wealthWingTop1,
+        wealthWingTop2,
+        wealthWingTop3,
+        wealthFrameTop1,
+        wealthFrameTop2,
+        wealthFrameTop3,
+        wealthListBgOthers,
+        wealthEventBg,
+        wealthActiveTabBg
+      }, { merge: true });
+      alert("تم حفظ إعدادات تصميم الثروة بنجاح!");
+    } catch (e) {
+      alert("خطأ في حفظ تصميم الثروة");
+    }
+  };
+
+  const saveCharismaDesignSettings = async () => {
+    try {
+      await setDoc(doc(db, "settings", "design"), {
+        charismaWingTop1,
+        charismaWingTop2,
+        charismaWingTop3,
+        charismaFrameTop1,
+        charismaFrameTop2,
+        charismaFrameTop3,
+        charismaListBgOthers,
+        charismaEventBg,
+        charismaActiveTabBg
+      }, { merge: true });
+      alert("تم حفظ إعدادات تصميم السحر بنجاح!");
+    } catch (e) {
+      alert("خطأ في حفظ تصميم السحر");
+    }
+  };
+
+  const saveMenuButtonsSettings = async () => {
+    try {
+      await setDoc(doc(db, "settings", "design"), {
+        menuBox1Url,
+        menuBox2Url
+      }, { merge: true });
+      alert("تم حفظ إعدادات تصميم أزرار القائمة بنجاح!");
+    } catch (e) {
+      alert("خطأ في حفظ تصميم أزرار القائمة");
+    }
+  };
+
+  const saveTopFramesSettings = async () => {
+    try {
+      await setDoc(doc(db, "settings", "design"), {
+        top1PodiumFrame,
+        top2PodiumFrame,
+        top3PodiumFrame
+      }, { merge: true });
+      alert(t("تم حفظ إعدادات إطارات المراكز بنجاح!", "Top podium frames saved successfully!"));
+    } catch (e) {
+      alert(t("خطأ في حفظ إعدادات إطارات المراكز", "Error saving top podium frames"));
+    }
+  };
+
   const handleSaveLoginSettings = async () => {
     try {
       await setDoc(doc(db, "settings", "appearance"), {
@@ -1106,6 +1227,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               {id: 'design', label: t('التصميم', 'Design Settings')},
               {id: 'roomFrames', label: t('اطارات الغرف', 'Room Frames')},
               {id: 'roomCenters', label: t('مراكز الغرف', 'Room Centers')},
+              {id: 'wealthDesign', label: t('تصميم الثروة', 'Wealth Design')},
+              {id: 'charismaDesign', label: t('تصميم السحر', 'Charisma Design')},
+              {id: 'menuButtonsDesign', label: t('تصميم أزرار القوائم', 'Menu Buttons Design')},
+              {id: 'topFramesDesign', label: t('إطارات التوبات', 'Top Frames')},
               {id: 'messages', label: t('الرسائل', 'Messages')}
             ].map((tab) => (
               <button key={tab.id} onClick={() => setAdminTab(tab.id as any)} className={`flex-shrink-0 px-4 py-2 text-[10px] font-black rounded-xl transition-all uppercase relative ${adminTab === tab.id ? 'bg-purple-600 text-white shadow-lg' : 'bg-white/5 text-purple-300/60'}`}>
@@ -3451,6 +3576,598 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                 className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-transform border border-white/10"
               >
                 حفظ ترتيب مراكز الغرف
+              </button>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'wealthDesign' && (
+          <div className="space-y-6 animate-fade-in pb-10">
+            <div className="bg-[#180e2d]/60 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex flex-col gap-1 border-b border-white/5 pb-3">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">تصميم قائمة الثروة والجاذبية (Leaderboard Assets)</p>
+                <p className="text-[9px] font-bold text-white/40">تخصيص ملحقات الأجنحة، الإطارات، والخلفيات لعرض التوب وقوائم الشرف.</p>
+              </div>
+
+              {/* Top 1 Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-crown text-yellow-500 text-[10px]"></i> المركز الأول (TOP 1)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Wing Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط ملحق الجناح الخاص بتوب 1</label>
+                    <input 
+                      type="text" 
+                      value={wealthWingTop1} 
+                      onChange={e => setWealthWingTop1(e.target.value)} 
+                      placeholder="ضع رابط الجناح المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {wealthWingTop1 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الجناح:</span>
+                        <img src={wealthWingTop1} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Wing 1 Preview" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Frame Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط الإطار الذي سيوضع على الجناح/الأفاتار لتوب 1</label>
+                    <input 
+                      type="text" 
+                      value={wealthFrameTop1} 
+                      onChange={e => setWealthFrameTop1(e.target.value)} 
+                      placeholder="ضع رابط الإطار المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {wealthFrameTop1 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الإطار:</span>
+                        <img src={wealthFrameTop1} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Frame 1 Preview" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Top 2 Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-crown text-slate-300 text-[10px]"></i> المركز الثاني (TOP 2)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Wing Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط ملحق الجناح الخاص بتوب 2</label>
+                    <input 
+                      type="text" 
+                      value={wealthWingTop2} 
+                      onChange={e => setWealthWingTop2(e.target.value)} 
+                      placeholder="ضع رابط الجناح المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {wealthWingTop2 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الجناح:</span>
+                        <img src={wealthWingTop2} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Wing 2 Preview" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Frame Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط الإطار الذي سيوضع على الجناح/الأفاتار لتوب 2</label>
+                    <input 
+                      type="text" 
+                      value={wealthFrameTop2} 
+                      onChange={e => setWealthFrameTop2(e.target.value)} 
+                      placeholder="ضع رابط الإطار المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {wealthFrameTop2 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الإطار:</span>
+                        <img src={wealthFrameTop2} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Frame 2 Preview" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Top 3 Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-crown text-amber-600 text-[10px]"></i> المركز الثالث (TOP 3)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Wing Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط ملحق الجناح الخاص بتوب 3</label>
+                    <input 
+                      type="text" 
+                      value={wealthWingTop3} 
+                      onChange={e => setWealthWingTop3(e.target.value)} 
+                      placeholder="ضع رابط الجناح المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {wealthWingTop3 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الجناح:</span>
+                        <img src={wealthWingTop3} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Wing 3 Preview" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Frame Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط الإطار الذي سيوضع على الجناح/الأفاتار لتوب 3</label>
+                    <input 
+                      type="text" 
+                      value={wealthFrameTop3} 
+                      onChange={e => setWealthFrameTop3(e.target.value)} 
+                      placeholder="ضع رابط الإطار المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {wealthFrameTop3 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الإطار:</span>
+                        <img src={wealthFrameTop3} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Frame 3 Preview" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Others Rank 4+ Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-list-ol text-purple-400 text-[10px]"></i> الرتب الأخرى (توب 4، 5، 6 فما فوق)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط المستطيل/الخلفية لعرض المستخدمين (توب 4 فما فوق)</label>
+                  <input 
+                    type="text" 
+                    value={wealthListBgOthers} 
+                    onChange={e => setWealthListBgOthers(e.target.value)} 
+                    placeholder="ضع رابط الخلفية المستطيلة هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {wealthListBgOthers && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة المستطيل:</span>
+                      <img src={wealthListBgOthers} className="h-10 w-24 object-cover rounded border border-white/10 animate-fade-in" alt="Others Card Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Event Background Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-images text-purple-400 text-[10px]"></i> خلفية صفحة الحدث/لوحة الصدارة (Event Background)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط خلفية صفحة الحدث/لوحة الصدارة</label>
+                  <input 
+                    type="text" 
+                    value={wealthEventBg} 
+                    onChange={e => setWealthEventBg(e.target.value)} 
+                    placeholder="ضع رابط خلفية الحدث هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {wealthEventBg && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة خلفية الحدث:</span>
+                      <img src={wealthEventBg} className="h-16 w-12 object-cover rounded border border-white/10 animate-fade-in" alt="Event Background Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Tab Background Image Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-toggle-on text-purple-400 text-[10px]"></i> خلفية التبويب النشط (Active Tab Background)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط صورة التبويب المحدد (يومية/أسبوعية/شهرياً) عند الضغط عليه</label>
+                  <input 
+                    type="text" 
+                    value={wealthActiveTabBg} 
+                    onChange={e => setWealthActiveTabBg(e.target.value)} 
+                    placeholder="ضع رابط خلفية التبويب النشط هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {wealthActiveTabBg && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة خلفية الدايرة للتبويب:</span>
+                      <img src={wealthActiveTabBg} className="h-8 px-4 py-1 bg-white/5 object-contain rounded-full border border-white/10 animate-fade-in" alt="Active Tab Background Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button 
+                onClick={saveWealthDesignSettings}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all border border-white/10 animate-fade-in"
+              >
+                حفظ تصميم الثروة
+              </button>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'charismaDesign' && (
+          <div className="space-y-6 animate-fade-in pb-10">
+            <div className="bg-[#180e2d]/60 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex flex-col gap-1 border-b border-white/5 pb-3">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">تصميم قائمة الجاذبية والسحر (Charisma Leaderboard Assets)</p>
+                <p className="text-[9px] font-bold text-white/40">تخصيص ملحقات الأجنحة، الإطارات، والخلفيات لعرض التوب وقوائم الشرف للجاذبية.</p>
+              </div>
+
+              {/* Top 1 Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-crown text-yellow-500 text-[10px]"></i> المركز الأول (TOP 1)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Wing Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط ملحق الجناح الخاص بتوب 1</label>
+                    <input 
+                      type="text" 
+                      value={charismaWingTop1} 
+                      onChange={e => setCharismaWingTop1(e.target.value)} 
+                      placeholder="ضع رابط الجناح المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {charismaWingTop1 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الجناح:</span>
+                        <img src={charismaWingTop1} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Wing 1 Preview" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Frame Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط إطار توب 1</label>
+                    <input 
+                      type="text" 
+                      value={charismaFrameTop1} 
+                      onChange={e => setCharismaFrameTop1(e.target.value)} 
+                      placeholder="ضع رابط الإطار المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {charismaFrameTop1 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الإطار:</span>
+                        <img src={charismaFrameTop1} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Frame 1 Preview" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Top 2 Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-medal text-silver-300 text-[10px]"></i> المركز الثاني (TOP 2)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Wing Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط ملحق الجناح الخاص بتوب 2</label>
+                    <input 
+                      type="text" 
+                      value={charismaWingTop2} 
+                      onChange={e => setCharismaWingTop2(e.target.value)} 
+                      placeholder="ضع رابط الجناح المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {charismaWingTop2 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الجناح:</span>
+                        <img src={charismaWingTop2} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Wing 2 Preview" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Frame Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط إطار توب 2</label>
+                    <input 
+                      type="text" 
+                      value={charismaFrameTop2} 
+                      onChange={e => setCharismaFrameTop2(e.target.value)} 
+                      placeholder="ضع رابط الإطار المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {charismaFrameTop2 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الإطار:</span>
+                        <img src={charismaFrameTop2} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Frame 2 Preview" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Top 3 Configuration */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-medal text-orange-400 text-[10px]"></i> المركز الثالث (TOP 3)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Wing Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط ملحق الجناح الخاص بتوب 3</label>
+                    <input 
+                      type="text" 
+                      value={charismaWingTop3} 
+                      onChange={e => setCharismaWingTop3(e.target.value)} 
+                      placeholder="ضع رابط الجناح المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {charismaWingTop3 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الجناح:</span>
+                        <img src={charismaWingTop3} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Wing 3 Preview" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Frame Link */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-white/60">رابط إطار توب 3</label>
+                    <input 
+                      type="text" 
+                      value={charismaFrameTop3} 
+                      onChange={e => setCharismaFrameTop3(e.target.value)} 
+                      placeholder="ضع رابط الإطار المباشر هنا..." 
+                      className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                      dir="ltr"
+                    />
+                    {charismaFrameTop3 && (
+                      <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                        <span>معاينة الإطار:</span>
+                        <img src={charismaFrameTop3} className="h-10 w-10 object-contain rounded border border-white/10 animate-fade-in" alt="Frame 3 Preview" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Others Card Backplate */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-id-badge text-purple-400 text-[10px]"></i> خلفية كروت الأشخاص (Card Backplate)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط صورة كرت بقية الأشخاص في القائمة (تحت توب 3)</label>
+                  <input 
+                    type="text" 
+                    value={charismaListBgOthers} 
+                    onChange={e => setCharismaListBgOthers(e.target.value)} 
+                    placeholder="ضع رابط صورة خلفية الكرت هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {charismaListBgOthers && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة الكرت:</span>
+                      <img src={charismaListBgOthers} className="h-10 w-24 object-cover rounded border border-white/10 animate-fade-in" alt="Others Card Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Event Background Image */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-image text-purple-400 text-[10px]"></i> الخلفية الكلية لصفحة الفعالية (Event Background)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط الخلفية الكلية لصفحة قائمة المتصدرين كاملة</label>
+                  <input 
+                    type="text" 
+                    value={charismaEventBg} 
+                    onChange={e => setCharismaEventBg(e.target.value)} 
+                    placeholder="ضع رابط الخلفية المباشر هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {charismaEventBg && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة الخلفية:</span>
+                      <img src={charismaEventBg} className="h-16 w-12 object-cover rounded border border-white/10 animate-fade-in" alt="Event Background Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Tab Background Image */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-toggle-on text-purple-400 text-[10px]"></i> خلفية التبويب النشط (Active Tab Background)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط صورة التبويب المحدد (يومية/أسبوعية/شهرياً) عند الضغط عليه</label>
+                  <input 
+                    type="text" 
+                    value={charismaActiveTabBg} 
+                    onChange={e => setCharismaActiveTabBg(e.target.value)} 
+                    placeholder="ضع رابط خلفية التبويب النشط هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {charismaActiveTabBg && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة خلفية الدايرة للتبويب:</span>
+                      <img src={charismaActiveTabBg} className="h-8 px-4 py-1 bg-white/5 object-contain rounded-full border border-white/10 animate-fade-in" alt="Active Tab Background Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button 
+                onClick={saveCharismaDesignSettings}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all border border-white/10 animate-fade-in"
+              >
+                حفظ تصميم السحر
+              </button>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'menuButtonsDesign' && (
+          <div className="space-y-6 animate-fade-in pb-10">
+            <div className="bg-[#180e2d]/60 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex flex-col gap-1 border-b border-white/5 pb-3">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">تصميم أزرار القوائم (Menu Buttons Design)</p>
+                <p className="text-[9px] font-bold text-white/40">تخصيص المربعين أو المستطيلين اللذان يظهران تحت البنر العلوي مباشرة في الصفحة الرئيسية.</p>
+              </div>
+
+              {/* Menu Button 1 */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-th-large text-purple-400 text-[10px]"></i> المربع/المستطيل الأول (Button 1)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط صورة المربع الأول</label>
+                  <input 
+                    type="text" 
+                    value={menuBox1Url} 
+                    onChange={e => setMenuBox1Url(e.target.value)} 
+                    placeholder="ضع رابط صورة المربع الأول هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {menuBox1Url && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة:</span>
+                      <img src={menuBox1Url} className="h-12 w-24 object-cover rounded border border-white/10 animate-fade-in" alt="Button 1 Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Menu Button 2 */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-th-large text-purple-400 text-[10px]"></i> المربع/المستطيل الثاني (Button 2)</h3>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط صورة المربع الثاني</label>
+                  <input 
+                    type="text" 
+                    value={menuBox2Url} 
+                    onChange={e => setMenuBox2Url(e.target.value)} 
+                    placeholder="ضع رابط صورة المربع الثاني هنا..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {menuBox2Url && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة:</span>
+                      <img src={menuBox2Url} className="h-12 w-24 object-cover rounded border border-white/10 animate-fade-in" alt="Button 2 Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button 
+                onClick={saveMenuButtonsSettings}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all border border-white/10 animate-fade-in"
+              >
+                حفظ تصميم أزرار القائمة
+              </button>
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'topFramesDesign' && (
+          <div className="space-y-6 animate-fade-in pb-10">
+            <div className="bg-[#180e2d]/60 backdrop-blur-md p-6 rounded-[2rem] border border-white/10 space-y-6 shadow-2xl">
+              <div className="flex flex-col gap-1 border-b border-white/5 pb-3">
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">إطارات التوبات / إطارات المراكز للرئيسية (Podium Top Frames)</p>
+                <p className="text-[9px] font-bold text-white/40">تخصيص الإطارات التي تظهر حول صور أول ثلاثة مستخدمين على المربعات التبويبية بالصفحة الرئيسية.</p>
+              </div>
+
+              {/* Frame Top 1 */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-crown text-yellow-500 text-[10px]"></i> إطار المركز الأول (Top 1 Podium Frame)</h3>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط الإطار</label>
+                  <input 
+                    type="text" 
+                    value={top1PodiumFrame} 
+                    onChange={e => setTop1PodiumFrame(e.target.value)} 
+                    placeholder="ضع رابط صورة إطار المركز الأول..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {top1PodiumFrame && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة:</span>
+                      <img src={top1PodiumFrame} className="h-12 w-12 object-contain rounded border border-white/10 animate-fade-in" alt="Top 1 Frame Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Frame Top 2 */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-medal text-slate-300 text-[10px]"></i> إطار المركز الثاني (Top 2 Podium Frame)</h3>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط الإطار</label>
+                  <input 
+                    type="text" 
+                    value={top2PodiumFrame} 
+                    onChange={e => setTop2PodiumFrame(e.target.value)} 
+                    placeholder="ضع رابط صورة إطار المركز الثاني..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {top2PodiumFrame && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة:</span>
+                      <img src={top2PodiumFrame} className="h-12 w-12 object-contain rounded border border-white/10 animate-fade-in" alt="Top 2 Frame Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Frame Top 3 */}
+              <div className="bg-[#100623]/40 p-4 rounded-2xl border border-white/5 space-y-4">
+                <h3 className="text-xs font-black text-white flex items-center gap-1.5"><i className="fas fa-award text-amber-700 text-[10px]"></i> إطار المركز الثالث (Top 3 Podium Frame)</h3>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/60">رابط الإطار</label>
+                  <input 
+                    type="text" 
+                    value={top3PodiumFrame} 
+                    onChange={e => setTop3PodiumFrame(e.target.value)} 
+                    placeholder="ضع رابط صورة إطار المركز الثالث..." 
+                    className="w-full bg-[#100623] border border-white/10 py-3 px-4 rounded-xl text-[10px] text-white outline-none focus:border-purple-500/50 transition-all font-bold placeholder:text-white/20 text-left"
+                    dir="ltr"
+                  />
+                  {top3PodiumFrame && (
+                    <div className="flex items-center gap-2 mt-1 text-[9px] text-white/40">
+                      <span>معاينة:</span>
+                      <img src={top3PodiumFrame} className="h-12 w-12 object-contain rounded border border-white/10 animate-fade-in" alt="Top 3 Frame Preview" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button 
+                onClick={saveTopFramesSettings}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all border border-white/10 animate-fade-in"
+              >
+                حفظ إطارات التوبات
               </button>
             </div>
           </div>
