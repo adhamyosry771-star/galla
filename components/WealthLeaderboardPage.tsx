@@ -293,7 +293,7 @@ export const WealthLeaderboardPage: React.FC<WealthLeaderboardPageProps> = ({
               <div className="grid grid-cols-3 gap-1 pt-6 items-end justify-center max-w-[265px] mx-auto relative min-h-[250px] overflow-visible">
                 
                 {/* Rank 2 (Left Column) */}
-                <div className="flex flex-col items-center space-y-2 relative translate-y-28">
+                <div className="flex flex-col items-center space-y-2 relative" style={{ transform: 'translateY(185px)' }}>
                   {top2 && (
                     <>
                       <div className="relative w-20 h-20 z-10 flex items-center justify-center">
@@ -343,7 +343,7 @@ export const WealthLeaderboardPage: React.FC<WealthLeaderboardPageProps> = ({
                 </div>
 
                 {/* Rank 1 (Center Column - Elevated) */}
-                <div className="flex flex-col items-center space-y-2 relative -top-3 overflow-visible">
+                <div className="flex flex-col items-center space-y-2 relative -top-3 overflow-visible" style={{ transform: 'translateY(73px)' }}>
                   {top1 && (
                     <>
                       <div className="relative w-24 h-24 z-10 flex items-center justify-center">
@@ -392,7 +392,7 @@ export const WealthLeaderboardPage: React.FC<WealthLeaderboardPageProps> = ({
                 </div>
 
                 {/* Rank 3 (Right Column) */}
-                <div className="flex flex-col items-center space-y-2 relative translate-y-28">
+                <div className="flex flex-col items-center space-y-2 relative" style={{ transform: 'translateY(185px)' }}>
                   {top3 && (
                     <>
                       <div className="relative w-20 h-20 z-10 flex items-center justify-center">
