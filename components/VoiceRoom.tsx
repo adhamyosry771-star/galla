@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../LanguageContext';
 import { Room, Gift, ChatMessage } from '../types';
@@ -10,7 +10,7 @@ import { AviatorGame } from './AviatorGame';
 import { Lucky77Game } from './Lucky77Game';
 import { getWealthLevelInfo, getCharismaLevelInfo } from '../utils';
 import { FlagIcon } from './ProfilePage';
-import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, orderBy, addDoc, serverTimestamp, Timestamp, increment, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { doc, onSnapshot, updateDoc, getDocs, collection, query, where, orderBy, limit, addDoc, serverTimestamp, Timestamp, increment, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { registerBackAction } from '../backButtonManager';
 import AgoraRTC from 'agora-rtc-sdk-ng';
 
@@ -99,7 +99,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   }, [user]);
   const [currentRoom, setCurrentRoom] = useState(initialRoom);
   const isRoomOwner = user?.uid === currentRoom.owner?.uid || user?.email === "admin@yalla.com";
-  const isRoomModerator = currentRoom.moderators && user?.uid && currentRoom.moderators.includes(user.uid);
+  const isRoomModerator = !!(currentRoom.moderators && user?.uid && currentRoom.moderators.includes(user.uid));
   const canManageRoom = isRoomOwner || isRoomModerator;
   const [inputText, setInputText] = useState('');
   const [showGifts, setShowGifts] = useState(false);
@@ -123,6 +123,107 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [targetUserIdInput, setTargetUserIdInput] = useState('');
   const [distributionAmountInput, setDistributionAmountInput] = useState('');
   const [isDistributing, setIsDistributing] = useState(false);
+  
+  // Room Trophy (كأس الغرفة) States
+  const [showRoomTrophyModal, setShowRoomTrophyModal] = useState(false);
+  const [roomGiftLogs, setRoomGiftLogs] = useState<any[]>([]);
+  const [roomTrophyTab, setRoomTrophyTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  // Calculating supporter lists (Daily, Weekly, Monthly) via useMemo
+  const roomTrophyDailyList = useMemo(() => {
+    const cutOff = Date.now() - 24 * 60 * 60 * 1000;
+    const filtered = roomGiftLogs.filter(log => log.createdAt instanceof Date ? log.createdAt.getTime() >= cutOff : new Date(log.createdAt).getTime() >= cutOff);
+    
+    const groups: { [uid: string]: any } = {};
+    filtered.forEach(log => {
+      const uid = log.senderUid;
+      if (!uid) return;
+      if (!groups[uid]) {
+        groups[uid] = {
+          uid,
+          displayName: log.senderName || t("مستخدم", "User"),
+          photoURL: log.senderAvatar || '',
+          customId: log.senderCustomId || '',
+          customIdIcon: log.senderCustomIdIcon || '',
+          idOffsetX: log.senderIdOffsetX !== undefined ? log.senderIdOffsetX : undefined,
+          idOffsetY: log.senderIdOffsetY !== undefined ? log.senderIdOffsetY : undefined,
+          idFontSize: log.senderIdFontSize !== undefined ? log.senderIdFontSize : undefined,
+          amount: 0
+        };
+      }
+      groups[uid].amount += (log.amount || 0);
+    });
+    return Object.values(groups).sort((a, b) => b.amount - a.amount);
+  }, [roomGiftLogs]);
+
+  const roomTrophyWeeklyList = useMemo(() => {
+    const cutOff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const filtered = roomGiftLogs.filter(log => log.createdAt instanceof Date ? log.createdAt.getTime() >= cutOff : new Date(log.createdAt).getTime() >= cutOff);
+    
+    const groups: { [uid: string]: any } = {};
+    filtered.forEach(log => {
+      const uid = log.senderUid;
+      if (!uid) return;
+      if (!groups[uid]) {
+        groups[uid] = {
+          uid,
+          displayName: log.senderName || t("مستخدم", "User"),
+          photoURL: log.senderAvatar || '',
+          customId: log.senderCustomId || '',
+          customIdIcon: log.senderCustomIdIcon || '',
+          idOffsetX: log.senderIdOffsetX !== undefined ? log.senderIdOffsetX : undefined,
+          idOffsetY: log.senderIdOffsetY !== undefined ? log.senderIdOffsetY : undefined,
+          idFontSize: log.senderIdFontSize !== undefined ? log.senderIdFontSize : undefined,
+          amount: 0
+        };
+      }
+      groups[uid].amount += (log.amount || 0);
+    });
+    return Object.values(groups).sort((a, b) => b.amount - a.amount);
+  }, [roomGiftLogs]);
+
+  const roomTrophyMonthlyList = useMemo(() => {
+    const cutOff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const filtered = roomGiftLogs.filter(log => log.createdAt instanceof Date ? log.createdAt.getTime() >= cutOff : new Date(log.createdAt).getTime() >= cutOff);
+    
+    const groups: { [uid: string]: any } = {};
+    filtered.forEach(log => {
+      const uid = log.senderUid;
+      if (!uid) return;
+      if (!groups[uid]) {
+        groups[uid] = {
+          uid,
+          displayName: log.senderName || t("مستخدم", "User"),
+          photoURL: log.senderAvatar || '',
+          customId: log.senderCustomId || '',
+          customIdIcon: log.senderCustomIdIcon || '',
+          idOffsetX: log.senderIdOffsetX !== undefined ? log.senderIdOffsetX : undefined,
+          idOffsetY: log.senderIdOffsetY !== undefined ? log.senderIdOffsetY : undefined,
+          idFontSize: log.senderIdFontSize !== undefined ? log.senderIdFontSize : undefined,
+          amount: 0
+        };
+      }
+      groups[uid].amount += (log.amount || 0);
+    });
+    return Object.values(groups).sort((a, b) => b.amount - a.amount);
+  }, [roomGiftLogs]);
+
+  const roomTrophyTotalAllTime = useMemo(() => {
+    return roomGiftLogs.reduce((sum, log) => sum + (log.amount || 0), 0);
+  }, [roomGiftLogs]);
+
+  const formatTrophyAmount = (amount: number) => {
+    if (amount >= 1000000000) {
+      return (amount / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+    }
+    if (amount >= 1000000) {
+      return (amount / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    }
+    if (amount >= 1000) {
+      return (amount / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    }
+    return amount.toString();
+  };
   
   // وقت الدخول لفلترة الرسائل القديمة
   const [joinTime] = useState(Timestamp.now());
@@ -252,8 +353,12 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           setIsAgoraConnected(true);
           console.log("Agora client joined room channel successfully.");
         }
-      } catch (err) {
-        console.error("Failed to fully initiate Agora Client:", err);
+      } catch (err: any) {
+        if (err?.code === "OPERATION_ABORTED" || err?.message?.includes("cancel") || err?.message?.includes("aborted")) {
+          console.log("Agora client setup was aborted gracefully (component unmounted or room switched rapidly).");
+        } else {
+          console.error("Failed to fully initiate Agora Client:", err);
+        }
       }
     };
 
@@ -565,6 +670,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [editRoomDescription, setEditRoomDescription] = useState(currentRoom.description || '');
   const [editRoomCover, setEditRoomCover] = useState(currentRoom.coverImage);
   const [editRoomBg, setEditRoomBg] = useState(currentRoom.roomBackground || '');
+  const [editRoomTrophyBg, setEditRoomTrophyBg] = useState(currentRoom.roomTrophyBg || '');
   const [editMicCount, setEditMicCount] = useState(currentRoom.micCount || 10);
   const [availableBgs, setAvailableBgs] = useState<any[]>([]);
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
@@ -1318,6 +1424,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           setEditRoomDescription(data.description || '');
           setEditRoomCover(data.coverImage);
           setEditRoomBg(data.roomBackground || '');
+          setEditRoomTrophyBg(data.roomTrophyBg || '');
           setEditMicCount(data.micCount || 10);
         }
       }
@@ -1375,6 +1482,38 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     
     return unsubLogs;
   }, [showBarWealthModal, currentRoom.id]);
+
+  useEffect(() => {
+    if (!showRoomTrophyModal || !currentRoom.id) return;
+    
+    const logsRef = collection(db, "rooms", currentRoom.id, "giftLogs");
+    const qLogs = query(logsRef, orderBy("createdAt", "desc"), limit(500));
+    const unsubLogs = onSnapshot(qLogs, (snap) => {
+      const logs = snap.docs.map(doc => {
+        const data = doc.data();
+        let cAt = new Date();
+        if (data.createdAt) {
+          if (typeof data.createdAt.toDate === 'function') {
+            cAt = data.createdAt.toDate();
+          } else if (data.createdAt.seconds) {
+            cAt = new Date(data.createdAt.seconds * 1000);
+          } else {
+            cAt = new Date(data.createdAt);
+          }
+        }
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: cAt
+        };
+      });
+      setRoomGiftLogs(logs);
+    }, (err) => {
+      console.error("Error fetching room gift logs:", err);
+    });
+    
+    return unsubLogs;
+  }, [showRoomTrophyModal, currentRoom.id]);
 
   // Real-time custom background validation has been disabled because it caused
   // issues for visitors (due to Firestore inventory read restrictions or query delay)
@@ -1547,6 +1686,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         setAvailableBgs(combined);
       };
       fetchAllBgs();
+    } else {
+      setShowBgSelector(false);
+      setShowBlacklist(false);
+      setShowModeratorsList(false);
     }
   }, [showRoomSettings, user]);
 
@@ -1791,6 +1934,23 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       
       await addDoc(collection(db, "rooms", currentRoom.id, "chat"), giftMsg);
 
+      try {
+        await addDoc(collection(db, "rooms", currentRoom.id, "giftLogs"), {
+          senderUid: user!.uid,
+          senderName: currentUserData?.displayName || t("مستخدم", "User"),
+          senderAvatar: currentUserData?.animatedAvatar || currentUserData?.photoURL || '',
+          senderCustomId: currentUserData?.customId || user!.uid.substring(0, 8),
+          senderCustomIdIcon: currentUserData?.customIdIcon || '',
+          senderIdOffsetX: currentUserData?.profileIdOffsetX ?? currentUserData?.idOffsetX ?? 28,
+          senderIdOffsetY: currentUserData?.profileIdOffsetY ?? currentUserData?.idOffsetY ?? 0.5,
+          senderIdFontSize: currentUserData?.profileIdFontSize ?? currentUserData?.idFontSize ?? 11,
+          amount: totalCost,
+          createdAt: serverTimestamp()
+        });
+      } catch (logErr) {
+        console.error("Error writing gift log:", logErr);
+      }
+
       if (isEffectsEnabled && gift.animation) {
         setIsGiftMinimized(false); 
         setActiveGiftEffect({ url: gift.animation, id: Date.now() });
@@ -1839,7 +1999,13 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     if (!editRoomTitle.trim()) return alert(t("يرجى إدخل اسم للغرفة", "Please enter a room name"));
     setIsUpdatingRoom(true);
     try {
-      await updateDoc(doc(db, "rooms", currentRoom.id), { title: editRoomTitle, description: editRoomDescription, coverImage: editRoomCover, roomBackground: editRoomBg, micCount: editMicCount });
+      await updateDoc(doc(db, "rooms", currentRoom.id), { 
+        title: editRoomTitle, 
+        description: editRoomDescription, 
+        coverImage: editRoomCover, 
+        roomBackground: editRoomBg, 
+        micCount: editMicCount 
+      });
       setShowRoomSettings(false);
     } catch (err) { alert(t("حدث خطأ أثناء التحديث", "An error occurred during update")); } finally { setIsUpdatingRoom(false); }
   };
@@ -2351,8 +2517,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/95 z-[2]"></div>
       </div>
       <div className="relative z-10 flex flex-col h-full w-full max-w-md mx-auto font-['Cairo']">
-        <div className="p-4 flex items-center justify-between overflow-visible">
-          <div className="flex items-center">
+        <div className="pt-4 px-4 pb-0 flex items-start justify-between overflow-visible">
+          <div className="flex flex-col items-start gap-1">
             <div 
               onClick={() => setShowRoomInfoModal(true)}
               className="flex items-center gap-2.5 bg-black/60 border-y border-l border-white/10 rounded-l-full rounded-r-none pr-1.5 pl-6 py-1 shadow-2xl relative -mr-4 min-w-[140px] max-w-[220px] cursor-pointer hover:bg-black/80 select-none"
@@ -2380,8 +2546,28 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Room Trophy Rectangle (مستطيل صغير تحت مستطيل الغرفة) */}
+            <div 
+              onClick={() => setShowRoomTrophyModal(true)}
+              className="flex items-center justify-start gap-1.5 bg-black/60 border border-white/10 rounded-l-full rounded-r-none pr-2.5 pl-3.5 shadow-md relative -mr-4 cursor-pointer hover:bg-black/85 select-none h-[29px] animate-in fade-in duration-300 w-auto inline-flex"
+              style={{ direction: 'rtl' }}
+              title={t("كأس الغرفة", "Room Trophy")}
+            >
+              {/* Cup icon on the right (first child in RTL) */}
+              <div className="flex items-center text-yellow-500">
+                <i className="fas fa-trophy text-[11px]"></i>
+              </div>
+              
+              {/* Coins value on the left (second child in RTL) */}
+              <div className="flex items-center text-yellow-400 pr-0.5">
+                <span className="text-[11px] font-black leading-none">
+                  {formatTrophyAmount(roomTrophyTotalAllTime)}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pt-1">
             <button onClick={() => setShowParticipants(true)} className="h-8 px-3 rounded-full bg-black/60 border border-white/10 flex items-center gap-1.5 transition-all shadow-lg">
               <i className="fas fa-users text-white text-[10px]"></i>
               <span className="text-[10px] font-black text-white">{allPresentUsers.length}</span>
@@ -2433,13 +2619,13 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     <div className="w-full h-full flex items-center justify-center animate-in fade-in duration-200">
                       {mic?.status === 'locked' ? (
                         designSettings?.micLockedIcon ? (
-                          <img src={designSettings.micLockedIcon} className="w-full h-full object-contain" alt="locked" />
+                          <img src={designSettings?.micLockedIcon} className="w-full h-full object-contain" alt="locked" />
                         ) : (
                           <i className={`fas fa-lock text-white/20 ${activeMicCount === 15 ? 'text-sm' : 'text-xl'}`}></i>
                         )
                       ) : (
                         designSettings?.micOpenIcon ? (
-                          <img src={designSettings.micOpenIcon} className="w-full h-full object-contain" alt="open" />
+                          <img src={designSettings?.micOpenIcon} className="w-full h-full object-contain" alt="open" />
                         ) : (
                           <i className={`fas fa-microphone text-white/20 ${activeMicCount === 15 ? 'text-lg' : 'text-2xl'}`}></i>
                         )
@@ -2568,7 +2754,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             <button onClick={() => { setShowRoomSettings(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-cog text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الإعدادات", "Settings")}</span></button>
           )}
           <button onClick={() => { setShowGamesMenu(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الألعاب", "Games")}</span></button><button onClick={() => { setShowMusicModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الموسيقى", "Music")}</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-2"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>{t("المؤثرات", "Effects")}</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">{isRoomMuted ? t("إلغاء الكتم", "Unmute") : t("كتم الغرفة", "Mute Room")}</span></button><button className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("مشاركة", "Share")}</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("إبلاغ", "Report")}</span></button>
-{isRoomOwner && (
+
+{canManageRoom && (
   <button onClick={() => { setShowLockModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2">
     <div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center ${currentRoom.isLocked ? 'text-white' : 'text-white/80'}`}>
       <i className={`fas ${currentRoom.isLocked ? 'fa-lock' : 'fa-lock-open'} text-xl`}></i>
@@ -2771,6 +2958,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                       <i className={`fas ${language === 'en' ? 'fa-chevron-right' : 'fa-chevron-left'} text-purple-400`}></i>
                     </button>
                   </div>
+
+
                 </div>
               </>
             ) : showBgSelector ? (
@@ -2809,6 +2998,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                   ))}
                 </div>
               </div>
+
             ) : showBlacklist ? (
               <div className="space-y-6 animate-in slide-in-from-left" dir={language === 'ar' ? 'rtl' : 'ltr'}>
                 <div className="flex items-center gap-3">
@@ -4263,6 +4453,162 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             </div>
           </div>
         </>
+      )}
+
+      {showRoomTrophyModal && (
+        <div 
+          className="fixed inset-0 max-w-md mx-auto z-[841] bg-[#0d041e] flex flex-col font-['Cairo'] text-right overflow-hidden animate-in fade-in duration-300 pointer-events-auto bg-cover bg-center"
+          style={(designSettings?.roomTrophyBg || currentRoom?.roomTrophyBg) ? { backgroundImage: `url(${designSettings?.roomTrophyBg || currentRoom?.roomTrophyBg})` } : {}}
+          onClick={(e) => e.stopPropagation()}
+          dir={language === 'ar' ? 'rtl' : 'ltr'}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 flex-shrink-0 bg-transparent">
+            <button 
+              onClick={() => setShowRoomTrophyModal(false)}
+              className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 text-white flex items-center justify-center transition-all active:scale-90"
+            >
+              <i className={`fas ${language === 'ar' ? 'fa-chevron-right' : 'fa-chevron-left'} text-sm`}></i>
+            </button>
+            <h3 className="text-white text-[15px] font-black">{t("كأس الغرفة", "Room Trophy")}</h3>
+            <div className="w-10"></div>
+          </div>
+
+          {/* Content Area */}
+          <div className="flex-1 overflow-y-auto p-5 scrollbar-hide flex flex-col gap-4">
+            
+            {/* Solid BG-Black Styled Tab Selectors matching the room title container styling */}
+            <div className="grid grid-cols-3 bg-white/5 backdrop-blur-md p-0.5 rounded-full border border-white/10 flex-shrink-0 font-black h-9 w-[85%] max-w-[280px] mx-auto">
+              <button 
+                onClick={() => setRoomTrophyTab('daily')} 
+                style={roomTrophyTab === 'daily' && designSettings?.roomTrophyTabActiveBg ? { backgroundImage: `url(${designSettings.roomTrophyTabActiveBg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundColor: 'transparent' } : {}}
+                className={`py-1 text-[11px] font-black rounded-full transition-all ${
+                  roomTrophyTab === 'daily' 
+                    ? (designSettings?.roomTrophyTabActiveBg ? 'text-white border-transparent' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/10') 
+                    : 'text-white/45 hover:text-white/80'
+                }`}
+              >
+                {t("اليومي", "Daily")}
+              </button>
+              <button 
+                onClick={() => setRoomTrophyTab('weekly')} 
+                style={roomTrophyTab === 'weekly' && designSettings?.roomTrophyTabActiveBg ? { backgroundImage: `url(${designSettings.roomTrophyTabActiveBg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundColor: 'transparent' } : {}}
+                className={`py-1 text-[11px] font-black rounded-full transition-all ${
+                  roomTrophyTab === 'weekly' 
+                    ? (designSettings?.roomTrophyTabActiveBg ? 'text-white border-transparent' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/10') 
+                    : 'text-white/45 hover:text-white/80'
+                }`}
+              >
+                {t("الأسبوعي", "Weekly")}
+              </button>
+              <button 
+                onClick={() => setRoomTrophyTab('monthly')} 
+                style={roomTrophyTab === 'monthly' && designSettings?.roomTrophyTabActiveBg ? { backgroundImage: `url(${designSettings.roomTrophyTabActiveBg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundColor: 'transparent' } : {}}
+                className={`py-1 text-[11px] font-black rounded-full transition-all ${
+                  roomTrophyTab === 'monthly' 
+                    ? (designSettings?.roomTrophyTabActiveBg ? 'text-white border-transparent' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/10') 
+                    : 'text-white/45 hover:text-white/80'
+                }`}
+              >
+                {t("الشهري", "Monthly")}
+              </button>
+            </div>
+
+            {/* Supporters Leaderboard List / Empty Box Section */}
+            <div className="space-y-3 flex-1 pb-6">
+              {(() => {
+                const currentList = roomTrophyTab === 'daily' 
+                  ? roomTrophyDailyList 
+                  : roomTrophyTab === 'weekly' 
+                    ? roomTrophyWeeklyList 
+                    : roomTrophyMonthlyList;
+
+                if (currentList.length === 0) {
+                  return (
+                    <div className="py-20 text-center text-white/30 flex flex-col items-center justify-center border border-dashed border-white/5 rounded-3xl bg-white/3 my-2 animate-in fade-in duration-300">
+                      <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-3 flex-shrink-0">
+                        <i className="fas fa-box-open text-2xl text-white/20"></i>
+                      </div>
+                      <p className="text-sm font-black tracking-wide text-white/40 leading-relaxed max-w-[200px] mx-auto text-center" style={{ direction: 'rtl' }}>
+                        {t("عذراً هذا الشخص لم يستلم أي هدايا", "Sorry, this person has not received any gifts")}
+                      </p>
+                    </div>
+                  );
+                }
+
+                return currentList.map((supporter, idx) => {
+                  const rank = idx + 1;
+
+                  // Find user details to check for customIdIcon and currentFrame
+                  const details = allPresentUsers.find(u => u.uid === supporter.uid) || 
+                                  (supporter.uid === user?.uid ? currentUserData : null) || 
+                                  (supporter.uid === currentRoom?.ownerId ? ownerData : null);
+                  const supporterCustomIdIcon = details?.customIdIcon || supporter.customIdIcon || '';
+                  const sIdX = details?.profileIdOffsetX ?? details?.idOffsetX ?? supporter.idOffsetX ?? 28;
+                  const sIdY = details?.profileIdOffsetY ?? details?.idOffsetY ?? supporter.idOffsetY ?? 0.5;
+                  const sIdFS = details?.profileIdFontSize ?? details?.idFontSize ?? supporter.idFontSize ?? 11;
+                  const supporterCustomId = supporter.customId || details?.customId || '';
+                  const supporterCurrentFrame = details?.currentFrame || supporter.currentFrame || '';
+
+                  const itemBgStyle = designSettings?.roomTrophyItemBg 
+                    ? { backgroundImage: `url(${designSettings.roomTrophyItemBg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundColor: 'transparent' } 
+                    : {};
+
+                  const itemClass = designSettings?.roomTrophyItemBg
+                    ? "flex items-center justify-between p-3.5 relative overflow-hidden transition-all active:scale-[0.98]" 
+                    : "flex items-center justify-between bg-white/3 border border-white/5 rounded-xl p-3.5 hover:bg-white/5 transition-colors";
+
+                  return (
+                    <div key={supporter.uid} className={itemClass} style={itemBgStyle}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Avatar container that allows frame overflow */}
+                        <div className="relative w-11 h-11 flex-shrink-0 flex items-center justify-center">
+                          <div className="w-full h-full rounded-full overflow-hidden border border-white/10 relative z-10 bg-black/20">
+                            <img src={supporter.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover" alt="" />
+                          </div>
+                          {supporterCurrentFrame && (
+                            <img src={supporterCurrentFrame} className="absolute inset-0 w-full h-full object-contain pointer-events-none z-20 scale-[1.35]" alt="frame" />
+                          )}
+                        </div>
+
+                        <div className="text-right min-w-0 flex flex-col items-start gap-0.5">
+                          <h5 className="text-white font-black text-[12.5px] truncate leading-tight flex items-center gap-1">
+                            {supporter.displayName}
+                          </h5>
+                          
+                          {supporterCustomIdIcon ? (
+                            <div className="relative w-[85px] h-[26.5px] flex items-center bg-contain bg-center bg-no-repeat mt-0.5 select-none" style={{ backgroundImage: `url(${supporterCustomIdIcon})` }}>
+                              <span className="font-mono font-black text-white tracking-widest text-center w-full block drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.95)]" 
+                                    style={{ 
+                                      paddingLeft: `${sIdX}px`, 
+                                      paddingTop: `${sIdY}px`,
+                                      fontSize: `${sIdFS - 2.2}px`
+                                    }}>
+                                {supporterCustomId}
+                              </span>
+                            </div>
+                          ) : (
+                            /* Beautiful ID badge with icon */
+                            <div className="flex items-center gap-1 mt-0.5 bg-white/5 border border-white/5 rounded-md px-1.5 py-0.5 w-fit" dir="ltr">
+                              <i className="fas fa-id-card text-[8.5px] text-yellow-500/80"></i>
+                              <span className="text-[8.5px] text-white/60 font-mono tracking-tight font-black">ID: {supporterCustomId}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Gift value spent */}
+                      <div className="text-left flex-shrink-0 flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/10 rounded-full px-3 py-1.5 text-yellow-400 font-extrabold text-[12px]">
+                        <span>{supporter.amount.toLocaleString()}</span>
+                        <i className="fas fa-coins text-[10px]"></i>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{`

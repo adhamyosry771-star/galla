@@ -17,7 +17,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOfficialAdmin }) => {
-  const { language, t } = useLanguage();
+   const { language, t } = useLanguage();
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [searchId, setSearchId] = useState('');
   const [allBanners, setAllBanners] = useState<any[]>([]);
@@ -31,8 +31,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [allReports, setAllReports] = useState<any[]>([]);
   const [defaultProfileImage, setDefaultProfileImage] = useState<string | null>(null);
   const [defaultCoverImage, setDefaultCoverImage] = useState<string | null>(null);
+  const [roomTrophyInputs, setRoomTrophyInputs] = useState<Record<string, string>>({});
+  const [trophyBgSearchQuery, setTrophyBgSearchQuery] = useState('');
+  const [globalTrophyBg, setGlobalTrophyBg] = useState('');
+  const [globalTrophyItemBg, setGlobalTrophyItemBg] = useState('');
+  const [globalTrophyTabActiveBg, setGlobalTrophyTabActiveBg] = useState('');
 
-  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign' | 'carnival' | 'roomFrames' | 'roomCenters' | 'wealthDesign' | 'charismaDesign' | 'topFramesDesign' | 'menuButtonsDesign'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'news' | 'banners' | 'bgs' | 'rooms' | 'trophyBg' | 'design' | 'messages' | 'store' | 'emojis' | 'gifts' | 'support' | 'cp' | 'fruits' | 'reports' | 'mainImages' | 'agencyDesign' | 'carnival' | 'roomFrames' | 'roomCenters' | 'wealthDesign' | 'charismaDesign' | 'topFramesDesign' | 'menuButtonsDesign'>('users');
   
   // Top Frames / Podium Frames (اطارات التوبات)
   const [top1PodiumFrame, setTop1PodiumFrame] = useState('');
@@ -295,6 +300,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     const unsubDesign = onSnapshot(doc(db, "settings", "design"), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
+        setGlobalTrophyBg(data.roomTrophyBg || '');
+        setGlobalTrophyItemBg(data.roomTrophyItemBg || '');
+        setGlobalTrophyTabActiveBg(data.roomTrophyTabActiveBg || '');
         setMicOpenIcon(data.micOpenIcon || null);
         setMicLockedIcon(data.micLockedIcon || null);
         setWaveRoomIcon(data.waveRoomIcon || null);
@@ -1213,6 +1221,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
               {id: 'users', label: t('المستخدمين', 'Users')},
               {id: 'support', label: t('محادثات الدعم', 'Support Chats')},
               {id: 'rooms', label: t('الغرف', 'Rooms')},
+              {id: 'trophyBg', label: t('خلفية الكأس', 'Trophy Background')},
               {id: 'news', label: t('الأخبار', 'News')},
               {id: 'banners', label: t('البنرات', 'Banners')},
               {id: 'bgs', label: t('خلفيات مجانية', 'Free Backgrounds')},
@@ -2318,6 +2327,167 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {adminTab === 'trophyBg' && (
+          <div className="space-y-6">
+            <div className="bg-white/5 p-5 rounded-[2.5rem] border border-white/10 space-y-4 shadow-2xl">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <i className="fas fa-trophy text-yellow-500"></i>
+                {t("إدارة خلفيات الكؤوس العامة", "Manage Global Trophy Background")}
+              </h3>
+              <p className="text-[11px] text-white/50 leading-relaxed font-bold">
+                {t("هنا يمكنك التحكم في الخلفية العامة لصفحة الكأس في جميع الغرف. الرابط الذي تدخله بالأسفل سيطبق كخلفية لصفحة الكأس لدى كل المستخدمين في جميع غرف التطبيق.", "Here you can control the global background for the trophy page across all rooms. The URL you enter below will be applied as the trophy page background for all users in every room of the application.")}
+              </p>
+            </div>
+
+            <div className="bg-white/5 rounded-3xl border border-white/10 p-6 space-y-6 shadow-xl max-w-xl mx-auto">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest-xs">
+                  {t("رابط الخلفية العامة للكؤوس (URL)", "Global Trophy Background URL")}
+                </label>
+                <input 
+                  type="text" 
+                  value={globalTrophyBg} 
+                  onChange={(e) => setGlobalTrophyBg(e.target.value)} 
+                  placeholder="https://example.com/global-trophy-bg.jpg" 
+                  className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-purple-500/40 text-left font-sans font-bold" 
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest-xs">
+                  {t("رابط خلفية مستطيل معلومات الأشخاص (مستطيل الكأس)", "Trophy User Card Rectangle URL")}
+                </label>
+                <input 
+                  type="text" 
+                  value={globalTrophyItemBg} 
+                  onChange={(e) => setGlobalTrophyItemBg(e.target.value)} 
+                  placeholder="https://example.com/user-card-rect.png" 
+                  className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-purple-500/40 text-left font-sans font-bold" 
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest-xs">
+                  {t("رابط لون (صورة) زر التبويب النشط", "Active Tab Highlight Image URL")}
+                </label>
+                <input 
+                  type="text" 
+                  value={globalTrophyTabActiveBg} 
+                  onChange={(e) => setGlobalTrophyTabActiveBg(e.target.value)} 
+                  placeholder="https://example.com/active-tab-highlight.png" 
+                  className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xs text-white outline-none focus:border-purple-500/40 text-left font-sans font-bold" 
+                />
+              </div>
+
+              {(globalTrophyBg || globalTrophyItemBg || globalTrophyTabActiveBg) && (
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest text-center block">
+                    {t("معاينة الخلفية والعناصر", "Trophy Graphics Preview")}
+                  </label>
+                  <div className="relative aspect-[9/16] max-w-[200px] mx-auto rounded-3xl overflow-hidden border border-white/10 bg-black/40 shadow-2xl flex flex-col justify-between p-4">
+                    {globalTrophyBg && (
+                      <img 
+                        src={globalTrophyBg} 
+                        className="absolute inset-0 w-full h-full object-cover z-0" 
+                        alt="Global Trophy Background Preview" 
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }} 
+                      />
+                    )}
+                    {/* Mock layout overlay to see how it matches real UI */}
+                    <div className="relative z-10 w-full flex justify-between items-center bg-black/40 backdrop-blur-xs p-1.5 rounded-full border border-white/10">
+                      <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[8px] text-white"><i className="fas fa-chevron-right"></i></div>
+                      <span className="text-[8px] font-black text-white">{t("كأس الغرفة", "Room Trophy")}</span>
+                      <div className="w-5"></div>
+                    </div>
+
+                    {/* Active tab mock */}
+                    <div className="relative z-10 w-full bg-white/5 p-0.5 rounded-full border border-white/10 grid grid-cols-2 text-center text-[7px] font-black">
+                      <div 
+                        style={globalTrophyTabActiveBg ? { backgroundImage: `url(${globalTrophyTabActiveBg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat' } : {}}
+                        className={`py-0.5 rounded-full text-white ${globalTrophyTabActiveBg ? '' : 'bg-yellow-500/20 text-yellow-400'}`}
+                      >
+                        {t("اليومي", "Daily")}
+                      </div>
+                      <div className="py-0.5 text-white/50">{t("الأسبوعي", "Weekly")}</div>
+                    </div>
+
+                    {/* User list card mock */}
+                    <div 
+                      style={globalTrophyItemBg ? { backgroundImage: `url(${globalTrophyItemBg})`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat' } : {}}
+                      className={`relative z-10 w-full p-2 rounded-xl flex items-center justify-between text-white ${globalTrophyItemBg ? '' : 'bg-white/5 border border-white/5'}`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-full bg-white/25 overflow-hidden"></div>
+                        <div className="text-right">
+                          <div className="text-[7px] font-black leading-none text-white">الاسم هنا</div>
+                          <div className="text-[5px] text-white/60 font-mono scale-90 -mx-1">ID: 12345</div>
+                        </div>
+                      </div>
+                      <div className="text-[7px] bg-yellow-500/20 text-yellow-500 font-extrabold px-1 py-0.5 rounded-full">
+                        1,000 <i className="fas fa-coins text-[5px]"></i>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 w-full bg-black/40 backdrop-blur-xs p-1 rounded-2xl border border-white/10 flex flex-col gap-1 items-center">
+                      <div className="w-5 h-5 rounded-full bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-yellow-500 text-[8px]"><i className="fas fa-trophy"></i></div>
+                      <div className="w-8 h-0.5 bg-white/20 rounded-full"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 font-black pt-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      await setDoc(doc(db, "settings", "design"), {
+                        roomTrophyBg: globalTrophyBg.trim(),
+                        roomTrophyItemBg: globalTrophyItemBg.trim(),
+                        roomTrophyTabActiveBg: globalTrophyTabActiveBg.trim()
+                      }, { merge: true });
+                      alert(t("تم حفظ أزرار وخلفيات الكأس بنجاح!", "Trophy assets and background saved successfully!"));
+                    } catch (error: any) {
+                      alert(t("حدث خطأ أثناء الحفظ: ", "Error saving: ") + (error.message || error));
+                    }
+                  }}
+                  className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-4 rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2 shadow-xl"
+                >
+                  <i className="fas fa-save text-sm"></i>
+                  <span>{t("حفظ تعديلات الكأس", "Save Trophy Designs")}</span>
+                </button>
+
+                {(globalTrophyBg || globalTrophyItemBg || globalTrophyTabActiveBg) && (
+                  <button
+                    onClick={async () => {
+                      if (confirm(t("هل أنت متأكد من حذف تعديلات الكأس والرجوع للافتراضي؟", "Are you sure you want to delete custom trophy graphics and revert to defaults?"))) {
+                        try {
+                          await setDoc(doc(db, "settings", "design"), {
+                            roomTrophyBg: deleteField(),
+                            roomTrophyItemBg: deleteField(),
+                            roomTrophyTabActiveBg: deleteField()
+                          }, { merge: true });
+                          setGlobalTrophyBg('');
+                          setGlobalTrophyItemBg('');
+                          setGlobalTrophyTabActiveBg('');
+                          alert(t("تم حذف تعديلات الكأس بنجاح والرجوع للافتراضي!", "Trophy designs reverted to default successfully!"));
+                        } catch (error: any) {
+                          alert(t("حدث خطأ أثناء الحذف: ", "Error deleting: ") + (error.message || error));
+                        }
+                      }
+                    }}
+                    className="bg-red-600/20 hover:bg-red-600 border border-red-500/30 hover:border-red-500 text-red-300 hover:text-white px-5 py-4 rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center"
+                    title={t("حذف والرجوع للافتراضي", "Delete and revert to default")}
+                  >
+                    <i className="fas fa-trash-alt text-sm"></i>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

@@ -29,7 +29,18 @@ export const GMPage: React.FC<GMPageProps> = ({
   const [bannerImage, setBannerImage] = useState<string | null>(null);
   const [banners, setBanners] = useState<any[]>([]);
   const [isPublishing, setIsPublishing] = useState(false);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+
+  useEffect(() => {
+    if (banners.length <= 1) {
+      setCurrentSlideIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setCurrentSlideIndex(prev => (prev + 1) % banners.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [banners]);
 
   useEffect(() => {
     if (!isOpen || view !== 'banners') return;
@@ -42,17 +53,8 @@ export const GMPage: React.FC<GMPageProps> = ({
     return () => unsub();
   }, [isOpen, view]);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setBannerImage(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handlePublishBanner = async () => {
-    if (!bannerImage) return alert(t("يرجى اختيار صورة للبنر", "Please specify a banner image"));
+    if (!bannerImage || !bannerImage.trim()) return alert(t("يرجى إدخال رابط صورة البنر", "Please specify a banner image URL"));
     setIsPublishing(true);
     try {
       await addDoc(collection(db, "banners"), {
@@ -102,7 +104,7 @@ export const GMPage: React.FC<GMPageProps> = ({
         </button>
         <div>
           <h2 className="text-lg font-black text-white">
-            {view === 'banners' ? t('إدارة البنارات', 'Manage Banners') : t('نظام المدير العام', 'General Manager Panel')}
+            {view === 'banners' ? t('إدارة البنرات', 'Manage Banners') : t('نظام المدير العام', 'General Manager Panel')}
           </h2>
           <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">
             {view === 'banners' ? 'Banner Management' : 'General Manager Panel'}
@@ -142,8 +144,8 @@ export const GMPage: React.FC<GMPageProps> = ({
                     <i className="fas fa-images text-xl"></i>
                   </div>
                   <div className="flex flex-col items-start text-start min-w-0">
-                    <span className="font-black text-sm text-emerald-100 tracking-wide">{t('إدارة البنارات المتحركة', 'Manage Sliding Banners')}</span>
-                    <span className="text-[10px] text-emerald-500/60 font-bold truncate w-full">{t('رفع صور بنارات جديدة لواجهة التطبيق', 'Upload home banner slide images')}</span>
+                    <span className="font-black text-sm text-emerald-100 tracking-wide">{t('إدارة البنرات المتحركه', 'Manage Sliding Banners')}</span>
+                    <span className="text-[10px] text-emerald-500/60 font-bold truncate w-full">{t('رفع صور بنرات جديدة لواجهة التطبيق', 'Upload home banner slide images')}</span>
                   </div>
                 </button>
 
@@ -225,8 +227,8 @@ export const GMPage: React.FC<GMPageProps> = ({
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[100px] -mr-16 -mt-16"></div>
                 
                 <h3 className="text-sm font-black text-white flex items-center gap-2">
-                  <i className="fas fa-cloud-upload-alt text-emerald-400"></i>
-                  {t('رفع بنر جديد', 'Upload New Banner')}
+                  <i className="fas fa-paper-plane text-emerald-400"></i>
+                  {t('إضافة بنر جديد', 'Add New Banner')}
                 </h3>
 
                 <div className="space-y-4">
@@ -239,32 +241,26 @@ export const GMPage: React.FC<GMPageProps> = ({
                   />
                   
                   <input 
-                    type="file" 
-                    ref={bannerInputRef} 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleImageSelect} 
+                    type="text" 
+                    value={bannerImage || ''} 
+                    onChange={e => setBannerImage(e.target.value)} 
+                    placeholder={t('أدخل رابط البنر المباشر هنا...', 'Enter direct banner image URL here...')} 
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-white outline-none focus:border-emerald-500/30 font-bold text-left placeholder:text-white/20"
+                    dir="ltr"
                   />
-                  
-                  <button 
-                    onClick={() => bannerInputRef.current?.click()} 
-                    className="w-full aspect-[21/9] bg-white/5 rounded-3xl flex flex-col items-center justify-center border-2 border-dashed border-white/10 overflow-hidden group hover:border-emerald-500/30 transition-all relative"
-                  >
-                    {bannerImage ? (
-                      <img src={bannerImage} className="w-full h-full object-cover" />
-                    ) : (
-                      <>
-                        <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white/20 group-hover:bg-emerald-500/10 group-hover:text-emerald-400 transition-all mb-2">
-                          <i className="fas fa-plus text-xl"></i>
-                        </div>
-                        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest group-hover:text-emerald-400">{t('اختر صورة البنر', 'Select Banner Image')}</span>
-                      </>
-                    )}
-                  </button>
+
+                  {bannerImage && bannerImage.trim() !== '' && (
+                    <div className="w-full aspect-[792/236] rounded-2xl overflow-hidden border border-white/10 relative bg-black/40 animate-fade-in">
+                      <img src={bannerImage} className="w-full h-full object-cover" alt="Banner Preview" onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/600x250/100623/FFF?text=Image+URL+Preview'; }} />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent p-4 flex flex-col justify-end">
+                        <span className="text-[9px] text-white/50 font-bold uppercase tracking-widest">{t('معاينة البنر المباشر', 'Direct Banner Preview')}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <button 
                     onClick={handlePublishBanner}
-                    disabled={isPublishing || !bannerImage}
+                    disabled={isPublishing || !bannerImage || !bannerImage.trim()}
                     className="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-black text-xs text-white shadow-xl active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isPublishing ? (
@@ -282,37 +278,108 @@ export const GMPage: React.FC<GMPageProps> = ({
               <div className="space-y-4">
                 <div className="flex items-center gap-2 px-1">
                   <div className="w-1 h-3 bg-emerald-500 rounded-full"></div>
-                  <h4 className="text-[10px] font-black text-white/30 uppercase tracking-widest">{t('البنارات النشطة حالياً', 'Currently Active Banners')}</h4>
+                  <h4 className="text-[10px] font-black text-white/30 uppercase tracking-widest">{t('البنرات النشطة حالياً', 'Currently Active Banners')}</h4>
                 </div>
-                
-                <div className="grid grid-cols-1 gap-4">
-                  {banners.map(banner => (
-                    <motion.div 
-                      layout
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      key={banner.id}
-                      className="group relative aspect-[21/9] rounded-3xl overflow-hidden border border-white/5 shadow-xl"
-                    >
-                      <img src={banner.imageUrl} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-5 flex flex-col justify-end">
-                        <p className="text-xs font-black text-white tracking-wide">{banner.title || t('بدون عنوان', 'Untitled')}</p>
-                      </div>
-                      <button 
-                        onClick={() => handleDeleteBanner(banner.id)}
-                        className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-red-600/90 text-white flex items-center justify-center shadow-lg active:scale-90 opacity-0 group-hover:opacity-100 transition-all"
+
+                {banners.length > 0 ? (
+                  <div className="w-full aspect-[792/236] rounded-3xl overflow-hidden relative shadow-2xl border border-white/10 bg-black/40 group">
+                    {/* Sliding Banners rendering exactly like home slider */}
+                    {banners.map((banner, index) => (
+                      <div 
+                        key={banner.id} 
+                        className={`absolute inset-0 transition-opacity duration-1000 ${index === currentSlideIndex ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
                       >
-                        <i className="fas fa-trash-alt"></i>
-                      </button>
-                    </motion.div>
-                  ))}
-                  {banners.length === 0 && (
-                    <div className="py-20 text-center opacity-20 flex flex-col items-center">
-                      <i className="fas fa-images text-4xl mb-2"></i>
-                      <p className="text-[10px] font-black uppercase tracking-widest">{t('لا توجد بنارات حالياً', 'No banners found')}</p>
-                    </div>
-                  )}
-                </div>
+                        <img src={banner.imageUrl} className="w-full h-full object-cover" alt={banner.title} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent p-5 flex flex-col justify-end">
+                          <h4 className="font-black text-sm text-white text-shadow-sm">{banner.title || t('بدون عنوان', 'Untitled')}</h4>
+                          <p className="text-[9px] text-emerald-400 mt-1 font-bold uppercase tracking-widest">{t('بنر متحرك نشط', 'Active Sliding Banner')}</p>
+                        </div>
+
+                        {/* Slide specific delete button */}
+                        <div className="absolute top-4 right-4 z-30 flex gap-2">
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteBanner(banner.id);
+                            }}
+                            className="bg-red-600 hover:bg-red-500 text-white w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-lg active:scale-90"
+                            title={t('حذف هذا البنر', 'Delete this banner')}
+                          >
+                            <i className="fas fa-trash-alt text-xs"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Navigation Buttons */}
+                    {banners.length > 1 && (
+                      <>
+                        <button 
+                          type="button"
+                          onClick={() => setCurrentSlideIndex(prev => (prev - 1 + banners.length) % banners.length)}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-xl bg-black/50 hover:bg-black/80 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all"
+                        >
+                          <i className="fas fa-chevron-left text-xs"></i>
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setCurrentSlideIndex(prev => (prev + 1) % banners.length)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-xl bg-black/50 hover:bg-black/80 text-white flex items-center justify-center border border-white/10 active:scale-95 transition-all"
+                        >
+                          <i className="fas fa-chevron-right text-xs"></i>
+                        </button>
+
+                        {/* Indicators dots */}
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex gap-1.5 bg-black/30 px-3 py-1.5 rounded-full">
+                          {banners.map((_, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setCurrentSlideIndex(i)}
+                              className={`w-1.5 h-1.5 rounded-full transition-all ${i === currentSlideIndex ? 'bg-emerald-400 w-3' : 'bg-white/40'}`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-20 text-center opacity-20 flex flex-col items-center border border-dashed border-white/10 rounded-3xl bg-white/5">
+                    <i className="fas fa-images text-4xl mb-2"></i>
+                    <p className="text-[10px] font-black uppercase tracking-widest">{t('لا توجد بنرات حالياً', 'No banners found')}</p>
+                  </div>
+                )}
+
+                {/* Individual list details for easy management / jumping */}
+                {banners.length > 0 && (
+                  <div className="mt-4 space-y-2 max-h-56 overflow-y-auto pr-1">
+                    <p className="text-[9px] font-black text-white/20 uppercase tracking-widest">{t('قائمة البنرات لسهولة التحكم', 'Banners Control List')}</p>
+                    {banners.map((banner, index) => (
+                      <div 
+                        key={banner.id}
+                        onClick={() => setCurrentSlideIndex(index)}
+                        className={`flex items-center gap-3 p-2.5 rounded-2xl border transition-all cursor-pointer ${index === currentSlideIndex ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                      >
+                        <img src={banner.imageUrl} className="w-16 h-8 rounded-lg object-cover bg-black/40 border border-white/10" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{banner.title || t('بدون عنوان', 'Untitled')}</p>
+                          <p className="text-[9px] text-white/30 truncate text-left" dir="ltr">{banner.imageUrl}</p>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBanner(banner.id);
+                          }}
+                          className="w-8 h-8 rounded-xl bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white flex items-center justify-center transition-all active:scale-95"
+                        >
+                          <i className="fas fa-trash-alt text-[10px]"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

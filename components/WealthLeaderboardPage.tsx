@@ -444,7 +444,7 @@ export const WealthLeaderboardPage: React.FC<WealthLeaderboardPageProps> = ({
               </div>
 
               {/* Ranks 4+ Scroll Area */}
-              <div className="space-y-2 max-w-sm mx-auto pt-64 pb-8 font-sans">
+              <div className="space-y-2 max-w-sm mx-auto pt-[315px] pb-8 font-sans">
                 {restUsers.map((user, index) => {
                   const rank = index + 4;
                   return (
