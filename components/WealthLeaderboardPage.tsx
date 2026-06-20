@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../LanguageContext';
 import { db } from '../firebase';
-import { collection, query, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { collection, query, limit, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getWealthLevelInfo, getCharismaLevelInfo } from '../utils';
 import { FlagIcon } from './ProfilePage';
 
@@ -33,9 +33,10 @@ export const WealthLeaderboardPage: React.FC<WealthLeaderboardPageProps> = ({
 
   useEffect(() => {
     setIsLoading(true);
-    // Fetch all users to properly populate top 2 and top 3 even if some have 0 XP
+    const xpField = isCharisma ? "charismaXP" : "wealthXP";
     const q = query(
       collection(db, "users"),
+      orderBy(xpField, "desc"),
       limit(50)
     );
     
@@ -290,7 +291,10 @@ export const WealthLeaderboardPage: React.FC<WealthLeaderboardPageProps> = ({
           ) : (
             <div className="space-y-8 animate-fade-in font-sans">
               {/* Podium View (Top 3) - Left = Top 2, Center = Top 1, Right = Top 3 */}
-              <div className="grid grid-cols-3 gap-1 pt-6 items-end justify-center max-w-[265px] mx-auto relative min-h-[250px] overflow-visible">
+              <div 
+                className="grid grid-cols-3 gap-1 pt-6 items-end justify-center max-w-[265px] mx-auto relative min-h-[250px] overflow-visible"
+                style={{ transform: 'translateY(1%)' }}
+              >
                 
                 {/* Rank 2 (Left Column) */}
                 <div className="flex flex-col items-center space-y-2 relative" style={{ transform: 'translateY(185px)' }}>
@@ -444,7 +448,7 @@ export const WealthLeaderboardPage: React.FC<WealthLeaderboardPageProps> = ({
               </div>
 
               {/* Ranks 4+ Scroll Area */}
-              <div className="space-y-2 max-w-sm mx-auto pt-[315px] pb-8 font-sans">
+              <div className="space-y-2 max-w-sm mx-auto pt-[275px] pb-8 font-sans">
                 {restUsers.map((user, index) => {
                   const rank = index + 4;
                   return (

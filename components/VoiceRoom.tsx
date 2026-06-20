@@ -4560,7 +4560,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
                   return (
                     <div key={supporter.uid} className={itemClass} style={itemBgStyle}>
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {/* Avatar container that allows frame overflow */}
                         <div className="relative w-11 h-11 flex-shrink-0 flex items-center justify-center">
                           <div className="w-full h-full rounded-full overflow-hidden border border-white/10 relative z-10 bg-black/20">
@@ -4588,20 +4588,33 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                               </span>
                             </div>
                           ) : (
-                            /* Beautiful ID badge with icon */
+                            /* Beautiful ID badge without default icon */
                             <div className="flex items-center gap-1 mt-0.5 bg-white/5 border border-white/5 rounded-md px-1.5 py-0.5 w-fit" dir="ltr">
-                              <i className="fas fa-id-card text-[8.5px] text-yellow-500/80"></i>
                               <span className="text-[8.5px] text-white/60 font-mono tracking-tight font-black">ID: {supporterCustomId}</span>
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Gift value spent */}
-                      <div className="text-left flex-shrink-0 flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/10 rounded-full px-3 py-1.5 text-yellow-400 font-extrabold text-[12px]">
-                        <span>{supporter.amount.toLocaleString()}</span>
-                        <i className="fas fa-coins text-[10px]"></i>
-                      </div>
+                      {/* Gift value spent (removed yellow border/bg rectangle for full numeric flexibility and zero overlap) */}
+                      {(() => {
+                        const amountStr = supporter.amount.toLocaleString();
+                        let coinFontSize = "text-[12.5px]";
+                        let coinIconSize = "text-[10.5px]";
+                        if (amountStr.length > 8) {
+                          coinFontSize = "text-[10px]";
+                          coinIconSize = "text-[9px]";
+                        } else if (amountStr.length > 6) {
+                          coinFontSize = "text-[11.5px]";
+                          coinIconSize = "text-[10px]";
+                        }
+                        return (
+                          <div className={`text-left flex-shrink-0 flex items-center gap-1 text-yellow-400 font-extrabold ${coinFontSize} ml-2 pl-1 select-all`}>
+                            <span>{amountStr}</span>
+                            <i className={`fas fa-coins ${coinIconSize}`}></i>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 });

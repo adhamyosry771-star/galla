@@ -71,7 +71,8 @@ const App: React.FC = () => {
   const [banners, setBanners] = useState<any[]>([]);
   const [banners2, setBanners2] = useState<any[]>([]);
   const [designSettings, setDesignSettings] = useState<any>(null);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [topWealthUsers, setTopWealthUsers] = useState<any[]>([]);
+  const [topCharismaUsers, setTopCharismaUsers] = useState<any[]>([]);
   const [defaultImages, setDefaultImages] = useState<any>(null);
   const [carnivalSettings, setCarnivalSettings] = useState<any>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -97,12 +98,24 @@ const App: React.FC = () => {
       if (snap.exists()) setCarnivalSettings(snap.data());
     });
 
-    const unsubAllUsers = onSnapshot(query(collection(db, "users"), limit(55)), (snap) => {
+    const unsubWealth = onSnapshot(query(collection(db, "users"), orderBy("wealthXP", "desc"), limit(5)), (snap) => {
       const list: any[] = [];
       snap.forEach((d) => {
         list.push({ id: d.id, ...d.data() });
       });
-      setAllUsers(list);
+      setTopWealthUsers(list);
+    }, (error) => {
+      console.warn("Could not load top wealth users real-time:", error);
+    });
+
+    const unsubCharisma = onSnapshot(query(collection(db, "users"), orderBy("charismaXP", "desc"), limit(5)), (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+      setTopCharismaUsers(list);
+    }, (error) => {
+      console.warn("Could not load top charisma users real-time:", error);
     });
 
     // منع النسخ والقص وتحديد النصوص بشكل كامل لجميع عناصر التطبيق
@@ -144,7 +157,8 @@ const App: React.FC = () => {
       unsubDesign();
       unsubDefaultImages();
       unsubCarnival();
-      unsubAllUsers();
+      if (typeof unsubWealth === 'function') unsubWealth();
+      if (typeof unsubCharisma === 'function') unsubCharisma();
       document.removeEventListener('copy', handlePreventCopy);
       document.removeEventListener('cut', handlePreventCopy);
       document.removeEventListener('selectstart', handlePreventSelect);
@@ -797,7 +811,7 @@ const App: React.FC = () => {
                           className="w-full h-auto block" 
                           alt="Menu Button 1" 
                         />
-                        <PodiumOverlay mode="wealth" designSettings={designSettings} allUsers={allUsers} />
+                        <PodiumOverlay mode="wealth" designSettings={designSettings} allUsers={topWealthUsers} />
                       </div>
                     )}
 
@@ -814,7 +828,7 @@ const App: React.FC = () => {
                           className="w-full h-auto block" 
                           alt="Menu Button 2" 
                         />
-                        <PodiumOverlay mode="charisma" designSettings={designSettings} allUsers={allUsers} />
+                        <PodiumOverlay mode="charisma" designSettings={designSettings} allUsers={topCharismaUsers} />
                       </div>
                     )}
                   </div>
