@@ -4,7 +4,7 @@ import { auth, db } from '../firebase';
 import { 
   doc, updateDoc, collection, query, limit, deleteDoc, addDoc, 
   serverTimestamp, orderBy, onSnapshot, setDoc, deleteField,
-  collectionGroup, where, getDocs, getDoc, Timestamp 
+  collectionGroup, where, getDocs, getDoc, Timestamp, startAt, endAt
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import CPAdmin from './CPAdmin';
 
@@ -20,6 +20,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
    const { language, t } = useLanguage();
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [searchId, setSearchId] = useState('');
+  const [dbSearchResults, setDbSearchResults] = useState<any[]>([]);
+  const [isSearchingDB, setIsSearchingDB] = useState(false);
   const [allBanners, setAllBanners] = useState<any[]>([]);
   const [allBanners2, setAllBanners2] = useState<any[]>([]);
   const [allRoomBgs, setAllRoomBgs] = useState<any[]>([]);
@@ -129,6 +131,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const [micLockedIcon, setMicLockedIcon] = useState<string | null>(null);
   const [waveRoomIcon, setWaveRoomIcon] = useState<string | null>(null);
   const [giftButtonIcon, setGiftButtonIcon] = useState<string | null>(null);
+  const [gamesButtonIcon, setGamesButtonIcon] = useState<string | null>(null);
 
   // Room Frame settings
   const [roomFrameTop1, setRoomFrameTop1] = useState('');
@@ -228,6 +231,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   const micLockedInputRef = useRef<HTMLInputElement>(null);
   const waveRoomInputRef = useRef<HTMLInputElement>(null);
   const giftButtonInputRef = useRef<HTMLInputElement>(null);
+  const gamesButtonInputRef = useRef<HTMLInputElement>(null);
   const msgImageRef = useRef<HTMLInputElement>(null);
   const idIconInputRef = useRef<HTMLInputElement>(null);
   const fruitsGameIconInputRef = useRef<HTMLInputElement>(null);
@@ -307,6 +311,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
         setMicLockedIcon(data.micLockedIcon || null);
         setWaveRoomIcon(data.waveRoomIcon || null);
         setGiftButtonIcon(data.giftButtonIcon || null);
+        setGamesButtonIcon(data.gamesButtonIcon || null);
         setRoomFrameTop1(data.roomFrameTop1 || '');
         setRoomFrameTop2(data.roomFrameTop2 || '');
         setRoomFrameTop3(data.roomFrameTop3 || '');
@@ -404,6 +409,76 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
       unsubCarnivalCodes();
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const term = searchId.trim();
+    if (!term) {
+      setDbSearchResults([]);
+      return;
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setIsSearchingDB(true);
+      try {
+        const tempResults = new Map<string, any>();
+
+        // 1. Search by exact customId (as string)
+        const qCustomIdStr = query(collection(db, "users"), where("customId", "==", term));
+        const snap1 = await getDocs(qCustomIdStr);
+        snap1.forEach(d => tempResults.set(d.id, { id: d.id, ...d.data() }));
+
+        // 1.1 Search by exact customId (as number if term is numeric)
+        const termNum = Number(term);
+        if (!isNaN(termNum)) {
+          const qCustomIdNum = query(collection(db, "users"), where("customId", "==", termNum));
+          const snap2 = await getDocs(qCustomIdNum);
+          snap2.forEach(d => tempResults.set(d.id, { id: d.id, ...d.data() }));
+        }
+
+        // 2. Search by exact displayName
+        const qExactName = query(collection(db, "users"), where("displayName", "==", term));
+        const snap4 = await getDocs(qExactName);
+        snap4.forEach(d => tempResults.set(d.id, { id: d.id, ...d.data() }));
+
+        // 3. Search by displayName starting with prefix
+        try {
+          const qDisplayName = query(
+            collection(db, "users"),
+            orderBy("displayName"),
+            startAt(term),
+            endAt(term + "\uf8ff"),
+            limit(15)
+          );
+          const snap3 = await getDocs(qDisplayName);
+          snap3.forEach(d => tempResults.set(d.id, { id: d.id, ...d.data() }));
+        } catch (prefixErr) {
+          console.warn("Prefix query displayName failed or needs index:", prefixErr);
+        }
+
+        // 4. Search by exact ID/UID
+        if (term.length >= 10) {
+          try {
+            const docRef = doc(db, "users", term);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+              tempResults.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+            }
+          } catch (e) {
+            // Document reference check failed
+          }
+        }
+
+        setDbSearchResults(Array.from(tempResults.values()));
+      } catch (err) {
+        console.error("Error searching database:", err);
+      } finally {
+        setIsSearchingDB(false);
+      }
+    }, 450); // Debounce search for 450ms
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchId, isOpen]);
 
   useEffect(() => {
     let unsub: any;
@@ -967,6 +1042,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
     }
   };
 
+  const handleToggleVerification = async (uid: string, name: string, currentStatus: boolean) => {
+    try {
+      const userRef = doc(db, "users", uid);
+      await updateDoc(userRef, { isVerified: !currentStatus });
+      
+      if (!currentStatus) {
+        await addDoc(collection(db, "users", uid, "systemNotifications"), {
+          title: "توثيق الحساب",
+          desc: "تهانينا! تم توثيق حسابك بنجاح وحصلت على علامة التوثيق الزرقاء.",
+          icon: "fas fa-check-circle",
+          createdAt: serverTimestamp(),
+          type: 'verification_grant',
+          read: false
+        });
+      } else {
+        await addDoc(collection(db, "users", uid, "systemNotifications"), {
+          title: "تنبيه إداري",
+          desc: "تم إلغاء توثيق حسابك.",
+          icon: "fas fa-check-circle",
+          createdAt: serverTimestamp(),
+          type: 'verification_revoke',
+          read: false
+        });
+      }
+      
+      alert(currentStatus ? "تم إلغاء توثيق الحساب بنجاح" : "تم توثيق الحساب بنجاح");
+    } catch (e: any) {
+      alert(`خطأ: ${e.message || String(e)}`);
+    }
+  };
+
   const handleAdminSupportReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupportChatId || !adminSupportReply.trim()) return;
@@ -1008,7 +1114,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
         micOpenIcon,
         micLockedIcon,
         waveRoomIcon,
-        giftButtonIcon
+        giftButtonIcon,
+        gamesButtonIcon
       }, { merge: true });
       alert("تم حفظ إعدادات التصميم");
     } catch (e) {
@@ -1166,12 +1273,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
   };
 
   const filteredUsers = (() => {
+    const combinedSet = new Map<string, any>();
+    
+    // Add in-memory users
+    allUsers.forEach(u => {
+      if (u && u.id) combinedSet.set(u.id, u);
+    });
+    
+    // Add dynamically searched users
+    dbSearchResults.forEach(u => {
+      if (u && u.id) combinedSet.set(u.id, u);
+    });
+    
+    const unifiedList = Array.from(combinedSet.values());
+
     const list = searchId.trim() 
-      ? allUsers.filter(u => 
-          u.customId?.toLowerCase().includes(searchId.toLowerCase()) || 
-          u.displayName?.toLowerCase().includes(searchId.toLowerCase())
+      ? unifiedList.filter(u => 
+          u.customId?.toString().toLowerCase().includes(searchId.toLowerCase()) || 
+          u.displayName?.toLowerCase().includes(searchId.toLowerCase()) ||
+          u.id?.toLowerCase().includes(searchId.toLowerCase())
         )
-      : [...allUsers];
+      : unifiedList;
 
     const myUid = auth.currentUser?.uid;
     const myEmail = 'adhamyosry57@gmail.com';
@@ -2181,7 +2303,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
         {adminTab === 'users' && (
           <div className="space-y-4">
             <div className="relative mb-4">
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-purple-300/30 text-xs"><i className="fas fa-search"></i></span>
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-purple-300/30 text-xs">
+                {isSearchingDB ? (
+                  <i className="fas fa-spinner animate-spin text-purple-400"></i>
+                ) : (
+                  <i className="fas fa-search"></i>
+                )}
+              </span>
               <input type="text" value={searchId} onChange={(e) => setSearchId(e.target.value)} placeholder="بحث بواسطة الاسم أو الـ ID..." className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pr-10 pl-4 text-xs text-white outline-none focus:border-purple-500/40 shadow-inner" />
             </div>
             {filteredUsers.map(u => (
@@ -2199,7 +2327,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                         <img src={u.photoURL || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a0b2e'/><circle cx='50' cy='35' r='20' fill='%23ffffff' fill-opacity='0.3'/><path d='M25 80c0-15 10-25 25-25s25 10 25 25' fill='%23ffffff' fill-opacity='0.3'/></svg>"} className="w-full h-full object-cover rounded-full" />
                       )}
                     </div>
-                    <div><p className="text-xs font-black">{u.displayName}</p><p className="text-[9px] text-purple-400">ID: {u.customId}</p></div>
+                    <div>
+                      <p className="text-xs font-black flex items-center gap-1">
+                        {u.displayName}
+                        {u.isVerified && (
+                          <svg className="w-3.5 h-3.5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                            <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                          </svg>
+                        )}
+                      </p>
+                      <p className="text-[9px] text-purple-400">ID: {u.customId}</p>
+                    </div>
                   </div>
                   <div className="flex flex-col items-end gap-0.5">
                     <div className="flex items-center gap-1">
@@ -2241,19 +2379,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                     const rX = u.roomIdOffsetX ?? u.idOffsetX ?? 28;
                     const rY = u.roomIdOffsetY ?? u.idOffsetY ?? 0.5;
                     const rS = u.roomIdFontSize ?? u.idFontSize ?? 11;
-
+ 
                     setIdOffsetX(pX);
                     setIdOffsetY(pY);
                     setIdFontSize(pS);
-
+ 
                     setProfileIdOffsetX(pX);
                     setProfileIdOffsetY(pY);
                     setProfileIdFontSize(pS);
-
+ 
                     setRoomIdOffsetX(rX);
                     setRoomIdOffsetY(rY);
                     setRoomIdFontSize(rS);
-
+ 
                     setActiveIdTab('profile');
                   }} className="bg-blue-600/20 text-blue-400 text-[10px] py-2 rounded-xl border border-blue-600/30 font-black">تعديل ID</button>
                   <button onClick={() => { setShowBadgesPopup(u.id); setBadgeUrl(''); }} className="bg-emerald-600/20 text-emerald-400 text-[10px] py-2 rounded-xl border border-emerald-600/30 font-black">شارات</button>
@@ -2270,6 +2408,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                     className={`${u.isGM ? 'bg-purple-600/40 text-purple-400' : 'bg-purple-600/10 text-purple-500/60'} text-[10px] py-2 rounded-xl border border-purple-600/30 font-black`}
                   >
                     {u.isGM ? 'سحب نظام المدير' : 'منح نظام المدير'}
+                  </button>
+                  <button 
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleVerification(u.id, u.displayName, !!u.isVerified); }} 
+                    className={`${u.isVerified ? 'bg-blue-600/40 text-blue-400' : 'bg-blue-600/10 text-blue-500/60'} text-[10px] py-2 rounded-xl border border-blue-600/30 font-black`}
+                  >
+                    {u.isVerified ? 'سحب التوثيق' : 'توثيق'}
                   </button>
                 </div>
               </div>
@@ -3465,6 +3609,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                         type="text" 
                         value={giftButtonIcon || ''} 
                         onChange={e => setGiftButtonIcon(e.target.value)} 
+                        placeholder="https://..." 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-[10px] text-white outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Games Button Customization */}
+                <div className="space-y-2 pt-4 border-t border-white/5">
+                  <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest mr-2">{t("أيقونة زر الألعاب (ذراع البلايستيشن)", "Games Button Icon (Gamepad)")}</label>
+                  <div className="space-y-3">
+                    <button onClick={() => gamesButtonInputRef.current?.click()} className="w-full h-16 bg-black/40 rounded-2xl border-2 border-dashed border-white/5 flex items-center justify-center overflow-hidden transition-all hover:bg-black/60">
+                      {gamesButtonIcon ? <img src={gamesButtonIcon} className="h-10 w-10 object-contain" alt="games" /> : <div className="flex flex-col items-center opacity-20"><i className="fas fa-gamepad mb-1 text-xl"></i><span className="text-[8px] font-black uppercase">اختر الأيقونة</span></div>}
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={gamesButtonInputRef} 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => handleImageSelect(e, setGamesButtonIcon)} 
+                    />
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-bold text-white/20 ml-2 uppercase">أو ضع رابط الأيقونة هنا</label>
+                      <input 
+                        type="text" 
+                        value={gamesButtonIcon || ''} 
+                        onChange={e => setGamesButtonIcon(e.target.value)} 
                         placeholder="https://..." 
                         className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-[10px] text-white outline-none font-mono"
                       />

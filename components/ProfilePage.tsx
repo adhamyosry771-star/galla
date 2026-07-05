@@ -1124,8 +1124,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </div>
           </div>
           <div className="flex flex-col min-w-0 flex-1 justify-center translate-y-3">
-            <h2 className="text-[20.5px] font-bold text-white drop-shadow-2xl leading-normal -mt-1 pt-1 mb-0.5 truncate">
+            <h2 className="text-[20.5px] font-bold text-white drop-shadow-2xl leading-normal -mt-1 pt-1 mb-0.5 truncate flex items-center gap-1.5">
               {userDisplayName}
+              {liveUserData?.isVerified && (
+                <svg className="w-5 h-5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                  <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                </svg>
+              )}
             </h2>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-0.5">
@@ -1711,8 +1716,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   </div>
                 </div>
                 <div className="flex flex-col z-10">
-                  <span className="text-[11.5px] font-[855] text-[#2a2210] tracking-widest uppercase truncate">
+                  <span className="text-[11.5px] font-[855] text-[#2a2210] tracking-widest uppercase truncate flex items-center gap-1">
                     {userDisplayName}
+                    {liveUserData?.isVerified && (
+                      <svg className="w-3.5 h-3.5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                        <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                      </svg>
+                    )}
                   </span>
                   <span className="text-[9px] font-bold text-[#3d3118] opacity-60">
                     ID {userCustomId}
@@ -1742,8 +1752,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 </div>
                 <div className="flex justify-between items-end z-10 w-full">
                   <div className="flex flex-col items-start text-start">
-                    <span className="text-[11.5px] font-[855] text-white tracking-widest uppercase truncate drop-shadow-md">
+                    <span className="text-[11.5px] font-[855] text-white tracking-widest uppercase truncate drop-shadow-md flex items-center gap-1">
                       {userDisplayName}
+                      {liveUserData?.isVerified && (
+                        <svg className="w-3.5 h-3.5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                          <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                        </svg>
+                      )}
                     </span>
                     <span className="text-[9px] font-bold text-white/80">
                       ID {userCustomId}
@@ -2899,7 +2914,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                       alt={item.displayName}
                     />
                     <div className="flex flex-col items-start gap-0.5">
-                      <span className="text-xs font-black text-white">{item.displayName}</span>
+                      <span className="text-xs font-black text-white flex items-center gap-1">
+                        {item.displayName}
+                        {item.isVerified && (
+                          <svg className="w-3.5 h-3.5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                            <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                          </svg>
+                        )}
+                      </span>
                       <span className="text-[10px] text-purple-400 font-bold">
                         ID: {item.customId || item.uid?.substring(0, 8)}
                       </span>

@@ -32,6 +32,52 @@ const getDeviceId = () => {
   return devId;
 };
 
+const safeJsonStringify = (obj: any): string => {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+      seen.add(value);
+      if (typeof value.path === 'string' && value.firestore) {
+        return value.path;
+      }
+    }
+    return value;
+  });
+};
+
+const sanitizeFirestoreData = (val: any, seen = new WeakSet()): any => {
+  if (val === null || val === undefined) {
+    return val;
+  }
+  if (typeof val !== 'object') {
+    return val;
+  }
+  if (seen.has(val)) {
+    return '[Circular]';
+  }
+  seen.add(val);
+  if (typeof val.path === 'string' && val.firestore) {
+    return val.path;
+  }
+  if (typeof val.toDate === 'function' && typeof val.toMillis === 'function') {
+    return val; 
+  }
+  if (Array.isArray(val)) {
+    return val.map(item => sanitizeFirestoreData(item, seen));
+  }
+  if (val instanceof Date) {
+    return val;
+  }
+  const cleaned: any = {};
+  for (const key of Object.keys(val)) {
+    cleaned[key] = sanitizeFirestoreData(val[key], seen);
+  }
+  return cleaned;
+};
+
 const App: React.FC = () => {
   const { language, t } = useLanguage();
   const [user, setUser] = useState<any>(null);
@@ -288,7 +334,7 @@ const App: React.FC = () => {
 
         // Self-healing: shrink document if size approaches Firestore 1MB limits to prevent Quota Exceeded errors
         try {
-          const docString = JSON.stringify(data);
+          const docString = safeJsonStringify(data);
           if (docString.length > 700000) { // More than 700KB (strict limit is 1MB)
             console.warn("User document size is extremely large: " + docString.length + " bytes. Pruning base64 fields to prevent Firestore limit crash!");
             const prunes: any = {};
@@ -316,7 +362,8 @@ const App: React.FC = () => {
         if (user.email && data.email !== user.email) {
           updateDoc(doc(db, "users", user.uid), { email: user.email });
         }
-        setUserData(data);
+        const sanitizedData = sanitizeFirestoreData(data);
+        setUserData(sanitizedData);
         // Check if profile is setup: either has a displayName in Firestore, or has a customId, or has one in Auth
         setIsProfileSetup(!!data.displayName || !!data.customId || !!user.displayName);
       } else {

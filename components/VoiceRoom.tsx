@@ -1533,6 +1533,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             text: 'join',
             type: 'join',
             userAvatar: currentUserData?.photoURL || user?.photoURL || '',
+            isVerified: !!currentUserData?.isVerified,
             createdAt: serverTimestamp()
           });
         } catch (err) {
@@ -1733,6 +1734,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         text: inputText,
         type: 'text',
         userAvatar: currentUserData?.photoURL || user?.photoURL || '',
+        isVerified: !!currentUserData?.isVerified,
         createdAt: serverTimestamp()
       });
       setInputText('');
@@ -1929,6 +1931,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         giftName: gift.name,
         giftAnimation: gift.animation || null,
         userAvatar: currentUserData?.photoURL || user?.photoURL || '',
+        isVerified: !!currentUserData?.isVerified,
         createdAt: serverTimestamp()
       };
       
@@ -2165,7 +2168,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         photoURL: currentUserData?.photoURL || user.photoURL,
         customId: currentUserData?.customId || user.uid.substring(0, 8),
         currentFrame: currentUserData?.currentFrame || null,
-        animatedAvatar: currentUserData?.animatedAvatar || null
+        animatedAvatar: currentUserData?.animatedAvatar || null,
+        isVerified: !!currentUserData?.isVerified
       },
       status: 'occupied',
       receivedCoins: 0,
@@ -2637,12 +2641,33 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                 <div className="flex flex-col items-center gap-0.5">
                   <div className={`${nameContainerWidth} h-4 px-1.5 py-0.5 rounded-full backdrop-blur-sm border shadow-sm flex justify-center items-center overflow-hidden relative ${mic?.user ? 'bg-black/40 border-white/10' : 'bg-black/20 border-white/5'}`}>
                     {isLongName ? (
-                      <div className="flex animate-marquee-infinite">
-                        <span className={`font-black text-white/90 whitespace-nowrap px-4 ${nameTextSize}`}>{displayName}</span>
-                        <span className={`font-black text-white/90 whitespace-nowrap px-4 ${nameTextSize}`}>{displayName}</span>
+                      <div className="flex animate-marquee-infinite items-center">
+                        <span className={`font-black text-white/90 whitespace-nowrap px-4 ${nameTextSize} flex items-center gap-0.5`}>
+                          {displayName}
+                          {mic?.user?.isVerified && (
+                            <svg className="w-2.5 h-2.5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24">
+                              <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                            </svg>
+                          )}
+                        </span>
+                        <span className={`font-black text-white/90 whitespace-nowrap px-4 ${nameTextSize} flex items-center gap-0.5`}>
+                          {displayName}
+                          {mic?.user?.isVerified && (
+                            <svg className="w-2.5 h-2.5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24">
+                              <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                            </svg>
+                          )}
+                        </span>
                       </div>
                     ) : (
-                      <span className={`font-black text-white/90 text-center ${nameTextSize}`}>{displayName}</span>
+                      <span className={`font-black text-white/90 text-center ${nameTextSize} flex items-center justify-center gap-0.5`}>
+                        {displayName}
+                        {mic?.user?.isVerified && (
+                          <svg className="w-2.5 h-2.5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24">
+                            <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                          </svg>
+                        )}
+                      </span>
                     )}
                   </div>
                   
@@ -2672,7 +2697,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
             return (
               <div key={msg.id} className="flex flex-col items-start gap-1 animate-in slide-in-from-right duration-300">
-                <span className="font-black text-[10px] text-purple-300/80 mr-2">{isMe ? t('أنا', 'Me') : msg.userName}</span>
+                <span className="font-black text-[10px] text-purple-300/80 mr-2 flex items-center gap-1">
+                  {isMe ? t('أنا', 'Me') : msg.userName}
+                  {((isMe && currentUserData?.isVerified) || msg.isVerified) && (
+                    <svg className="w-3 h-3 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                      <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                    </svg>
+                  )}
+                </span>
                 <div className={`bg-black/20 backdrop-blur-sm px-3 py-2 rounded-xl max-w-[85%] shadow-sm overflow-hidden ${msg.type === 'gift' ? 'border border-yellow-500/30 bg-yellow-500/5' : ''}`}>
                   {msg.image ? (
                     <img src={msg.image} className="max-w-full max-h-32 object-contain rounded-lg" alt="emoji" />
@@ -2740,7 +2772,30 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               />
             )}
           </button>
-          <button onClick={() => setShowExtraMenu(true)} className="w-10 h-10 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center transition-transform relative group flex-shrink-0"><div className="grid grid-cols-2 gap-[3px] p-2"><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div></div></button>
+          <div className="relative flex-shrink-0">
+            {/* Standalone Games Button */}
+            <button 
+              onClick={() => setShowGamesMenu(true)} 
+              className="absolute bottom-[46px] left-1/2 -translate-x-1/2 w-12 h-12 flex items-center justify-center transition-transform active:scale-90 hover:scale-105 bg-transparent border-0 outline-none p-0 shadow-none appearance-none"
+              title={t("الألعاب", "Games")}
+            >
+              {designSettings === null ? (
+                // Invisible placeholder during loading to prevent flash of default icon
+                <div className="w-11 h-11 bg-transparent" />
+              ) : designSettings?.gamesButtonIcon ? (
+                <img 
+                  src={designSettings.gamesButtonIcon} 
+                  className="w-full h-full object-contain bg-transparent border-0 outline-none" 
+                  alt="Games" 
+                />
+              ) : (
+                <div className="w-11 h-11 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/80 shadow-lg">
+                  <i className="fas fa-gamepad text-lg"></i>
+                </div>
+              )}
+            </button>
+            <button onClick={() => setShowExtraMenu(true)} className="w-10 h-10 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center transition-transform relative group flex-shrink-0"><div className="grid grid-cols-2 gap-[3px] p-2"><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div><div className="w-[6px] h-[6px] rounded-[1px] bg-white opacity-80 group-hover:opacity-100 transition-opacity"></div></div></button>
+          </div>
         </div>
       </div>
       
@@ -2753,7 +2808,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           {canManageRoom && (
             <button onClick={() => { setShowRoomSettings(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-cog text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الإعدادات", "Settings")}</span></button>
           )}
-          <button onClick={() => { setShowGamesMenu(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-gamepad text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الألعاب", "Games")}</span></button><button onClick={() => { setShowMusicModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الموسيقى", "Music")}</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-2"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>{t("المؤثرات", "Effects")}</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">{isRoomMuted ? t("إلغاء الكتم", "Unmute") : t("كتم الغرفة", "Mute Room")}</span></button><button className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("مشاركة", "Share")}</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("إبلاغ", "Report")}</span></button>
+          <button onClick={() => { setShowMusicModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-music text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("الموسيقى", "Music")}</span></button><button onClick={() => setIsEffectsEnabled(!isEffectsEnabled)} className="flex flex-col items-center gap-2"><div className={`w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center transition-all relative ${isEffectsEnabled ? 'text-white/80' : 'text-white/20'}`}><i className="fas fa-wand-magic-sparkles text-xl"></i>{!isEffectsEnabled && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-8 h-0.5 bg-white/40 rotate-45 rounded-full"></div></div>}</div><span className={`text-[10px] font-black ${isEffectsEnabled ? 'text-white/60' : 'text-white/20'}`}>{t("المؤثرات", "Effects")}</span></button><button onClick={() => setIsRoomMuted(!isRoomMuted)} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className={`fas ${isRoomMuted ? 'fa-volume-xmark' : 'fa-volume-high'} text-xl`}></i></div><span className="text-[10px] font-black text-white/60">{isRoomMuted ? t("إلغاء الكتم", "Unmute") : t("كتم الغرفة", "Mute Room")}</span></button><button className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-share-alt text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("مشاركة", "Share")}</span></button><button onClick={() => { setShowReportModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2"><div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80"><i className="fas fa-info-circle text-xl"></i></div><span className="text-[10px] font-black text-white/60">{t("إبلاغ", "Report")}</span></button>
 
 {canManageRoom && (
   <button onClick={() => { setShowLockModal(true); setShowExtraMenu(false); }} className="flex flex-col items-center gap-2">
@@ -3351,7 +3406,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
                     {u.currentFrame && <img src={u.currentFrame} className="absolute inset-0 w-full h-full object-contain scale-110 z-10" />}
                   </div>
                   <div className="flex-1 min-w-0 text-start">
-                    <span className="text-white font-bold text-[11px] truncate block">{u.displayName}</span>
+                    <span className="text-white font-bold text-[11px] truncate flex items-center gap-1">
+                      {u.displayName}
+                      {u.isVerified && (
+                        <svg className="w-3 h-3 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                          <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                        </svg>
+                      )}
+                    </span>
                     <span className="text-purple-400 text-[8px] font-black">ID: {u.customId || u.uid?.substring(0,8)}</span>
                   </div>
                 </div>
@@ -3517,7 +3579,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
               </div>
             </div>
             <div className="pt-20 px-8 flex flex-col items-center h-full overflow-y-auto overflow-x-hidden scrollbar-hide pb-12">
-              <h3 className="text-2xl font-black text-white drop-shadow-lg py-1 mb-2 leading-relaxed relative z-10">{profileUserData?.displayName}</h3>
+              <h3 className="text-2xl font-black text-white drop-shadow-lg py-1 mb-2 leading-relaxed relative z-10 flex items-center justify-center gap-1.5">
+                {profileUserData?.displayName}
+                {profileUserData?.isVerified && (
+                  <svg className="w-5 h-5 text-blue-500 fill-current inline-block flex-shrink-0" viewBox="0 0 24 24" title="حساب موثق">
+                    <path d="M23 12l-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+                  </svg>
+                )}
+              </h3>
               
               <div className="mb-8 flex flex-col items-center gap-3">
                 <div className="flex items-center gap-2">

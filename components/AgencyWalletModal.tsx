@@ -53,8 +53,14 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  let errStr = '';
+  try {
+    errStr = JSON.stringify(errInfo);
+  } catch (stringifyErr) {
+    errStr = String(errInfo.error || "Unknown Error");
+  }
+  console.error('Firestore Error: ', errStr);
+  throw new Error(errStr);
 }
 
 export const AgencyWalletModal: React.FC<AgencyWalletModalProps> = ({ isOpen, onClose, userBalance }) => {
